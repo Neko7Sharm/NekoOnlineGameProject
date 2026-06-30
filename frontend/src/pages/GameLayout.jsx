@@ -16,12 +16,19 @@ export default function GameLayout({ character, token, onBack }) {
   const [moveRemaining, setMoveRemaining] = useState(4);
   const [shopItems, setShopItems] = useState([]);
   const [quests, setQuests] = useState([]);
-  const [overlay, setOverlay] = useState(null); // 'shop' | 'quests' | null
+  const [parties, setParties] = useState([]);
+  const [myParty, setMyParty] = useState(null);
+  const [partyName, setPartyName] = useState('');
+  const [overlay, setOverlay] = useState(null); // 'shop' | 'quests' | 'party' | null
 
   // ── SOCKET ────────────────────────────────────────────────────────
   useEffect(() => {
     const s = io('http://localhost:5000', { auth: { token } });
     setSocket(s);
+
+    s.on('connect', () => {
+      s.emit('join_game', character);
+    });
 
     s.on('chat_message', (msg) => setMessages(prev => [...prev.slice(-49), msg]));
     s.on('chat_history', (history) => setMessages(history));
@@ -75,6 +82,50 @@ export default function GameLayout({ character, token, onBack }) {
     setOverlay('quests');
   };
 
+  const fetchParties = async () => {
+    try {
+      const res = await fetch(`${API_URL}/parties`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      setParties(data);
+      const mine = data.find(p => p.members.some(m => m._id === character._id));
+      setMyParty(mine || null);
+    } catch(err) { console.error(err); }
+  };
+
+  const openParty = async () => {
+    await fetchParties();
+    setOverlay('party');
+  };
+
+  const createParty = async () => {
+    if (!partyName.trim()) return;
+    const res = await fetch(`${API_URL}/parties`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ name: partyName, characterId: character._id })
+    });
+    if (res.ok) { setPartyName(''); fetchParties(); }
+  };
+
+  const joinParty = async (id) => {
+    const res = await fetch(`${API_URL}/parties/${id}/join`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ characterId: character._id })
+    });
+    if (res.ok) fetchParties();
+  };
+
+  const leaveParty = async () => {
+    if (!myParty) return;
+    const res = await fetch(`${API_URL}/parties/${myParty._id}/leave`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ characterId: character._id })
+    });
+    if (res.ok) fetchParties();
+  };
+
   const sendChat = () => {
     if (!chatInput.trim() || !socket) return;
     socket.emit('chat_message', { text: chatInput, type: chatMode });
@@ -101,7 +152,10 @@ export default function GameLayout({ character, token, onBack }) {
             </span>
           )}
         </div>
-        <button className="secondary" style={{ width: 'auto', padding: '4px 12px', fontSize: '12px' }} onClick={onBack}>Change Character</button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button style={{ width: 'auto', padding: '4px 12px', fontSize: '12px', background: '#ec4899', borderColor: '#db2777' }} onClick={openParty}>🎉 Party</button>
+          <button className="secondary" style={{ width: 'auto', padding: '4px 12px', fontSize: '12px' }} onClick={onBack}>Change Character</button>
+        </div>
       </div>
 
       {/* Game Canvas Area */}
@@ -176,6 +230,60 @@ export default function GameLayout({ character, token, onBack }) {
             </div>
           </div>
         )}
+
+        {/* Party Overlay */}
+        {overlay === 'party' && (
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 50 }}>
+            <div className="glass-panel" style={{ width: '600px', maxHeight: '80vh', overflow: 'auto', padding: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+                <h2 style={{ color: '#ec4899' }}>🎉 Party Finder</h2>
+                <button className="secondary" style={{ width: 'auto', padding: '4px 12px' }} onClick={() => setOverlay(null)}>✕ Close</button>
+              </div>
+              
+              {!myParty && (
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
+                  <input type="text" placeholder="Party Name" value={partyName} onChange={e => setPartyName(e.target.value)} style={{ flex: 1, marginBottom: 0 }} />
+                  <button onClick={createParty} style={{ width: 'auto', background: '#db2777' }}>Create Party</button>
+                </div>
+              )}
+
+              {myParty && (
+                <div className="glass-panel" style={{ padding: '16px', marginBottom: '24px', borderColor: '#db2777', background: 'rgba(219,39,119,0.05)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <h3 style={{ margin: 0, color: '#f8fafc' }}>{myParty.name}</h3>
+                    <button className="secondary" style={{ width: 'auto', padding: '4px 12px', borderColor: '#ef4444', color: '#fca5a5' }} onClick={leaveParty}>Leave Party</button>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {myParty.members.map(m => (
+                      <span key={m._id} style={{ padding: '4px 8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', fontSize: '12px', border: '1px solid rgba(255,255,255,0.2)' }}>
+                        {m._id === myParty.leader._id ? '👑 ' : ''}{m.name} ({m.class} {m.level})
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <h4 style={{ color: '#94a3b8', marginBottom: '8px', fontSize: '12px', textTransform: 'uppercase' }}>Active Parties</h4>
+              {parties.length === 0 ? (
+                <p style={{ color: '#64748b', textAlign: 'center', fontSize: '13px' }}>No active parties looking for members.</p>
+              ) : (
+                <div style={{ display: 'grid', gap: '8px' }}>
+                  {parties.map(p => (
+                    <div key={p._id} className="glass-panel" style={{ padding: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <strong style={{ color: '#f8fafc' }}>{p.name}</strong>
+                        <span style={{ color: '#94a3b8', fontSize: '12px', marginLeft: '8px' }}>{p.members.length}/{p.maxMembers} Members</span>
+                      </div>
+                      {!myParty && p.members.length < p.maxMembers && (
+                        <button style={{ width: 'auto', padding: '4px 12px', fontSize: '12px', background: '#059669' }} onClick={() => joinParty(p._id)}>Join</button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Bottom Panel */}
@@ -200,35 +308,88 @@ export default function GameLayout({ character, token, onBack }) {
           <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }}>
 
             {/* STATS */}
-            {activeTab === 'stats' && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
-                <div>
-                  <h4 style={{ color: '#3b82f6', marginBottom: '8px', fontSize: '12px', textTransform: 'uppercase' }}>Ability Scores</h4>
-                  {Object.entries(character.stats || {}).map(([key, val]) => {
-                    const mod = Math.floor((val - 10) / 2);
-                    return <div key={key} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '13px' }}>
-                      <span style={{ color: '#94a3b8', textTransform: 'uppercase' }}>{key}</span>
-                      <span><strong style={{ color: '#f8fafc' }}>{val}</strong> <span style={{ color: mod >= 0 ? '#10b981' : '#ef4444' }}>({mod >= 0 ? '+' : ''}{mod})</span></span>
-                    </div>;
-                  })}
+            {activeTab === 'stats' && (() => {
+              const STAT_LABELS = {
+                str: { name: 'Strength',     icon: '💪', color: '#ef4444', tip: 'Melee attack & damage' },
+                dex: { name: 'Dexterity',    icon: '🏹', color: '#f59e0b', tip: 'Ranged attack, AC, Initiative' },
+                con: { name: 'Constitution', icon: '❤️', color: '#10b981', tip: 'Max HP per level' },
+                int: { name: 'Intelligence', icon: '📚', color: '#3b82f6', tip: 'Arcana, History (Wizard key)' },
+                wis: { name: 'Wisdom',       icon: '👁️', color: '#8b5cf6', tip: 'Perception, Insight (Cleric key)' },
+                cha: { name: 'Charisma',     icon: '✨', color: '#ec4899', tip: 'Persuasion, Intimidation (Paladin key)' },
+              };
+              const sw = character.classFeatures?.secondWind;
+              const as = character.classFeatures?.actionSurge;
+              return (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+                  {/* Ability Scores */}
+                  <div>
+                    <h4 style={{ color: '#3b82f6', marginBottom: '8px', fontSize: '12px', textTransform: 'uppercase' }}>Ability Scores</h4>
+                    {Object.entries(character.stats || {}).map(([key, val]) => {
+                      const mod = Math.floor((val - 10) / 2);
+                      const info = STAT_LABELS[key] || {};
+                      return (
+                        <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '5px', fontSize: '12px' }}>
+                          <span style={{ fontSize: '14px' }}>{info.icon}</span>
+                          <span style={{ color: '#64748b', flex: 1 }}>{info.name}</span>
+                          <span style={{ fontWeight: 700, minWidth: '20px', textAlign: 'right' }}>{val}</span>
+                          <span style={{ color: mod >= 0 ? '#10b981' : '#ef4444', minWidth: '30px', textAlign: 'right', fontSize: '11px' }}>({mod >= 0 ? '+' : ''}{mod})</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {/* Combat Stats */}
+                  <div>
+                    <h4 style={{ color: '#3b82f6', marginBottom: '8px', fontSize: '12px', textTransform: 'uppercase' }}>Combat</h4>
+                    <div style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#94a3b8' }}>❤️ HP</span><strong style={{ color: character.hp?.current <= character.hp?.max * 0.3 ? '#ef4444' : '#f8fafc' }}>{character.hp?.current}/{character.hp?.max}</strong></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#94a3b8' }}>🛡 AC</span><strong>{character.ac}</strong></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#94a3b8' }}>💰 Gold</span><strong style={{ color: '#fbbf24' }}>{character.gold || 0}g</strong></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#94a3b8' }}>✨ EXP</span><strong>{character.exp}</strong></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#94a3b8' }}>📊 Level</span><strong>{character.level}/2</strong></div>
+                    </div>
+                    {character.fightingStyle && (
+                      <div style={{ marginTop: '10px', padding: '8px', background: 'rgba(59,130,246,0.1)', borderRadius: '6px', border: '1px solid rgba(59,130,246,0.2)' }}>
+                        <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '2px' }}>FIGHTING STYLE</div>
+                        <div style={{ fontSize: '12px', color: '#60a5fa', textTransform: 'capitalize' }}>
+                          ⚔️ {character.fightingStyle.replace(/_/g, ' ')}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {/* Class Features */}
+                  <div>
+                    <h4 style={{ color: '#3b82f6', marginBottom: '8px', fontSize: '12px', textTransform: 'uppercase' }}>Class Features</h4>
+                    <div style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ color: '#94a3b8', fontSize: '11px' }}>{character.class} · Level {character.level}</div>
+                      {sw && (
+                        <div style={{ padding: '8px', background: 'rgba(16,185,129,0.1)', borderRadius: '6px', border: '1px solid rgba(16,185,129,0.2)' }}>
+                          <div style={{ fontWeight: 700, color: '#10b981', marginBottom: '2px' }}>💨 Second Wind</div>
+                          <div style={{ color: '#94a3b8' }}>{sw.uses}/{sw.maxUses} uses</div>
+                          <div style={{ color: '#475569', fontSize: '10px' }}>Recover: 1 (short rest), 2 (long rest)</div>
+                        </div>
+                      )}
+                      {as && character.level >= 2 && (
+                        <div style={{ padding: '8px', background: 'rgba(245,158,11,0.1)', borderRadius: '6px', border: '1px solid rgba(245,158,11,0.2)' }}>
+                          <div style={{ fontWeight: 700, color: '#f59e0b', marginBottom: '2px' }}>⚡ Action Surge</div>
+                          <div style={{ color: as.available ? '#10b981' : '#ef4444' }}>{as.available ? 'Ready' : 'Used (Long Rest)'}</div>
+                        </div>
+                      )}
+                      {character.classFeatures?.tacticalMind && (
+                        <div style={{ padding: '8px', background: 'rgba(139,92,246,0.1)', borderRadius: '6px', border: '1px solid rgba(139,92,246,0.2)' }}>
+                          <div style={{ fontWeight: 700, color: '#8b5cf6', marginBottom: '2px' }}>🧠 Tactical Mind</div>
+                          <div style={{ color: '#94a3b8', fontSize: '10px' }}>Use Second Wind on failed checks</div>
+                        </div>
+                      )}
+                      {character.class === 'Wizard' || character.class === 'Cleric' ? (
+                        <div style={{ padding: '8px', background: 'rgba(139,92,246,0.1)', borderRadius: '6px' }}>
+                          <div style={{ fontWeight: 700, color: '#a78bfa' }}>🔮 Spell Slots: 3</div>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <h4 style={{ color: '#3b82f6', marginBottom: '8px', fontSize: '12px', textTransform: 'uppercase' }}>Combat</h4>
-                  <p style={{ marginBottom: '4px', fontSize: '13px' }}>❤️ HP: <strong>{character.hp?.current}/{character.hp?.max}</strong></p>
-                  <p style={{ marginBottom: '4px', fontSize: '13px' }}>🛡 AC: <strong>{character.ac}</strong></p>
-                  <p style={{ marginBottom: '4px', fontSize: '13px' }}>✨ EXP: <strong>{character.exp}</strong></p>
-                  <p style={{ marginBottom: '4px', fontSize: '13px' }}>📊 Level: <strong>{character.level}</strong></p>
-                </div>
-                <div>
-                  <h4 style={{ color: '#3b82f6', marginBottom: '8px', fontSize: '12px', textTransform: 'uppercase' }}>Info</h4>
-                  <p style={{ fontSize: '13px', marginBottom: '4px' }}>🧑 {character.name}</p>
-                  <p style={{ fontSize: '13px', marginBottom: '4px', color: '#94a3b8' }}>Class: {character.class}</p>
-                  {(character.class === 'Wizard' || character.class === 'Cleric') && (
-                    <p style={{ fontSize: '13px', color: '#a78bfa' }}>🔮 Spell Slots: 3</p>
-                  )}
-                </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* INVENTORY */}
             {activeTab === 'inventory' && (
@@ -300,8 +461,8 @@ export default function GameLayout({ character, token, onBack }) {
             {activeTab === 'chat' && (
               <div style={{ display: 'flex', flexDirection: 'column', height: '220px' }}>
                 <div style={{ flex: 1, overflowY: 'auto', background: 'rgba(0,0,0,0.3)', padding: '8px', borderRadius: '4px', marginBottom: '8px' }}>
-                  {messages.map(msg => (
-                    <div key={msg.id} style={{ marginBottom: '4px', fontSize: '13px' }}>
+                  {messages.map((msg, idx) => (
+                    <div key={msg.id || idx} style={{ marginBottom: '4px', fontSize: '13px' }}>
                       <span style={{ color: msg.type === 'world' ? '#3b82f6' : '#10b981', fontSize: '10px' }}>[{msg.type}] </span>
                       <strong style={{ color: msg.sender === 'System' ? '#fbbf24' : '#f8fafc' }}>{msg.sender}: </strong>
                       <span style={{ color: '#94a3b8' }}>{msg.text}</span>

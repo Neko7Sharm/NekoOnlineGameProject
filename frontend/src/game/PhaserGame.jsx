@@ -50,6 +50,16 @@ export default function PhaserGame({ character, socket, onCombatEvent }) {
         scene.character = character;
         scene.socket = socket;
         scene.onChangeScene = launchScene;
+
+        // Bridge scene events to React
+        scene.events.on('combat_started', (data) => onCombatEvent?.('combat_started', data));
+        scene.events.on('turn_changed', (data) => onCombatEvent?.('turn_changed', data));
+        scene.events.on('combat_ended', (data) => onCombatEvent?.('combat_ended', data));
+        scene.events.on('combat_result', (data) => onCombatEvent?.('combat_result', data));
+        scene.events.on('open_shop', () => onCombatEvent?.('open_shop'));
+        scene.events.on('open_quests', () => onCombatEvent?.('open_quests'));
+        scene.events.on('open_world_map', () => launchScene('world'));
+        scene.events.on('log', (msg, type) => onCombatEvent?.('log', { msg, type }));
       }
     });
 
@@ -58,12 +68,6 @@ export default function PhaserGame({ character, socket, onCombatEvent }) {
       socket,
       onChangeScene: launchScene
     });
-
-    // Listen to Phaser scene events and forward to React
-    game.events.on('scene-combat_started', (data) => onCombatEvent?.('combat_started', data));
-    game.events.on('scene-turn_changed', (data) => onCombatEvent?.('turn_changed', data));
-    game.events.on('scene-combat_ended', (data) => onCombatEvent?.('combat_ended', data));
-    game.events.on('scene-combat_result', (data) => onCombatEvent?.('combat_result', data));
 
     return () => {
       game.destroy(true);

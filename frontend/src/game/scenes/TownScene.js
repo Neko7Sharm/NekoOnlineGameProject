@@ -18,12 +18,17 @@ export default class TownScene extends Phaser.Scene {
 
   preload() {
     const g = this.add.graphics();
-    g.fillStyle(0x3b82f6, 1); g.fillCircle(16, 16, 14);
-    g.lineStyle(2, 0xffffff); g.strokeCircle(16, 16, 14);
+    // Local player (nice token)
+    g.fillStyle(0x0f172a, 1); g.fillCircle(16, 16, 15);
+    g.lineStyle(3, 0x3b82f6); g.strokeCircle(16, 16, 15);
+    g.fillStyle(0x1e3a8a, 1); g.fillCircle(16, 16, 11);
     g.generateTexture('localToken', 32, 32);
 
-    g.clear(); g.fillStyle(0x10b981, 1); g.fillCircle(16, 16, 14);
-    g.lineStyle(2, 0xffffff); g.strokeCircle(16, 16, 14);
+    // Other player (nice token)
+    g.clear(); 
+    g.fillStyle(0x0f172a, 1); g.fillCircle(16, 16, 15);
+    g.lineStyle(3, 0x10b981); g.strokeCircle(16, 16, 15);
+    g.fillStyle(0x064e3b, 1); g.fillCircle(16, 16, 11);
     g.generateTexture('partyToken', 32, 32);
 
     // Move target marker
@@ -56,25 +61,18 @@ export default class TownScene extends Phaser.Scene {
     this.drawBuilding(5, 24, 7, 5, 0x7c3aed, '🏠 Inn');
     this.drawBuilding(32, 5, 6, 5, 0x92400e, '⚒ Blacksmith');
 
-    // Shop interactive zone
-    const shopZone = this.add.rectangle(8 * CELL, 7 * CELL, 4 * CELL, 3 * CELL, 0x1d4ed8, 0)
-      .setInteractive();
-    shopZone.on('pointerover', () => this.input.setDefaultCursor('pointer'));
-    shopZone.on('pointerout', () => this.input.setDefaultCursor('default'));
-    shopZone.on('pointerdown', () => this.events.emit('open_shop'));
-
-    // Quest Board interactive zone
-    const questZone = this.add.rectangle(17 * CELL, 7 * CELL, 4 * CELL, 3 * CELL, 0x065f46, 0)
-      .setInteractive();
-    questZone.on('pointerover', () => this.input.setDefaultCursor('pointer'));
-    questZone.on('pointerout', () => this.input.setDefaultCursor('default'));
-    questZone.on('pointerdown', () => this.events.emit('open_quests'));
-
+    // ── Interaction Rects (checked on move complete) ──
+    this.shopRect = new Phaser.Geom.Rectangle(5 * CELL, 5 * CELL, 6 * CELL, 5 * CELL);
+    this.questRect = new Phaser.Geom.Rectangle(14 * CELL, 5 * CELL, 6 * CELL, 5 * CELL);
+    
     // World Map exit
-    const exitZone = this.add.rectangle(MAP_W * CELL - CELL, CELL, CELL * 3, CELL * 2, 0xfbbf24, 0.3)
-      .setInteractive().setStrokeStyle(2, 0xfbbf24);
-    this.add.text(MAP_W * CELL - CELL, CELL, '🗺 World\nMap', { fontSize: '10px', fill: '#fbbf24', align: 'center' }).setOrigin(0.5);
-    exitZone.on('pointerdown', () => this.events.emit('open_world_map'));
+    this.exitZone = this.add.rectangle(MAP_W * CELL - CELL, CELL, CELL * 3, CELL * 2, 0xfbbf24, 0.4)
+      .setStrokeStyle(2, 0xf59e0b);
+    this.add.text(MAP_W * CELL - CELL, CELL, '🗺 World Map\n(Walk here)', { fontSize: '10px', fill: '#fbbf24', align: 'center', fontStyle: 'bold' }).setOrigin(0.5);
+    this.exitRect = new Phaser.Geom.Rectangle(MAP_W * CELL - CELL * 2.5, 0, CELL * 3, CELL * 3);
+
+    // Glowing effect
+    this.tweens.add({ targets: this.exitZone, alpha: 0.8, yoyo: true, repeat: -1, duration: 800 });
 
     // Camera
     this.cameras.main.setBounds(0, 0, MAP_W * CELL, MAP_H * CELL);
@@ -107,6 +105,7 @@ export default class TownScene extends Phaser.Scene {
 
     // ─── CLICK TO MOVE (with confirm marker) ────────────────────────
     this.input.on('pointerdown', (pointer) => {
+      if (this.isPromptOpen) return;
       const wx = pointer.worldX, wy = pointer.worldY;
       if (this.confirmTarget) {
         // Second click = confirm move
@@ -163,7 +162,47 @@ export default class TownScene extends Phaser.Scene {
   doMove(x, y) {
     const myEntry = this.players[this.socket.id];
     if (!myEntry) return;
-    this.tweens.add({ targets: [myEntry.sprite, myEntry.label], x, y, duration: 500 });
+    this.tweens.add({
+      targets: [myEntry.sprite, myEntry.label], x, y, duration: 500,
+      onComplete: () => {
+        if (this.shopRect.contains(x, y)) this.promptInteraction('Enter Shop?', () => this.events.emit('open_shop'));
+        else if (this.questRect.contains(x, y)) this.promptInteraction('Check Quest Board?', () => this.events.emit('open_quests'));
+        else if (this.exitRect.contains(x, y)) this.promptInteraction('Leave Town to World Map?', () => this.events.emit('open_world_map'));
+      }
+    });
     this.socket.emit('player_move', { x, y });
+  }
+
+  promptInteraction(text, onConfirm) {
+    if (this.currentPrompt) {
+        this.currentPrompt.forEach(obj => obj.destroy());
+    }
+    this.isPromptOpen = true;
+
+    const cam = this.cameras.main;
+    const cx = cam.width / 2;
+    const cy = cam.height / 2;
+
+    const bg = this.add.rectangle(cx, cy, cam.width, cam.height, 0x000000, 0.6).setInteractive().setScrollFactor(0).setDepth(100);
+    const box = this.add.rectangle(cx, cy, 260, 110, 0x0f172a).setStrokeStyle(2, 0x3b82f6).setScrollFactor(0).setDepth(101);
+    const msg = this.add.text(cx, cy - 20, text, { fontSize: '15px', fill: '#f8fafc', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(102);
+    
+    const closePrompt = () => {
+        this.isPromptOpen = false;
+        if (this.currentPrompt) {
+            this.currentPrompt.forEach(obj => obj.destroy());
+            this.currentPrompt = null;
+        }
+    };
+
+    const btnYes = this.add.rectangle(cx - 60, cy + 25, 90, 32, 0x10b981).setInteractive().setScrollFactor(0).setDepth(102);
+    const txtYes = this.add.text(cx - 60, cy + 25, 'Yes', { fontSize: '13px', fill: '#fff', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(103);
+    btnYes.on('pointerdown', () => { onConfirm(); closePrompt(); });
+
+    const btnNo = this.add.rectangle(cx + 60, cy + 25, 90, 32, 0xef4444).setInteractive().setScrollFactor(0).setDepth(102);
+    const txtNo = this.add.text(cx + 60, cy + 25, 'No', { fontSize: '13px', fill: '#fff', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(103);
+    btnNo.on('pointerdown', closePrompt);
+
+    this.currentPrompt = [bg, box, msg, btnYes, txtYes, btnNo, txtNo];
   }
 }

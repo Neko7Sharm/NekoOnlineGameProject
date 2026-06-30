@@ -83,22 +83,22 @@ const rollDamage = (formula) => {
 const MONSTERS = {
   WoodenDummy: {
     name: 'Wooden Dummy',
-    hp: 15, maxHp: 15, ac: 5,
-    damage: '1d4', damageType: 'bludgeoning',
-    exp: 25, range: 5,
-    sightRange: 80 // pixels / map units
+    hp: 10, maxHp: 10, ac: 5,
+    damage: '1d4', damageType: 'bludgeoning', hitMod: 0,
+    exp: 25, range: 32,
+    sightRange: 32 // 5ft = 32px
   }
 };
 
 // Spawn monsters for a dungeon instance
 const spawnDungeonMonsters = (dungeonId) => {
-  const count = 3 + Math.floor(Math.random() * 3); // 3-5
+  const count = 1; // 1 dummy for now
   const monsters = [];
   for (let i = 0; i < count; i++) {
     monsters.push({
       id: `monster_${dungeonId}_${i}`,
       ...JSON.parse(JSON.stringify(MONSTERS.WoodenDummy)),
-      x: 400 + (i * 64),
+      x: 400,
       y: 200,
       isDead: false
     });
@@ -171,6 +171,12 @@ io.on('connection', (socket) => {
     player.y = data.y || 300;
     socket.join(data.map);
     socket.emit('map_changed', { map: data.map, x: player.x, y: player.y });
+    
+    const playersInMap = Object.fromEntries(
+      Object.entries(gameState.players).filter(([_, p]) => p.map === data.map)
+    );
+    socket.emit('current_players', playersInMap);
+    
     socket.broadcast.to(data.map).emit('new_player', player);
 
     // Init dungeon if first player
@@ -241,6 +247,19 @@ io.on('connection', (socket) => {
       if (loot) {
         // Send to all in dungeon
         io.to(attacker.map).emit('item_dropped', { monsterId: target.id, itemName: loot });
+      }
+
+      // Respawn dummy after 5 seconds
+      if (target.name === 'Wooden Dummy') {
+        setTimeout(() => {
+          target.hp = target.maxHp;
+          target.isDead = false;
+          // Random coordinates somewhat away from edges
+          target.x = 100 + Math.random() * 600;
+          target.y = 100 + Math.random() * 400;
+          // Notify players in dungeon of the respawned state
+          io.to(attacker.map).emit('monster_respawned', target);
+        }, 5000);
       }
     }
 
@@ -387,8 +406,10 @@ function executeMonsterTurn(dungeon, dungeonId, io) {
   if (players.length === 0) { advanceTurn(dungeon, dungeonId, io); return; }
   const target = players[Math.floor(Math.random() * players.length)];
 
+  // hitroll 1d20 + hitMod
+  const hitMod = monster.hitMod || 0;
   const d20 = rollDice(20);
-  const hit = d20 >= (target.ac || 10);
+  const hit = (d20 + hitMod) >= (target.ac || 10);
   let damage = 0;
   if (hit) damage = rollDamage(monster.damage);
 
