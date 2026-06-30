@@ -85,8 +85,8 @@ const MONSTERS = {
     name: 'Wooden Dummy',
     hp: 10, maxHp: 10, ac: 5,
     damage: '1d4', damageType: 'bludgeoning', hitMod: 0,
-    exp: 25, range: 32,
-    sightRange: 32 // 5ft = 32px
+    exp: 25, range: 48,
+    sightRange: 4 // 4 cells
   }
 };
 
@@ -98,8 +98,8 @@ const spawnDungeonMonsters = (dungeonId) => {
     monsters.push({
       id: `monster_${dungeonId}_${i}`,
       ...JSON.parse(JSON.stringify(MONSTERS.WoodenDummy)),
-      x: 400,
-      y: 200,
+      x: 12, // col 12
+      y: 6,  // row 6
       isDead: false
     });
   }
@@ -114,7 +114,7 @@ io.on('connection', (socket) => {
   socket.on('join_game', (character) => {
     gameState.players[socket.id] = {
       id: socket.id, character,
-      x: 400, y: 300,
+      x: 10, y: 12,
       map: 'town', partyId: null,
       hp: character.hp?.current || 10,
       maxHp: character.hp?.max || 10,
@@ -167,8 +167,8 @@ io.on('connection', (socket) => {
     if (!player) return;
     socket.leave(player.map);
     player.map = data.map;
-    player.x = data.x || 400;
-    player.y = data.y || 300;
+    player.x = data.x ?? 10;
+    player.y = data.y ?? 7;
     socket.join(data.map);
     socket.emit('map_changed', { map: data.map, x: player.x, y: player.y });
     

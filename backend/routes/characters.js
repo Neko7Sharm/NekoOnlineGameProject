@@ -168,4 +168,23 @@ router.get('/:id', authMiddleware, async (req, res) => {
   }
 });
 
+// ── DELETE single character ────────────────────────────────────────────
+router.delete('/:id', authMiddleware, async (req, res) => {
+  try {
+    const char = await Character.findOne({ _id: req.params.id, user: req.user.id });
+    if (!char) return res.status(404).json({ error: 'Not found' });
+    
+    // Also delete associated items
+    const Item = require('../models/Item');
+    await Item.deleteMany({ ownedBy: char._id });
+    
+    await Character.deleteOne({ _id: char._id });
+    await User.findByIdAndUpdate(req.user.id, { $pull: { characters: char._id } });
+    
+    res.json({ message: 'Character deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 module.exports = router;
