@@ -1814,20 +1814,16 @@ function CombatPanel({ combat, char, monsters, combatMode, setCombatMode, select
   const isPlayer = current?.type === "player";
   const hasSlots = char.spellSlots ? char.spellSlots.used < char.spellSlots.max : false;
   const moveLeft = MOVE_SQUARES - combat.movedSquares;
-  const [showLog, setShowLog] = useState(false);
+  const [showLog, setShowLog] = useState(true);
   const [actionTab, setActionTab] = useState<"none" | "attack" | "skill" | "item">("none");
-  const [tooltip, setTooltip] = useState<{ name: string; desc: string; y: number } | null>(null);
-  const [minimized, setMinimized] = useState(false);
+  const [tooltip, setTooltip] = useState<{ name: string; desc: string } | null>(null);
 
-  // Build spell list using spellChoice for Wizard
   const baseSpells = CLASS_SPELLS[char.class] ?? [];
   const spells = char.class === "Wizard" && char.spellChoice && char.spellChoice !== "Sleep"
     ? baseSpells.map(s => s.name === "Sleep"
         ? { ...s, name: char.spellChoice!, desc: WIZARD_SPELL_CHOICES.find(w => w.name === char.spellChoice)?.desc ?? s.desc }
         : s)
     : baseSpells;
-
-  // Usable items from inventory (non-material consumables only)
   const usableItems = char.inventory.filter(i => i.type === "consumable" && !i.material);
 
   function handleActionTab(tab: typeof actionTab) {
@@ -1836,241 +1832,301 @@ function CombatPanel({ combat, char, monsters, combatMode, setCombatMode, select
     if (tab !== "attack") setCombatMode("none");
   }
 
+  const classColor = CLASS_CFG[char.class]?.color ?? C.blue;
+  const turnColor = isPlayer ? classColor : C.red;
+
+  // Left cards: slide from left
+  const leftCard = (delay: number, extra?: React.CSSProperties): React.CSSProperties => ({
+    position: "relative",
+    clipPath: "polygon(0 0, calc(100% - 10px) 0, 100% 100%, 0 100%)",
+    animation: `cp-from-left 0.35s cubic-bezier(0.2,0,0,1) ${delay}ms both`,
+    ...extra,
+  });
+
+  // Right cards: slide from right, mirrored clip
+  const rightCard = (delay: number, extra?: React.CSSProperties): React.CSSProperties => ({
+    position: "relative",
+    clipPath: "polygon(10px 0, 100% 0, 100% 100%, 0 100%)",
+    animation: `cp-from-right 0.35s cubic-bezier(0.2,0,0,1) ${delay}ms both`,
+    ...extra,
+  });
+
   return (
     <>
       <style>{`
-        .cp-btn {
-          position: relative; overflow: hidden;
-          transition: border-color 0.15s, color 0.15s, background 0.15s;
+        @keyframes cp-from-left {
+          0% { transform: translateX(-70px) skewX(-6deg); opacity: 0; }
+          65% { transform: translateX(5px) skewX(-1deg); opacity: 1; }
+          100% { transform: translateX(0) skewX(0); opacity: 1; }
         }
-        .cp-btn::before {
-          content: ''; position: absolute; top: 0; left: -110%; width: 60%; height: 100%;
-          background: linear-gradient(90deg, transparent, rgba(94,184,255,0.22), transparent);
-          pointer-events: none;
-          transition: left 0.35s ease;
+        @keyframes cp-from-right {
+          0% { transform: translateX(70px) skewX(6deg); opacity: 0; }
+          65% { transform: translateX(-5px) skewX(1deg); opacity: 1; }
+          100% { transform: translateX(0) skewX(0); opacity: 1; }
         }
-        .cp-btn:hover::before { left: 150%; }
-        .cp-btn:hover { border-color: rgba(94,184,255,0.55) !important; }
-        .cp-btn-red:hover { border-color: rgba(244,67,54,0.55) !important; }
-        .cp-btn-red::before { background: linear-gradient(90deg, transparent, rgba(244,67,54,0.18), transparent); }
-        .cp-btn-gold:hover { border-color: rgba(255,213,79,0.55) !important; }
-        .cp-btn-gold::before { background: linear-gradient(90deg, transparent, rgba(255,213,79,0.18), transparent); }
+        @keyframes cp-turn-pulse {
+          0%,100% { box-shadow: 0 0 10px ${turnColor}50; }
+          50% { box-shadow: 0 0 24px ${turnColor}aa, inset 0 0 12px ${turnColor}22; }
+        }
+        .cp-left-btn {
+          transition: transform 0.12s, filter 0.12s;
+          cursor: pointer;
+        }
+        .cp-left-btn:hover { transform: translateX(5px); filter: brightness(1.25); }
+        .cp-left-btn:active { transform: translateX(2px); }
+        .cp-right-btn {
+          transition: transform 0.12s, filter 0.12s;
+          cursor: pointer;
+        }
+        .cp-right-btn:hover { transform: translateX(-5px); filter: brightness(1.25); }
+        .cp-right-btn:active { transform: translateX(-2px); }
       `}</style>
 
-      <div style={{ position: "absolute", right: 4, top: 4, zIndex: 20, width: 210, display: "flex", flexDirection: "column", gap: 5 }}>
+      {/* ══ LEFT PANEL: Turn order + Combat Log ══ */}
+      <div style={{ position: "absolute", left: 4, top: 4, zIndex: 20, display: "flex", flexDirection: "column", gap: 3, width: 180 }}>
 
-        {/* Turn order + minimize toggle */}
-        <div style={{ ...panel, padding: "10px 12px", position: "relative" }}>
-          <PixelCorners color={isPlayer ? CLASS_CFG[char.class].color : C.red} size={5} />
-          <div style={{ display: "flex", alignItems: "center", marginBottom: minimized ? 0 : 8 }}>
-            <div style={{ fontFamily: PX, fontSize: 7, color: isPlayer ? C.blue : C.red, letterSpacing: 1, flex: 1 }}>
-              ⚔ R{combat.round} · {isPlayer ? "YOUR TURN" : "ENEMY"}
-            </div>
-            <button onClick={() => setMinimized(p => !p)}
-              title={minimized ? "Expand" : "Minimize"}
-              style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, padding: "0 2px", fontFamily: PX, fontSize: 8, lineHeight: 1 }}>
-              {minimized ? "▼" : "▲"}
-            </button>
+        {/* Turn Banner */}
+        <div style={{
+          ...leftCard(0),
+          background: `linear-gradient(100deg, ${turnColor}dd, ${turnColor}66)`,
+          padding: "9px 16px 9px 12px",
+          animation: `cp-from-left 0.35s cubic-bezier(0.2,0,0,1) 0ms both, cp-turn-pulse 2s 0.4s ease-in-out infinite`,
+        }}>
+          <div style={{ fontFamily: PX, fontSize: 12, color: "#fff", letterSpacing: 3, textShadow: "2px 2px 0 rgba(0,0,0,0.6)" }}>
+            {isPlayer ? "YOUR TURN" : "ENEMY"}
           </div>
-          {!minimized && <div style={{ maxHeight: 80, overflowY: "auto", display: "flex", flexDirection: "column", gap: 3 }}>
-            {combat.turnOrder.map((t, i) => {
-              const dead = t.type === "monster" && monsters.find(m => m.id === t.id)?.hp === 0;
-              if (dead) return null;
-              const act = i === combat.currentIndex;
-              return (
-                <div key={t.id + i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "2px 4px", background: act ? C.blue + "18" : "transparent" }}>
-                  <div style={{ width: 6, height: 6, background: t.type === "player" ? CLASS_CFG[char.class].color : C.red, opacity: act ? 1 : 0.4, flexShrink: 0 }} />
-                  <span style={{ fontFamily: PX, fontSize: 6, color: act ? C.blue : C.muted + "90", letterSpacing: 0.3, flex: 1 }}>{t.name.slice(0, 11)}</span>
-                  <span style={{ fontFamily: MO, fontSize: 7, color: C.muted + "60" }}>{t.initiative}</span>
-                </div>
-              );
-            })}
-          </div>}
+          <div style={{ fontFamily: PX, fontSize: 7, color: "rgba(255,255,255,0.7)", letterSpacing: 2, marginTop: 2 }}>
+            ROUND {combat.round}
+          </div>
         </div>
 
-        {/* Player actions — hidden when minimized */}
-        {!minimized && isPlayer && (
-          <div style={{ ...panel, padding: "10px 12px", position: "relative" }}>
-            <div style={{ fontFamily: PX, fontSize: 6, color: C.muted, marginBottom: 6, letterSpacing: 1 }}>ACTIONS</div>
+        {/* Turn Order */}
+        {combat.turnOrder.map((t, i) => {
+          const dead = t.type === "monster" && monsters.find(m => m.id === t.id)?.hp === 0;
+          if (dead) return null;
+          const act = i === combat.currentIndex;
+          const col = t.type === "player" ? classColor : C.red;
+          return (
+            <div key={t.id + i} style={{
+              ...leftCard(60 + i * 35),
+              background: act ? `${col}28` : "rgba(8,6,20,0.82)",
+              borderRight: `3px solid ${act ? col : col + "35"}`,
+              padding: "5px 14px 5px 10px",
+              display: "flex", alignItems: "center", gap: 7,
+            }}>
+              <div style={{ width: 6, height: 6, background: act ? col : col + "55", flexShrink: 0, clipPath: "polygon(0 50%,50% 0,100% 50%,50% 100%)" }} />
+              <span style={{ fontFamily: PX, fontSize: act ? 8 : 7, color: act ? "#fff" : "rgba(255,255,255,0.4)", letterSpacing: 1, flex: 1 }}>
+                {t.name.slice(0, 12)}
+              </span>
+              <span style={{ fontFamily: MO, fontSize: 8, color: act ? col : "rgba(255,255,255,0.25)" }}>{t.initiative}</span>
+            </div>
+          );
+        })}
 
-            {/* MOVE — always visible */}
-            <button className="cp-btn" onClick={() => { setCombatMode(combatMode === "move" ? "none" : "move"); setActionTab("none"); }}
-              disabled={moveLeft === 0}
-              style={{
-                width: "100%", padding: "7px 10px", marginBottom: 4, cursor: moveLeft === 0 ? "not-allowed" : "pointer",
-                background: combatMode === "move" ? `linear-gradient(180deg, #1a3a6a, #0a2040)` : C.card2,
-                border: `2px solid ${combatMode === "move" ? C.blue : C.border}`,
-                color: moveLeft === 0 ? C.muted + "50" : combatMode === "move" ? C.blue : C.text,
-                fontFamily: PX, fontSize: 7, textAlign: "left", letterSpacing: 0.5,
-                boxShadow: combatMode === "move" ? `0 0 8px ${C.blue}40` : "none",
-                display: "flex", alignItems: "center", gap: 6,
-              }}>
-              ▶ MOVE ({moveLeft * 5}ft left)
-            </button>
-
-            {/* ACTION sub-menu toggle buttons */}
-            {!combat.actionUsed && (
-              <div style={{ display: "flex", gap: 4, marginBottom: 4 }}>
-                {[
-                  { id: "attack" as const, icon: "⚔", label: "ATTACK", col: C.red },
-                  { id: "skill" as const, icon: "✨", label: "SKILL", col: C.purple },
-                  { id: "item" as const, icon: "💊", label: "ITEM", col: "#4cdb70" },
-                ].map(btn => (
-                  <button key={btn.id} className={`cp-btn ${btn.id === "attack" ? "cp-btn-red" : ""}`}
-                    onClick={() => handleActionTab(btn.id)}
-                    style={{
-                      flex: 1, padding: "6px 2px", cursor: "pointer",
-                      background: actionTab === btn.id ? btn.col + "25" : C.card2,
-                      border: `2px solid ${actionTab === btn.id ? btn.col : C.border}`,
-                      color: actionTab === btn.id ? btn.col : C.muted,
-                      fontFamily: PX, fontSize: 6, textAlign: "center", letterSpacing: 0.3,
-                      boxShadow: actionTab === btn.id ? `0 0 8px ${btn.col}40` : "none",
-                      display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
-                    }}>
-                    <span style={{ fontSize: 14 }}>{btn.icon}</span>
-                    <span>{btn.label}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* ATTACK sub-panel */}
-            {!combat.actionUsed && actionTab === "attack" && char.equipment.weapon && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 3, marginBottom: 4, paddingLeft: 4, borderLeft: `2px solid ${C.red}40` }}>
-                <div style={{ fontFamily: MO, fontSize: 8, color: C.muted + "80", marginBottom: 2 }}>
-                  Select target on map
-                </div>
-                <button className="cp-btn cp-btn-red"
-                  onClick={() => setCombatMode(combatMode === "attack" ? "none" : "attack")}
-                  style={{
-                    width: "100%", padding: "7px 10px", cursor: "pointer",
-                    background: combatMode === "attack" ? `linear-gradient(180deg, #3a0a0a, #1a0505)` : C.card2,
-                    border: `2px solid ${combatMode === "attack" ? C.red : C.border}`,
-                    color: combatMode === "attack" ? C.red : C.text,
-                    fontFamily: PX, fontSize: 7, textAlign: "left", letterSpacing: 0.3,
-                    display: "flex", alignItems: "center", gap: 6,
-                    boxShadow: combatMode === "attack" ? `0 0 8px ${C.red}40` : "none",
-                  }}>
-                  ⚔ {char.equipment.weapon.name.slice(0, 14)}
-                  <span style={{ fontFamily: MO, fontSize: 8, color: C.muted, marginLeft: "auto" }}>{(() => {
-                    const w = char.equipment.weapon;
-                    const isR = (w.range ?? 5) > 5;
-                    const statMod = isR ? getMod(char.stats.dex) : getMod(char.stats.str);
-                    return `${w.damage}${statMod >= 0 ? "+" : ""}${statMod}`;
-                  })()}</span>
-                </button>
-              </div>
-            )}
-
-            {/* SKILL sub-panel */}
-            {!combat.actionUsed && actionTab === "skill" && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 3, marginBottom: 4, paddingLeft: 4, borderLeft: `2px solid ${C.purple}40`, position: "relative" }}>
-                <div style={{ fontFamily: MO, fontSize: 8, color: C.muted + "80", marginBottom: 2 }}>
-                  {hasSlots ? `${char.spellSlots!.max - char.spellSlots!.used}/${char.spellSlots!.max} slots` : "Cantrips only"}
-                </div>
-                {spells.filter(s => s.level === 0 || hasSlots).map((spell, si) => {
-                  const isActive = combatMode === "spell" && selectedSpell === spell.name;
-                  return (
-                    <button key={spell.name} className="cp-btn"
-                      onClick={() => onSelectSpell(isActive ? null : spell.name)}
-                      onMouseEnter={e => {
-                        const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
-                        setTooltip({ name: spell.name, desc: spell.desc ?? "", y: si });
-                      }}
-                      onMouseLeave={() => setTooltip(null)}
-                      style={{
-                        width: "100%", padding: "7px 10px", cursor: "pointer",
-                        background: isActive ? `linear-gradient(180deg, #1a0a3a, #0d0520)` : C.card2,
-                        border: `2px solid ${isActive ? C.purple : C.border}`,
-                        color: isActive ? C.purple : C.text,
-                        fontFamily: PX, fontSize: 6, textAlign: "left", letterSpacing: 0.3,
-                        boxShadow: isActive ? `0 0 8px ${C.purple}40` : "none",
-                        display: "flex", alignItems: "center", gap: 6,
-                      }}>
-                      <span>✨</span>
-                      <span>{spell.name}</span>
-                      {spell.level > 0 && <span style={{ marginLeft: "auto", fontFamily: MO, fontSize: 7, color: C.purple + "80" }}>slot</span>}
-                      {spell.level === 0 && <span style={{ marginLeft: "auto", fontFamily: MO, fontSize: 7, color: C.muted }}>∞</span>}
-                    </button>
-                  );
-                })}
-
-                {/* Tooltip */}
-                {tooltip && (
-                  <div style={{
-                    position: "absolute", right: "calc(100% + 8px)", top: 0,
-                    background: C.card, border: `2px solid ${C.purple}`,
-                    boxShadow: `0 0 18px ${C.purple}50`, padding: "10px 12px",
-                    width: 190, zIndex: 100, pointerEvents: "none",
-                  }}>
-                    <PixelCorners color={C.purple} size={5} />
-                    <div style={{ fontFamily: PX, fontSize: 7, color: C.purple, marginBottom: 6 }}>{tooltip.name}</div>
-                    <div style={{ fontFamily: NU, fontSize: 11, color: C.text + "cc", lineHeight: 1.5 }}>{tooltip.desc}</div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* ITEM sub-panel */}
-            {!combat.actionUsed && actionTab === "item" && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 3, marginBottom: 4, paddingLeft: 4, borderLeft: `2px solid #4cdb7040` }}>
-                {usableItems.length === 0 ? (
-                  <div style={{ fontFamily: NU, fontSize: 11, color: C.muted, padding: "4px 6px" }}>No usable items.</div>
-                ) : usableItems.map(item => (
-                  <button key={item.id} className="cp-btn cp-btn-gold"
-                    onClick={() => {/* handled via HUD — emit event to parent */}}
-                    style={{
-                      width: "100%", padding: "7px 10px", cursor: "pointer",
-                      background: C.card2, border: `2px solid ${C.border}`,
-                      color: C.text, fontFamily: PX, fontSize: 6, textAlign: "left", letterSpacing: 0.3,
-                      display: "flex", alignItems: "center", gap: 6,
-                    }}>
-                    💊 {item.name.slice(0, 14)}
-                    <span style={{ marginLeft: "auto", fontFamily: MO, fontSize: 7, color: C.gold }}>use</span>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Cancel spell */}
-            {combatMode === "spell" && (
-              <button className="cp-btn cp-btn-red" onClick={() => { onSelectSpell(null); setActionTab("none"); }}
-                style={{
-                  width: "100%", padding: "5px 10px", marginBottom: 4, cursor: "pointer",
-                  background: C.card2, border: `2px solid ${C.red}40`,
-                  color: C.red + "90", fontFamily: PX, fontSize: 6, letterSpacing: 0.5,
-                }}>✗ CANCEL SPELL</button>
-            )}
-
-            <div style={{ height: 1, background: C.border, margin: "2px 0 4px" }} />
-            <button className="cp-btn" onClick={onEndTurn}
-              style={{
-                ...pixelBtn("primary", true), width: "100%", textAlign: "center",
-                display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-              }}>
-              ✓ END TURN
-            </button>
-          </div>
-        )}
-
-        <button className="cp-btn" onClick={() => setShowLog(p => !p)} style={{ ...pixelBtn("ghost", true), fontSize: 6 }}>
-          {showLog ? "▲ HIDE LOG" : "▼ SHOW LOG"}
-        </button>
-        <button className="cp-btn cp-btn-red" onClick={onFlee} style={{ ...pixelBtn("ghost", true), fontSize: 6, color: C.red + "80", borderColor: C.red + "30" }}>
-          ✗ FLEE
-        </button>
-
-        {showLog && (
-          <div style={{ ...panel, padding: 8, maxHeight: 130, overflowY: "auto" }}>
-            {combat.log.slice(-15).map((l, i) => (
-              <div key={i} style={{ fontFamily: NU, fontSize: 10, color: C.muted, lineHeight: 1.4, borderBottom: `1px solid ${C.border}20`, paddingBottom: 2, marginBottom: 2 }}>{l}</div>
-            ))}
-          </div>
-        )}
+        {/* Combat Log toggle */}
+        <div style={{ marginTop: 4 }}>
+          <button className="cp-left-btn" onClick={() => setShowLog(p => !p)} style={{
+            ...leftCard(200),
+            border: "none", padding: "5px 16px 5px 10px", width: "100%", textAlign: "left",
+            background: "rgba(10,8,22,0.8)",
+            color: "rgba(255,255,255,0.35)", fontFamily: PX, fontSize: 7, letterSpacing: 1,
+          }}>
+            {showLog ? "▲ HIDE LOG" : "▼ COMBAT LOG"}
+          </button>
+          {showLog && (
+            <div style={{
+              ...leftCard(220),
+              padding: "8px 12px", background: "rgba(5,4,14,0.92)", maxHeight: 140, overflowY: "auto",
+            }}>
+              {combat.log.slice(-12).reverse().map((l, i) => (
+                <div key={i} style={{ fontFamily: NU, fontSize: 10, color: i === 0 ? "rgba(255,255,255,0.8)" : "rgba(255,255,255,0.4)", lineHeight: 1.5, marginBottom: 2 }}>{l}</div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* ══ RIGHT PANEL: Actions ══ */}
+      {isPlayer && (
+        <div style={{ position: "absolute", right: 4, top: 4, zIndex: 20, display: "flex", flexDirection: "column", gap: 3, width: 190 }}>
+
+          {/* MOVE */}
+          <button className="cp-right-btn" onClick={() => { setCombatMode(combatMode === "move" ? "none" : "move"); setActionTab("none"); }}
+            disabled={moveLeft === 0}
+            style={{
+              ...rightCard(0),
+              border: "none", padding: "10px 14px 10px 20px", textAlign: "right",
+              background: combatMode === "move"
+                ? `linear-gradient(260deg, ${C.blue}cc, ${C.blue}55)`
+                : "linear-gradient(260deg, rgba(20,30,60,0.95), rgba(10,15,35,0.95))",
+              color: moveLeft === 0 ? "rgba(255,255,255,0.2)" : combatMode === "move" ? "#fff" : "rgba(255,255,255,0.8)",
+              fontFamily: PX, fontSize: 9, letterSpacing: 2,
+              boxShadow: combatMode === "move" ? `0 0 14px ${C.blue}60` : "none",
+              display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8,
+            }}>
+            <span style={{ fontSize: 7, opacity: 0.65 }}>{moveLeft * 5}ft</span>
+            MOVE ▶
+          </button>
+
+          {/* ACTION TABS */}
+          {!combat.actionUsed ? (
+            <>
+              {[
+                { id: "attack" as const, icon: "⚔", label: "ATTACK", col: C.red },
+                { id: "skill" as const, icon: "✨", label: "SKILL", col: "#c97fff" },
+                { id: "item" as const, icon: "💊", label: "ITEM", col: "#4cdb70" },
+              ].map((btn, bi) => (
+                <button key={btn.id} className="cp-right-btn"
+                  onClick={() => handleActionTab(btn.id)}
+                  style={{
+                    ...rightCard(60 + bi * 50),
+                    border: "none", padding: "10px 14px 10px 20px", textAlign: "right",
+                    background: actionTab === btn.id
+                      ? `linear-gradient(260deg, ${btn.col}cc, ${btn.col}44)`
+                      : "linear-gradient(260deg, rgba(20,14,40,0.95), rgba(10,8,24,0.95))",
+                    color: actionTab === btn.id ? "#fff" : "rgba(255,255,255,0.7)",
+                    fontFamily: PX, fontSize: 9, letterSpacing: 2,
+                    boxShadow: actionTab === btn.id ? `0 0 14px ${btn.col}50` : "none",
+                    display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10,
+                  }}>
+                  {btn.label}
+                  <span style={{ fontSize: 15 }}>{btn.icon}</span>
+                </button>
+              ))}
+            </>
+          ) : (
+            <div style={{ ...rightCard(60), padding: "9px 14px 9px 20px", background: "rgba(12,10,28,0.88)", textAlign: "right" }}>
+              <span style={{ fontFamily: PX, fontSize: 8, color: "rgba(255,255,255,0.28)", letterSpacing: 2 }}>ACTION USED</span>
+            </div>
+          )}
+
+          {/* ATTACK sub-panel */}
+          {!combat.actionUsed && actionTab === "attack" && char.equipment.weapon && (
+            <div style={{ ...rightCard(220), padding: "9px 14px 9px 20px", background: "linear-gradient(260deg, rgba(60,10,10,0.95), rgba(30,5,5,0.95))" }}>
+              <button className="cp-right-btn"
+                onClick={() => setCombatMode(combatMode === "attack" ? "none" : "attack")}
+                style={{
+                  background: "none", border: "none", width: "100%", padding: 0, cursor: "pointer",
+                  color: combatMode === "attack" ? C.red : "rgba(255,255,255,0.85)",
+                  fontFamily: PX, fontSize: 9, letterSpacing: 1,
+                  display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, textAlign: "right",
+                }}>
+                <span style={{ fontFamily: MO, fontSize: 9, color: C.red + "99" }}>{char.equipment.weapon.damage}</span>
+                ⚔ {char.equipment.weapon.name.slice(0, 14)}
+              </button>
+              <div style={{ fontFamily: MO, fontSize: 9, color: "rgba(255,255,255,0.35)", marginTop: 4, textAlign: "right" }}>Click target on map</div>
+            </div>
+          )}
+
+          {/* SKILL sub-panel */}
+          {!combat.actionUsed && actionTab === "skill" && (
+            <div style={{ position: "relative" }}>
+              {spells.filter(s => s.level === 0 || hasSlots).map((spell, si) => {
+                const isActive = combatMode === "spell" && selectedSpell === spell.name;
+                return (
+                  <button key={spell.name} className="cp-right-btn"
+                    onClick={() => onSelectSpell(isActive ? null : spell.name)}
+                    onMouseEnter={() => setTooltip({ name: spell.name, desc: spell.desc ?? "" })}
+                    onMouseLeave={() => setTooltip(null)}
+                    style={{
+                      ...rightCard(220 + si * 40),
+                      border: "none", padding: "9px 14px 9px 20px", width: "100%",
+                      background: isActive
+                        ? "linear-gradient(260deg, #6a22cc, #3a0a80)"
+                        : "linear-gradient(260deg, rgba(40,14,70,0.95), rgba(20,8,40,0.95))",
+                      color: isActive ? "#fff" : "rgba(255,255,255,0.75)",
+                      fontFamily: PX, fontSize: 9, letterSpacing: 1,
+                      display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8,
+                      boxShadow: isActive ? "0 0 14px #7c3aed80" : "none",
+                      marginBottom: 3, textAlign: "right",
+                    }}>
+                    {spell.level > 0 && <span style={{ fontFamily: MO, fontSize: 7, color: "#c97fff88" }}>SLOT</span>}
+                    {spell.level === 0 && <span style={{ fontFamily: MO, fontSize: 7, color: "rgba(255,255,255,0.3)" }}>∞</span>}
+                    {spell.name} ✨
+                  </button>
+                );
+              })}
+              {!hasSlots && <div style={{ fontFamily: MO, fontSize: 9, color: "rgba(255,80,80,0.7)", padding: "4px 14px", textAlign: "right" }}>No slots left</div>}
+              {/* Tooltip - pops to left */}
+              {tooltip && (
+                <div style={{
+                  position: "absolute", right: "calc(100% + 8px)", top: 0,
+                  background: "rgba(12,8,28,0.97)", border: `2px solid #7c3aed`,
+                  boxShadow: "0 0 20px #7c3aed50", padding: "10px 14px",
+                  width: 200, zIndex: 100, pointerEvents: "none",
+                  clipPath: "polygon(0 0, calc(100% - 10px) 0, 100% 100%, 10px 100%)",
+                }}>
+                  <div style={{ fontFamily: PX, fontSize: 9, color: "#c97fff", marginBottom: 5 }}>{tooltip.name}</div>
+                  <div style={{ fontFamily: NU, fontSize: 10, color: "rgba(255,255,255,0.75)", lineHeight: 1.55 }}>{tooltip.desc}</div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ITEM sub-panel */}
+          {!combat.actionUsed && actionTab === "item" && (
+            usableItems.length === 0 ? (
+              <div style={{ ...rightCard(220), padding: "9px 14px", background: "rgba(12,10,28,0.88)", textAlign: "right" }}>
+                <span style={{ fontFamily: MO, fontSize: 10, color: "rgba(255,255,255,0.28)" }}>No items</span>
+              </div>
+            ) : usableItems.map((item, ii) => (
+              <button key={item.id} className="cp-right-btn"
+                style={{
+                  ...rightCard(220 + ii * 40),
+                  border: "none", padding: "9px 14px 9px 20px", width: "100%", textAlign: "right",
+                  background: "linear-gradient(260deg, rgba(15,40,20,0.95), rgba(8,20,12,0.95))",
+                  color: "rgba(255,255,255,0.8)", fontFamily: PX, fontSize: 9, letterSpacing: 1,
+                  display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, marginBottom: 3,
+                }}>
+                <span style={{ fontFamily: MO, fontSize: 9, color: "#4cdb7088" }}>USE</span>
+                {item.name.slice(0, 16)} 💊
+              </button>
+            ))
+          )}
+
+          {/* END TURN */}
+          <div style={{ height: 4 }} />
+          <button className="cp-right-btn" onClick={onEndTurn}
+            style={{
+              ...rightCard(260),
+              border: "none", padding: "12px 16px 12px 24px", textAlign: "right",
+              background: `linear-gradient(260deg, ${classColor}ee, ${classColor}66)`,
+              color: "#fff", fontFamily: PX, fontSize: 11, letterSpacing: 3,
+              boxShadow: `0 0 22px ${classColor}55`,
+            }}>
+            END TURN ✓
+          </button>
+
+          {/* FLEE */}
+          <button className="cp-right-btn" onClick={onFlee}
+            style={{
+              ...rightCard(300),
+              border: "none", padding: "7px 14px 7px 20px", textAlign: "right",
+              background: "linear-gradient(260deg, rgba(80,10,10,0.75), rgba(40,5,5,0.75))",
+              color: "rgba(255,80,80,0.8)", fontFamily: PX, fontSize: 8, letterSpacing: 2,
+            }}>
+            FLEE ✗
+          </button>
+        </div>
+      )}
+
+      {/* Enemy turn: indicator on right */}
+      {!isPlayer && (
+        <div style={{ position: "absolute", right: 4, top: 4, zIndex: 20 }}>
+          <div style={{
+            ...rightCard(0),
+            padding: "10px 14px 10px 20px", background: "linear-gradient(260deg, rgba(80,10,10,0.8), rgba(40,5,5,0.8))",
+          }}>
+            <div style={{ fontFamily: PX, fontSize: 8, color: "rgba(255,100,100,0.7)", letterSpacing: 2, textAlign: "right" }}>ENEMY</div>
+            <div style={{ fontFamily: PX, fontSize: 7, color: "rgba(255,255,255,0.3)", letterSpacing: 1, textAlign: "right" }}>THINKING...</div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
+
+
 
 // ─────────────────────────────────────────────────
 // SHOP MODAL
@@ -3833,20 +3889,41 @@ export default function App() {
                 </div>
               )}
 
-              {/* Engage First button — appears when enemies are nearby (Moved to top center) */}
+              {/* Engage First button — appears when enemies are nearby (Persona-style) */}
               {screen === "dungeon" && !combat.active && (() => {
                 const nearbyM = gs.dungeonMonsters.filter(m => m.hp > 0 && dist(char.position, m.position) <= m.sightRange + 2);
                 if (nearbyM.length === 0) return null;
                 return (
-                  <div style={{ position: "absolute", top: 24, left: "50%", transform: "translateX(-50%)", zIndex: 100 }}>
+                  <div style={{ position: "absolute", top: 16, left: "50%", transform: "translateX(-50%)", zIndex: 100 }}>
+                    <style>{`
+                      @keyframes engage-persona-in {
+                        0% { transform: translateX(-120px) skewX(-12deg) scaleX(0.3); opacity: 0; }
+                        50% { transform: translateX(8px) skewX(-4deg) scaleX(1.05); opacity: 1; }
+                        70% { transform: translateX(-2px) skewX(-2deg) scaleX(1); }
+                        100% { transform: translateX(0) skewX(0deg) scaleX(1); opacity: 1; }
+                      }
+                      @keyframes engage-persona-pulse {
+                        0%,100% { box-shadow: 0 0 20px rgba(220,30,30,0.7), 0 0 50px rgba(220,30,30,0.3); }
+                        50% { box-shadow: 0 0 35px rgba(255,60,60,0.9), 0 0 80px rgba(220,30,30,0.5), inset 0 0 20px rgba(255,100,100,0.15); }
+                      }
+                    `}</style>
                     <button onClick={() => startCombat(nearbyM.map(m => m.id))}
                       style={{
-                        ...pixelBtn("danger", true), fontSize: 16, padding: "10px 24px",
-                        display: "flex", alignItems: "center", gap: 8,
-                        animation: "engage-burst 0.5s ease-out, engage-aura 1.4s 0.5s ease-in-out infinite",
-                        boxShadow: "0 0 20px rgba(255, 0, 0, 0.8), 0 0 40px rgba(255, 50, 0, 0.5)"
+                        background: "linear-gradient(105deg, #cc0000, #880000)",
+                        border: "none",
+                        color: "#fff",
+                        fontFamily: PX,
+                        fontSize: 18,
+                        padding: "12px 32px",
+                        letterSpacing: 4,
+                        clipPath: "polygon(0 0, calc(100% - 16px) 0, 100% 100%, 16px 100%)",
+                        cursor: "pointer",
+                        animation: "engage-persona-in 0.5s cubic-bezier(0.2,0,0,1) forwards, engage-persona-pulse 1.5s 0.5s ease-in-out infinite",
+                        textShadow: "2px 2px 0 rgba(0,0,0,0.5)",
+                        display: "flex", alignItems: "center", gap: 10,
                       }}>
-                      ⚔ ENGAGE!
+                      <span style={{ fontSize: 22 }}>⚔</span>
+                      ENGAGE!
                     </button>
                   </div>
                 );
