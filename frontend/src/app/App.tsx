@@ -1,4 +1,8 @@
 import { useState, useEffect, useRef, useCallback, ReactNode } from "react";
+import _p1 from "../imports/proflie1.png";
+import _p2 from "../imports/profile2.png";
+import _p3 from "../imports/profile3.png";
+import _p4 from "../imports/profile4.png";
 import {
   Sword, Shield, User, Package, MessageCircle, Users,
   ChevronDown, ChevronUp, ChevronRight, X, Plus, LogOut, Heart, Zap,
@@ -12,7 +16,7 @@ import {
 type Screen = "auth" | "charSelect" | "charCreate" | "worldMap" | "town" | "dungeon";
 type CharClass = "Fighter" | "Cleric" | "Paladin" | "Ranger" | "Wizard";
 type ItemType = "weapon" | "armor" | "accessory" | "consumable";
-type HudTab = "char" | "inv" | "equip" | "acc" | "chat" | "party";
+type HudTab = "char" | "inv" | "equip" | "acc" | "chat" | "party" | "skills";
 type CombatModeT = "none" | "move" | "attack" | "spell";
 
 interface Stats { str: number; dex: number; con: number; int: number; wis: number; cha: number }
@@ -20,6 +24,10 @@ interface Item {
   id: string; name: string; type: ItemType; description: string; value: number;
   damage?: string; damageType?: string; range?: number;
   ac?: number; healAmount?: string; effect?: string; stat?: keyof Stats; bonus?: number;
+  material?: boolean;
+  saveStat?: keyof Stats;
+  saveDC?: number;
+  aoeRadius?: number;
 }
 interface Equipment {
   weapon: Item | null; armor: Item | null;
@@ -50,7 +58,8 @@ interface CombatState {
 }
 interface VisualEffect {
   id: string;
-  type: "slash" | "scratch" | "fire_bolt" | "magic_missile" | "sacred_flame" | "thunder" | "fire_aoe" | "smite" | "heal" | "miss" | "number";
+  type: "slash" | "scratch" | "fire_bolt" | "magic_missile" | "sacred_flame" | "thunder" | "fire_aoe" | "smite" | "heal" | "miss" | "number" | "sword_swing" | "arrow";
+  targetX?: number; targetY?: number; // for directional effects
   gridX: number; gridY: number;
   value?: string;
 }
@@ -67,8 +76,10 @@ interface DiceRollDisplay {
 interface Quest {
   id: string; title: string; description: string;
   killTarget?: { monster: string; count: number; current: number };
+  gatherTarget?: { itemName: string; count: number };
   reward: { exp: number; gold: number };
   completed?: boolean;
+  readyToTurnIn?: boolean;
 }
 interface Party { name: string; leaderId: string; memberIds: string[]; questIds: string[] }
 interface GameState {
@@ -110,6 +121,9 @@ const C = {
 const PX = "Press Start 2P, monospace";
 const NU = "Nunito, sans-serif";
 const MO = "JetBrains Mono, monospace";
+
+// Local pixel-art profile presets (static imports so Vite bundles them)
+const PROFILE_PRESETS: string[] = [_p1, _p2, _p3, _p4];
 
 // Pixel-art panel style
 const panel = {
@@ -289,27 +303,18 @@ const PROFICIENCY_LIST: Array<{ name: string; stat: keyof Stats; effect: string 
 ];
 
 const WIZARD_SPELL_CHOICES = [
-  { name: "Sleep", aoe: true, aoeRadius: 4, desc: "Magical slumber in 20ft area. CON save DC 13 or incapacitated." },
-  { name: "Thunderwave", aoe: true, aoeRadius: 3, desc: "15ft thunder burst. DEX save DC 13 or 2d8 thunder + push." },
-  { name: "Burning Hands", aoe: true, aoeRadius: 3, desc: "15ft fire cone. DEX save DC 13 or 3d6 fire damage." },
+  { name: "Sleep", aoe: true, aoeRadius: 4, isCone: false, desc: "Magical slumber. AOE(Circle) 20ft radius. CON save DC 13 or incapacitated." },
+  { name: "Thunderwave", aoe: true, aoeRadius: 3, isCone: false, desc: "Thunder burst. AOE(Circle) 15ft radius. DEX save DC 13 or 2d8 + push." },
+  { name: "Burning Hands", aoe: true, aoeRadius: 3, isCone: true, desc: "Fire cone. AOE(Cone) 15ft. DEX save DC 13 or 3d6 fire damage." },
 ];
 
 const BRANCH_ITEM: Omit<Item, "id"> = {
-  name: "Branch", type: "consumable", value: 1,
-  description: "A rough wooden branch. Dropped by training dummies.",
+  name: "Branch", type: "consumable", value: 1, material: true,
+  description: "Rough wooden branch from a training dummy. Used as crafting material.",
 };
 
 // DiceBear pixel-art avatar presets (anime pixel style)
-const PIXEL_AVATARS = [
-  "https://api.dicebear.com/8.x/pixel-art/svg?seed=warrior&backgroundColor=1a1a2e&scale=85",
-  "https://api.dicebear.com/8.x/pixel-art/svg?seed=mage&backgroundColor=1a1a2e&scale=85",
-  "https://api.dicebear.com/8.x/pixel-art/svg?seed=ranger&backgroundColor=1a1a2e&scale=85",
-  "https://api.dicebear.com/8.x/pixel-art/svg?seed=cleric&backgroundColor=1a1a2e&scale=85",
-  "https://api.dicebear.com/8.x/pixel-art/svg?seed=paladin&backgroundColor=1a1a2e&scale=85",
-  "https://api.dicebear.com/8.x/pixel-art/svg?seed=rogue&backgroundColor=1a1a2e&scale=85",
-  "https://api.dicebear.com/8.x/pixel-art/svg?seed=bard&backgroundColor=1a1a2e&scale=85",
-  "https://api.dicebear.com/8.x/pixel-art/svg?seed=druid&backgroundColor=1a1a2e&scale=85",
-];
+const PIXEL_AVATARS = PROFILE_PRESETS;
 
 const SHOP_ITEMS: Item[] = [
   { id: "s1", name: "Longsword", type: "weapon", damage: "1d8", damageType: "slashing", range: 5, value: 15, description: "Classic blade." },
@@ -324,9 +329,10 @@ const SHOP_ITEMS: Item[] = [
   { id: "s10", name: "Amulet of Vigor", type: "accessory", stat: "con", bonus: 2, value: 80, description: "+2 CON." },
   { id: "s11", name: "Cloak of Elvenkind", type: "accessory", stat: "dex", bonus: 2, value: 80, description: "+2 DEX." },
   { id: "s12", name: "Gauntlets of Strength", type: "accessory", stat: "str", bonus: 2, value: 80, description: "+2 STR." },
+  { id: "s13", name: "Small Bomb", type: "consumable", damage: "3d6", effect: "aoe_bomb", saveStat: "dex", saveDC: 15, aoeRadius: 2, value: 60, description: "3d6 explosion, DEX save DC 15. Half damage on save. Circle AOE." },
 ];
 
-const QUEST_TEMPLATES = [
+const QUEST_TEMPLATES: Array<{ title: string; desc: string; n: number; exp: number; gold: number; gather?: string }> = [
   { title: "Pest Control", desc: "Clear {n} Wooden Dummies from the dungeon.", n: 3, exp: 60, gold: 15 },
   { title: "Training Exercise", desc: "Destroy {n} training dummies.", n: 5, exp: 100, gold: 25 },
   { title: "Quick Skirmish", desc: "Defeat {n} Wooden Dummies.", n: 2, exp: 40, gold: 10 },
@@ -335,6 +341,8 @@ const QUEST_TEMPLATES = [
   { title: "Rookie Hunt", desc: "Kill {n} Wooden Dummies to prove worth.", n: 2, exp: 40, gold: 12 },
   { title: "Exterminator", desc: "Wipe out {n} Wooden Dummies below.", n: 5, exp: 95, gold: 22 },
   { title: "Combat Trial", desc: "Face and destroy {n} Wooden Dummies.", n: 3, exp: 65, gold: 16 },
+  { title: "Timber Collection", desc: "Collect {n} wooden branches from training dummies.", n: 5, exp: 50, gold: 20, gather: "Branch" },
+  { title: "Wood for the Workshop", desc: "Bring {n} branches from the dungeon.", n: 3, exp: 30, gold: 12, gather: "Branch" },
 ];
 
 const NPC_CHAT = [
@@ -372,6 +380,15 @@ function rollDice(notation: string): number {
   return Math.max(0, total);
 }
 
+function getSpellcastingMod(char: Character): number {
+  switch (char.class) {
+    case "Wizard": return getMod(char.stats.int);
+    case "Cleric": return getMod(char.stats.wis);
+    case "Paladin": return getMod(char.stats.cha);
+    default: return 0;
+  }
+}
+
 function calcAC(char: Character): number {
   const dexMod = getMod(char.stats.dex);
   const armorName = char.equipment.armor?.name ?? "";
@@ -383,7 +400,14 @@ function calcAC(char: Character): number {
 
 function createCharacter(name: string, avatar: string, cls: CharClass, customStats?: Stats, selectedSkills?: string[], spellChoice?: string): Character {
   const cfg = CLASS_CFG[cls];
-  const stats = customStats ?? { ...cfg.stats };
+  const stats: Stats = { ...(customStats ?? { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }) };
+  // Each chosen proficiency adds +1 to its associated ability score
+  if (selectedSkills) {
+    selectedSkills.forEach(sk => {
+      const prof = PROFICIENCY_LIST.find(p => p.name === sk);
+      if (prof) (stats[prof.stat] as number) += 1;
+    });
+  }
   const conMod = getMod(stats.con);
   const maxHp = cfg.hpBase + conMod;
   const weapon: Item = { ...cfg.weapon, id: gid() };
@@ -425,11 +449,20 @@ function genMonsters(): Monster[] {
 }
 
 function genQuests(n = 10): Quest[] {
-  return [...QUEST_TEMPLATES].sort(() => Math.random() - 0.5).slice(0, n).map(t => ({
-    id: gid(), title: t.title, description: t.desc.replace("{n}", String(t.n)),
-    killTarget: { monster: "Wooden Dummy", count: t.n, current: 0 },
-    reward: { exp: t.exp, gold: t.gold },
-  }));
+  return [...QUEST_TEMPLATES].sort(() => Math.random() - 0.5).slice(0, n).map(t => {
+    if (t.gather) {
+      return {
+        id: gid(), title: t.title, description: t.desc.replace("{n}", String(t.n)),
+        gatherTarget: { itemName: t.gather, count: t.n },
+        reward: { exp: t.exp, gold: t.gold },
+      };
+    }
+    return {
+      id: gid(), title: t.title, description: t.desc.replace("{n}", String(t.n)),
+      killTarget: { monster: "Wooden Dummy", count: t.n, current: 0 },
+      reward: { exp: t.exp, gold: t.gold },
+    };
+  });
 }
 
 // ─────────────────────────────────────────────────
@@ -921,8 +954,11 @@ function CharCreateScreen({ onCreated, onBack }: { onCreated: (c: Character) => 
 
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
               {(Object.keys(customStats) as (keyof Stats)[]).map(stat => {
-                const val = customStats[stat];
-                const mod = getMod(val);
+                const base = customStats[stat];
+                // Count how many selected proficiencies contribute to this stat
+                const profBonus = selectedSkills.filter(sk => PROFICIENCY_LIST.find(p => p.name === sk)?.stat === stat).length;
+                const effective = base + profBonus;
+                const mod = getMod(effective);
                 const desc = STAT_DESCRIPTIONS[stat];
                 return (
                   <div key={stat} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", background: C.card2, border: `1px solid ${C.border}` }}>
@@ -931,10 +967,13 @@ function CharCreateScreen({ onCreated, onBack }: { onCreated: (c: Character) => 
                       <div style={{ fontFamily: NU, fontSize: 10, color: C.muted }}>{desc.effect}</div>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-                      <button onClick={() => adjustStat(stat, -1)} disabled={val <= 8}
-                        style={{ ...pixelBtn("ghost", true), padding: "4px 8px", opacity: val <= 8 ? 0.4 : 1, fontFamily: MO, fontSize: 12 }}>−</button>
-                      <div style={{ textAlign: "center", minWidth: 48 }}>
-                        <div style={{ fontFamily: MO, fontSize: 14, color: C.blue, fontWeight: 700 }}>{val}</div>
+                      <button onClick={() => adjustStat(stat, -1)} disabled={base <= 8}
+                        style={{ ...pixelBtn("ghost", true), padding: "4px 8px", opacity: base <= 8 ? 0.4 : 1, fontFamily: MO, fontSize: 12 }}>−</button>
+                      <div style={{ textAlign: "center", minWidth: 52 }}>
+                        <div style={{ fontFamily: MO, fontSize: 14, fontWeight: 700, color: profBonus > 0 ? "#4cdb70" : C.blue }}>
+                          {effective}
+                          {profBonus > 0 && <span style={{ fontSize: 9, color: "#4cdb70" }}> (+{profBonus})</span>}
+                        </div>
                         <div style={{ fontFamily: MO, fontSize: 9, color: C.muted }}>{mod >= 0 ? `+${mod}` : `${mod}`}</div>
                       </div>
                       <button onClick={() => adjustStat(stat, 1)} disabled={pointsLeft <= 0}
@@ -966,8 +1005,11 @@ function CharCreateScreen({ onCreated, onBack }: { onCreated: (c: Character) => 
                       border: `2px solid ${sel ? C.blue : C.border}`,
                       boxShadow: sel ? `0 0 8px ${C.blue}30` : "none",
                     }}>
-                    <div style={{ fontFamily: MO, fontSize: 9, color: sel ? C.blue : C.text, marginBottom: 2 }}>{prof.name}</div>
-                    <div style={{ fontFamily: NU, fontSize: 9, color: C.muted }}>{prof.stat.toUpperCase()} · {prof.effect.split("—")[1]?.trim() ?? ""}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                      <span style={{ fontFamily: MO, fontSize: 9, color: sel ? C.blue : C.text }}>{prof.name}</span>
+                      <span style={{ fontFamily: MO, fontSize: 7, color: "#4cdb70", padding: "1px 4px", background: "#4cdb7015", border: "1px solid #4cdb7040" }}>+1 {prof.stat.toUpperCase()}</span>
+                    </div>
+                    <div style={{ fontFamily: NU, fontSize: 9, color: C.muted }}>{prof.effect.split("—")[1]?.trim() ?? ""}</div>
                   </button>
                 );
               })}
@@ -1229,16 +1271,41 @@ interface MapGridProps {
   combatMode: CombatModeT; selectedSpell?: string;
   onTileClick: (x: number, y: number) => void;
   onMonsterClick: (id: string) => void;
+  onAOECast?: (affectedMonsterIds: string[], tileX: number, tileY: number) => void;
   effects: VisualEffect[];
-  aoeHoverTile?: { x: number; y: number } | null;
-  onAOEHover?: (tile: { x: number; y: number } | null) => void;
-  onAOEClick?: (x: number, y: number) => void;
   dyingMonsters?: Set<string>;
+  hitTokenIds?: Set<string>;
+  onHealSelf?: () => void;
 }
 
-function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode, selectedSpell, onTileClick, onMonsterClick, effects, aoeHoverTile, onAOEHover, onAOEClick, dyingMonsters }: MapGridProps) {
+// Compute which grid tiles fall inside a cone pointing from player toward mouse
+function getConeTiles(playerPos: { x: number; y: number }, mouseX: number, mouseY: number, length: number): Set<string> {
+  const tiles = new Set<string>();
+  const px = playerPos.x * CELL + CELL / 2;
+  const py = playerPos.y * CELL + CELL / 2;
+  const angle = Math.atan2(mouseY - py, mouseX - px);
+  const halfAngle = Math.PI / 3.5; // ~51 degrees ⟹ ~103° wide cone
+  for (let dy = -length; dy <= length; dy++) {
+    for (let dx = -length; dx <= length; dx++) {
+      if (dx === 0 && dy === 0) continue;
+      const tx = playerPos.x + dx, ty = playerPos.y + dy;
+      if (tx < 0 || ty < 0 || tx >= COLS || ty >= ROWS) continue;
+      if (Math.sqrt(dx * dx + dy * dy) > length) continue;
+      const tileAngle = Math.atan2(ty * CELL + CELL / 2 - py, tx * CELL + CELL / 2 - px);
+      let diff = Math.abs(angle - tileAngle);
+      if (diff > Math.PI) diff = 2 * Math.PI - diff;
+      if (diff <= halfAngle) tiles.add(`${tx},${ty}`);
+    }
+  }
+  return tiles;
+}
+
+function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode, selectedSpell, onTileClick, onMonsterClick, onAOECast, effects, dyingMonsters, hitTokenIds, onHealSelf }: MapGridProps) {
   const pos = char.position;
   const [hoveredMonsterId, setHoveredMonsterId] = useState<string | null>(null);
+  // Mouse position relative to the grid container for cone direction
+  const [mouseGrid, setMouseGrid] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const gridRef = useRef<HTMLDivElement>(null);
 
   const visible = new Set<string>();
   if (mode === "dungeon") {
@@ -1270,36 +1337,57 @@ function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode, select
   }
 
   const spellableM = new Set<string>();
-  if (combat.active && combatMode === "spell" && selectedSpell) {
+  // AOE tiles — circle for normal spells, cone for Burning Hands
+  const aoeTiles = new Set<string>();
+  const aoeHitMonsters = new Set<string>();
+  const BOMB_AOE_DEF = { name: "Small Bomb", aoeRadius: 2, isCone: false, aoe: true };
+  const isAoeSpell = selectedSpell && (WIZARD_SPELL_CHOICES.some(s => s.name === selectedSpell) || selectedSpell === "Small Bomb");
+  const aoeSpellDef = isAoeSpell ? (WIZARD_SPELL_CHOICES.find(s => s.name === selectedSpell) ?? BOMB_AOE_DEF) : null;
+  // Mouse tile (grid coordinates) for circle AOE center
+  const mouseGridTile = {
+    x: Math.min(COLS - 1, Math.max(0, Math.floor(mouseGrid.x / CELL))),
+    y: Math.min(ROWS - 1, Math.max(0, Math.floor(mouseGrid.y / CELL))),
+  };
+
+  if (combatMode === "spell" && selectedSpell) {
     const allSpells = CLASS_SPELLS[char.class] ?? [];
     const wizChoices = char.class === "Wizard" ? WIZARD_SPELL_CHOICES.map(s => ({ name: s.name, range: 30 })) : [];
-    const spell = [...allSpells, ...wizChoices].find((s: { name: string }) => s.name === selectedSpell) as { name: string; range?: number } | undefined;
+    const bombEntry = selectedSpell === "Small Bomb" ? [{ name: "Small Bomb", range: 30 }] : [];
+    const spell = [...allSpells, ...wizChoices, ...bombEntry].find((s: { name: string }) => s.name === selectedSpell) as { name: string; range?: number } | undefined;
     if (spell) {
-      const rangeSquares = Math.ceil(((spell.range ?? 5)) / 5);
+      const rangeSquares = Math.ceil((spell.range ?? 5) / 5);
       monsters.filter(m => m.hp > 0).forEach(m => {
         if (dist(pos, m.position) <= rangeSquares) spellableM.add(m.id);
       });
     }
-  }
-
-  // Compute AOE area tiles
-  const aoeTiles = new Set<string>();
-  const aoeHitMonsters = new Set<string>();
-  const isAoeSpell = selectedSpell && WIZARD_SPELL_CHOICES.some(s => s.name === selectedSpell);
-  if (isAoeSpell && aoeHoverTile && combatMode === "spell") {
-    const aoeSpell = WIZARD_SPELL_CHOICES.find(s => s.name === selectedSpell);
-    const aoeR = aoeSpell?.aoeRadius ?? 3;
-    for (let dy2 = -aoeR; dy2 <= aoeR; dy2++)
-      for (let dx2 = -aoeR; dx2 <= aoeR; dx2++) {
-        if (Math.abs(dx2) + Math.abs(dy2) <= aoeR) {
-          const tx = aoeHoverTile.x + dx2, ty = aoeHoverTile.y + dy2;
-          if (tx >= 0 && tx < COLS && ty >= 0 && ty < ROWS) aoeTiles.add(`${tx},${ty}`);
+    if (isAoeSpell && aoeSpellDef) {
+      const aoeLen = aoeSpellDef.aoeRadius;
+      if (aoeSpellDef.isCone) {
+        // CONE: Burning Hands — emanates from player toward mouse
+        const coneTiles = getConeTiles(pos, mouseGrid.x, mouseGrid.y, aoeLen);
+        coneTiles.forEach(t => aoeTiles.add(t));
+      } else {
+        // CIRCLE: Sleep / Thunderwave — centered on mouse tile
+        for (let dy = -aoeLen; dy <= aoeLen; dy++) {
+          for (let dx = -aoeLen; dx <= aoeLen; dx++) {
+            if (Math.abs(dx) + Math.abs(dy) <= aoeLen) {
+              const tx = mouseGridTile.x + dx, ty = mouseGridTile.y + dy;
+              if (tx >= 0 && tx < COLS && ty >= 0 && ty < ROWS) aoeTiles.add(`${tx},${ty}`);
+            }
+          }
         }
       }
-    monsters.filter(m => m.hp > 0).forEach(m => {
-      if (dist(aoeHoverTile, m.position) <= (WIZARD_SPELL_CHOICES.find(s => s.name === selectedSpell)?.aoeRadius ?? 3)) aoeHitMonsters.add(m.id);
-    });
+      monsters.filter(m => m.hp > 0).forEach(m => {
+        if (aoeTiles.has(`${m.position.x},${m.position.y}`)) aoeHitMonsters.add(m.id);
+      });
+    }
   }
+
+  const isHealSpell = selectedSpell && (() => {
+    const spells = CLASS_SPELLS[char.class] ?? [];
+    const s = spells.find(sp => sp.name === selectedSpell);
+    return s?.type === "heal" || (s?.type === "cantrip" && s?.heal);
+  })();
 
   return (
     <>
@@ -1308,10 +1396,20 @@ function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode, select
         @keyframes dnd-float-up { 0%{opacity:1;transform:translateY(0)} 60%{opacity:1;transform:translateY(-22px)} 100%{opacity:0;transform:translateY(-44px)} }
         @keyframes dnd-fireball { 0%{opacity:0;transform:scale(0)} 35%{opacity:1;transform:scale(1.1)} 100%{opacity:0;transform:scale(2)} }
         @keyframes dnd-pulse-ring { 0%{opacity:0.9;transform:scale(0.85)} 100%{opacity:0;transform:scale(1.5)} }
+        @keyframes dnd-shake { 0%,100%{transform:translateX(0) translateY(0)} 20%{transform:translateX(-4px) translateY(-2px)} 40%{transform:translateX(4px) translateY(1px)} 60%{transform:translateX(-3px) translateY(-1px)} 80%{transform:translateX(2px)} }
+        @keyframes dnd-sword-thrust { 0%{opacity:0;transform:rotate(var(--r,0deg)) scale(0.6)} 25%{opacity:1;transform:rotate(var(--r,0deg)) scale(1)} 65%{opacity:1;transform:rotate(var(--r,0deg)) scale(1.05)} 100%{opacity:0;transform:rotate(var(--r,0deg)) scale(1.1)} }
+        @keyframes dnd-arrow-fly { 0%{clip-path:inset(0 100% 0 0);opacity:1} 75%{clip-path:inset(0 0% 0 0);opacity:1} 100%{clip-path:inset(0 0% 0 0);opacity:0} }
+        @keyframes dnd-slash-trail { 0%{opacity:0} 35%{opacity:0.9} 100%{opacity:0} }
         @keyframes dnd-dissolve { 0%{opacity:1;filter:none;transform:scale(1)} 30%{opacity:0.8;filter:blur(0px) brightness(2);transform:scale(1.1)} 60%{opacity:0.4;filter:blur(2px) brightness(3);transform:scale(1.3)} 100%{opacity:0;filter:blur(6px) brightness(0);transform:scale(0.2)} }
         @keyframes dnd-aoe-pulse { 0%{opacity:0.3} 100%{opacity:0.7} }
       `}</style>
-      <div style={{ position: "relative", width: COLS * CELL, height: ROWS * CELL, imageRendering: "pixelated" }}>
+      <div ref={gridRef}
+        onMouseMove={e => {
+          if (!gridRef.current) return;
+          const r = gridRef.current.getBoundingClientRect();
+          setMouseGrid({ x: e.clientX - r.left, y: e.clientY - r.top });
+        }}
+        style={{ position: "relative", width: COLS * CELL, height: ROWS * CELL, imageRendering: "pixelated" }}>
         {/* Tiles */}
         {Array.from({ length: ROWS }, (_, y) =>
           Array.from({ length: COLS }, (_, x) => {
@@ -1327,21 +1425,26 @@ function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode, select
 
             const bg = special?.color ? special.color + "50" : td.bg;
 
+            const inCone = aoeTiles.has(key);
+            const isAoeCursor = inCone && isAoeSpell && combatMode === "spell";
+
             return (
               <div key={key}
                 onClick={() => {
-                  if (!td.isWall && !isFogged) {
-                    if (isAoeSpell && combatMode === "spell") { onAOEClick?.(x, y); }
-                    else { onTileClick(x, y); }
+                  if (td.isWall || isFogged) return;
+                  if (isAoeCursor) {
+                    // Cast AOE at this tile — hit all monsters in cone
+                    const hit = monsters.filter(m => m.hp > 0 && aoeTiles.has(`${m.position.x},${m.position.y}`)).map(m => m.id);
+                    onAOECast?.(hit, x, y);
+                  } else {
+                    onTileClick(x, y);
                   }
                 }}
-                onMouseEnter={() => isAoeSpell && onAOEHover?.({ x, y })}
-                onMouseLeave={() => isAoeSpell && onAOEHover?.(null)}
                 style={{
                   position: "absolute", left: x * CELL, top: y * CELL, width: CELL, height: CELL,
                   background: isFogged ? "#000" : bg,
                   opacity: isDimmed ? 0.4 : 1,
-                  cursor: td.isWall || isFogged ? "default" : "pointer",
+                  cursor: td.isWall || isFogged ? "default" : isAoeCursor ? "crosshair" : "pointer",
                   outline: isReachable ? `2px solid ${C.gold}` : "none",
                   outlineOffset: "-2px",
                   boxShadow: isReachable ? `inset 0 0 8px ${C.gold}20` : "none",
@@ -1358,14 +1461,19 @@ function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode, select
                 {isExit && !isFogged && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>🚪</div>}
                 {isEntrance && !isFogged && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, opacity: 0.5 }}>⬇️</div>}
                 {isReachable && !isPlayer && <div style={{ position: "absolute", inset: 0, background: `${C.gold}12` }} />}
-                {aoeTiles.has(key) && !isFogged && (
-                  <div style={{
-                    position: "absolute", inset: 0, pointerEvents: "none",
-                    background: "rgba(255, 60, 60, 0.25)",
-                    animation: "dnd-aoe-pulse 0.6s ease-in-out infinite alternate",
-                    border: "1px solid rgba(255, 80, 80, 0.5)",
-                  }} />
-                )}
+                {/* Cone AOE per-tile highlight */}
+                {isAoeCursor && !isFogged && (() => {
+                  const monHere = monsters.find(m => m.hp > 0 && m.position.x === x && m.position.y === y);
+                  const hasTarget = monHere ? aoeHitMonsters.has(monHere.id) : false;
+                  return (
+                    <div style={{
+                      position: "absolute", inset: 0, pointerEvents: "none",
+                      background: hasTarget ? "rgba(255,40,20,0.42)" : "rgba(255,90,60,0.20)",
+                      border: `1px solid rgba(255,100,70,${hasTarget ? "0.8" : "0.4"})`,
+                      animation: "dnd-aoe-pulse 0.6s ease-in-out infinite alternate",
+                    }} />
+                  );
+                })()}
               </div>
             );
           })
@@ -1374,13 +1482,15 @@ function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode, select
         {/* Monster tokens */}
         {monsters.filter(m => m.hp > 0).map(m => {
           const key = `${m.position.x},${m.position.y}`;
+          if (mode === "town") return null; // monsters never appear in town
           if (mode === "dungeon" && !visible.has(key)) return null;
           const isAttackable = attackableM.has(m.id);
           const isSpellable = spellableM.has(m.id);
           const isAoeTarget = aoeHitMonsters.has(m.id);
           const isHovered = hoveredMonsterId === m.id;
           const isCurrentTurn = combat.active && combat.turnOrder[combat.currentIndex]?.id === m.id;
-          const isTargetable = isAttackable || isSpellable;
+          const isTargetable = isAttackable || isSpellable || isAoeTarget;
+          const isShaking = hitTokenIds?.has(m.id);
 
           if (dyingMonsters?.has(m.id)) {
             return (
@@ -1397,10 +1507,7 @@ function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode, select
 
           return (
             <div key={m.id}
-              onClick={() => {
-                if (isAoeTarget && combatMode === "spell" && isAoeSpell) { onMonsterClick(m.id); }
-                else if (isTargetable) { onMonsterClick(m.id); }
-              }}
+              onClick={() => { if (isTargetable) onMonsterClick(m.id); }}
               onMouseEnter={() => setHoveredMonsterId(m.id)}
               onMouseLeave={() => setHoveredMonsterId(null)}
               style={{
@@ -1408,22 +1515,33 @@ function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode, select
                 left: m.position.x * CELL + 3, top: m.position.y * CELL + 3,
                 width: CELL - 6, height: CELL - 6,
                 background: isCurrentTurn ? "#5a1010" : "#3a0a0a",
-                border: `2px solid ${isTargetable || isAoeTarget ? C.red : isCurrentTurn ? "#ff8888" : "#8b1a1a"}`,
+                border: `2px solid ${isTargetable ? C.red : isCurrentTurn ? "#ff8888" : "#8b1a1a"}`,
                 display: "flex", alignItems: "center", justifyContent: "center",
-                cursor: isTargetable || isAoeTarget ? "crosshair" : "default",
-                boxShadow: isTargetable || isAoeTarget ? `0 0 10px ${C.red}` : "none",
+                cursor: isTargetable ? "crosshair" : "default",
+                boxShadow: isTargetable ? `0 0 10px ${C.red}` : "none",
                 fontSize: 16, imageRendering: "pixelated",
+                animation: isShaking ? "dnd-shake 0.35s ease-in-out" : undefined,
               }}>
               🪵
               <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 3, background: "#0a0a0a" }}>
                 <div style={{ height: "100%", width: `${(m.hp / m.maxHp) * 100}%`, background: C.red }} />
               </div>
-              {/* Spell targeting ring */}
-              {(isSpellable || isAoeTarget) && isHovered && (
+              {/* Targeting ring on hover */}
+              {(isAttackable || isSpellable || isAoeTarget) && isHovered && (
                 <div style={{
-                  position: "absolute", inset: -4, border: `3px solid ${C.red}`,
+                  position: "absolute", inset: -4,
+                  border: `3px solid ${C.red}`,
                   borderRadius: "50%", pointerEvents: "none",
                   animation: "dnd-pulse-ring 0.7s ease-out infinite",
+                  boxShadow: `0 0 10px ${C.red}`,
+                }} />
+              )}
+              {/* Subtle always-on ring for attackable monsters */}
+              {isAttackable && !isHovered && (
+                <div style={{
+                  position: "absolute", inset: -3, border: `2px solid ${C.red}60`,
+                  borderRadius: "50%", pointerEvents: "none",
+                  animation: "dnd-pulse-ring 1s ease-out infinite",
                 }} />
               )}
             </div>
@@ -1431,21 +1549,32 @@ function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode, select
         })}
 
         {/* Player token */}
-        <div style={{
-          position: "absolute",
-          left: pos.x * CELL + 3, top: pos.y * CELL + 3,
-          width: CELL - 6, height: CELL - 6,
-          background: CLASS_CFG[char.class].color + "cc",
-          border: `2px solid ${CLASS_CFG[char.class].color}`,
-          boxShadow: `0 0 10px ${CLASS_CFG[char.class].color}70`,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 18, zIndex: 10, overflow: "hidden",
-          transition: "left 0.15s, top 0.15s",
-        }}>
+        <div onClick={() => isHealSpell && onHealSelf?.()}
+          style={{
+            position: "absolute",
+            left: pos.x * CELL + 3, top: pos.y * CELL + 3,
+            width: CELL - 6, height: CELL - 6,
+            background: CLASS_CFG[char.class].color + "cc",
+            border: `2px solid ${CLASS_CFG[char.class].color}`,
+            boxShadow: `0 0 10px ${CLASS_CFG[char.class].color}70`,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 18, zIndex: 10, overflow: "visible",
+            transition: "left 0.15s, top 0.15s",
+            animation: hitTokenIds?.has(char.id) ? "dnd-shake 0.35s ease-in-out" : undefined,
+            cursor: isHealSpell ? "pointer" : "default",
+          }}>
           {char.avatar
             ? <img src={char.avatar} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             : CLASS_CFG[char.class].icon
           }
+          {isHealSpell && (
+            <div style={{
+              position: "absolute", inset: -5, border: "3px solid #4cdb70",
+              borderRadius: "50%", pointerEvents: "none",
+              animation: "dnd-pulse-ring 0.7s ease-out infinite",
+              boxShadow: "0 0 10px #4cdb70",
+            }} />
+          )}
         </div>
 
         {/* Effects layer */}
@@ -1521,6 +1650,71 @@ function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode, select
           if (e.type === "fire_aoe") {
             return (
               <div key={e.id} style={{ position: "absolute", left: ex - 30, top: ey - 30, width: 60, height: 60, borderRadius: "50%", pointerEvents: "none", zIndex: 50, background: "radial-gradient(circle, rgba(255,200,50,0.8) 0%, rgba(255,80,0,0.6) 60%, transparent 100%)", animation: "dnd-fireball 0.7s ease-out forwards" }} />
+            );
+          }
+          if (e.type === "sword_swing") {
+            // Impact slash at monster position; targetX/Y = player (sword comes FROM player direction)
+            const fromX = (e.targetX ?? e.gridX - 1) * CELL + CELL / 2;
+            const fromY = (e.targetY ?? e.gridY) * CELL + CELL / 2;
+            // Angle the sword impact comes from (player → monster direction, then 180° for "arriving at")
+            const impactAngle = Math.atan2(ey - fromY, ex - fromX) * 180 / Math.PI;
+            const SZ = CELL * 2.6;
+            return (
+              <div key={e.id} style={{
+                position: "absolute", pointerEvents: "none", zIndex: 55,
+                left: ex - SZ / 2, top: ey - SZ / 2, width: SZ, height: SZ,
+                transform: `rotate(${impactAngle}deg)`,
+                transformOrigin: "50% 50%",
+                animation: "dnd-sword-thrust 0.42s ease-out forwards",
+              }}>
+                <svg width={SZ} height={SZ} viewBox={`0 0 ${SZ} ${SZ}`} style={{ overflow: "visible" }}>
+                  <defs>
+                    <linearGradient id={`sg${e.id}`} x1="100%" y1="0%" x2="0%" y2="0%">
+                      <stop offset="0%" stopColor="#c0a828" />
+                      <stop offset="35%" stopColor="#d8d8f8" />
+                      <stop offset="100%" stopColor="rgba(255,255,255,0.6)" />
+                    </linearGradient>
+                  </defs>
+                  {/* Blade arrives from right, tip at center, pointing left */}
+                  <polygon points={`${SZ*0.08},${SZ/2-4} ${SZ*0.08},${SZ/2+4} ${SZ*0.72},${SZ/2+2} ${SZ*0.82},${SZ/2} ${SZ*0.72},${SZ/2-2}`}
+                    fill={`url(#sg${e.id})`} />
+                  <line x1={SZ*0.1} y1={SZ/2} x2={SZ*0.78} y2={SZ/2}
+                    stroke="rgba(255,255,255,0.5)" strokeWidth="1.2" strokeLinecap="round" />
+                  <rect x={SZ*0.03} y={SZ/2-9} width="5" height="18" rx="1" fill="#d0a830" />
+                  {/* Slash impact marks — fan out from contact point */}
+                  <line x1={SZ*0.82} y1={SZ/2-20} x2={SZ*0.72} y2={SZ/2+4}
+                    stroke="rgba(255,255,255,0.85)" strokeWidth="3" strokeLinecap="round"
+                    style={{ animation: "dnd-slash-trail 0.42s ease-in forwards" }} />
+                  <line x1={SZ*0.88} y1={SZ/2-12} x2={SZ*0.74} y2={SZ/2+12}
+                    stroke="rgba(255,255,255,0.5)" strokeWidth="2" strokeLinecap="round"
+                    style={{ animation: "dnd-slash-trail 0.42s ease-in forwards" }} />
+                  <line x1={SZ*0.76} y1={SZ/2-24} x2={SZ*0.68} y2={SZ/2+2}
+                    stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" strokeLinecap="round"
+                    style={{ animation: "dnd-slash-trail 0.42s ease-in forwards" }} />
+                </svg>
+              </div>
+            );
+          }
+          if (e.type === "arrow" && e.targetX !== undefined && e.targetY !== undefined) {
+            const tx2 = e.targetX * CELL + CELL / 2;
+            const ty2 = e.targetY * CELL + CELL / 2;
+            const adx = tx2 - ex, ady = ty2 - ey;
+            const alen = Math.sqrt(adx * adx + ady * ady);
+            const aang = Math.atan2(ady, adx) * 180 / Math.PI;
+            return (
+              <div key={e.id} style={{
+                position: "absolute", pointerEvents: "none", zIndex: 55,
+                left: ex, top: ey - 3,
+                width: alen, height: 6,
+                transform: `rotate(${aang}deg)`, transformOrigin: "0 50%",
+                animation: "dnd-arrow-fly 0.36s ease-in forwards",
+              }}>
+                <svg width={alen} height={6} viewBox={`0 0 ${alen} 6`} style={{ overflow: "visible" }}>
+                  <line x1="0" y1="3" x2={alen - 10} y2="3" stroke="#b89040" strokeWidth="2" strokeLinecap="round" />
+                  <line x1="0" y1="3" x2={alen * 0.3} y2="3" stroke="#7a5a20" strokeWidth="1" strokeDasharray="3,4" />
+                  <polygon points={`${alen-10},0 ${alen},3 ${alen-10},6`} fill="#d0e0ff" />
+                </svg>
+              </div>
             );
           }
           return null;
@@ -1613,6 +1807,7 @@ function CombatPanel({ combat, char, monsters, combatMode, setCombatMode, select
   const [showLog, setShowLog] = useState(false);
   const [actionTab, setActionTab] = useState<"none" | "attack" | "skill" | "item">("none");
   const [tooltip, setTooltip] = useState<{ name: string; desc: string; y: number } | null>(null);
+  const [minimized, setMinimized] = useState(false);
 
   // Build spell list using spellChoice for Wizard
   const baseSpells = CLASS_SPELLS[char.class] ?? [];
@@ -1622,8 +1817,8 @@ function CombatPanel({ combat, char, monsters, combatMode, setCombatMode, select
         : s)
     : baseSpells;
 
-  // Usable items from inventory
-  const usableItems = char.inventory.filter(i => i.type === "consumable");
+  // Usable items from inventory (non-material consumables only)
+  const usableItems = char.inventory.filter(i => i.type === "consumable" && !i.material);
 
   function handleActionTab(tab: typeof actionTab) {
     setActionTab(prev => prev === tab ? "none" : tab);
@@ -1654,13 +1849,20 @@ function CombatPanel({ combat, char, monsters, combatMode, setCombatMode, select
 
       <div style={{ position: "absolute", right: 4, top: 4, zIndex: 20, width: 210, display: "flex", flexDirection: "column", gap: 5 }}>
 
-        {/* Turn order */}
+        {/* Turn order + minimize toggle */}
         <div style={{ ...panel, padding: "10px 12px", position: "relative" }}>
           <PixelCorners color={isPlayer ? CLASS_CFG[char.class].color : C.red} size={5} />
-          <div style={{ fontFamily: PX, fontSize: 7, color: isPlayer ? C.blue : C.red, marginBottom: 8, letterSpacing: 1 }}>
-            ⚔ R{combat.round} · {isPlayer ? "YOUR TURN" : "ENEMY"}
+          <div style={{ display: "flex", alignItems: "center", marginBottom: minimized ? 0 : 8 }}>
+            <div style={{ fontFamily: PX, fontSize: 7, color: isPlayer ? C.blue : C.red, letterSpacing: 1, flex: 1 }}>
+              ⚔ R{combat.round} · {isPlayer ? "YOUR TURN" : "ENEMY"}
+            </div>
+            <button onClick={() => setMinimized(p => !p)}
+              title={minimized ? "Expand" : "Minimize"}
+              style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, padding: "0 2px", fontFamily: PX, fontSize: 8, lineHeight: 1 }}>
+              {minimized ? "▼" : "▲"}
+            </button>
           </div>
-          <div style={{ maxHeight: 80, overflowY: "auto", display: "flex", flexDirection: "column", gap: 3 }}>
+          {!minimized && <div style={{ maxHeight: 80, overflowY: "auto", display: "flex", flexDirection: "column", gap: 3 }}>
             {combat.turnOrder.map((t, i) => {
               const dead = t.type === "monster" && monsters.find(m => m.id === t.id)?.hp === 0;
               if (dead) return null;
@@ -1673,11 +1875,11 @@ function CombatPanel({ combat, char, monsters, combatMode, setCombatMode, select
                 </div>
               );
             })}
-          </div>
+          </div>}
         </div>
 
-        {/* Player actions */}
-        {isPlayer && (
+        {/* Player actions — hidden when minimized */}
+        {!minimized && isPlayer && (
           <div style={{ ...panel, padding: "10px 12px", position: "relative" }}>
             <div style={{ fontFamily: PX, fontSize: 6, color: C.muted, marginBottom: 6, letterSpacing: 1 }}>ACTIONS</div>
 
@@ -1740,7 +1942,12 @@ function CombatPanel({ combat, char, monsters, combatMode, setCombatMode, select
                     boxShadow: combatMode === "attack" ? `0 0 8px ${C.red}40` : "none",
                   }}>
                   ⚔ {char.equipment.weapon.name.slice(0, 14)}
-                  <span style={{ fontFamily: MO, fontSize: 8, color: C.muted, marginLeft: "auto" }}>{char.equipment.weapon.damage}</span>
+                  <span style={{ fontFamily: MO, fontSize: 8, color: C.muted, marginLeft: "auto" }}>{(() => {
+                    const w = char.equipment.weapon;
+                    const isR = (w.range ?? 5) > 5;
+                    const statMod = isR ? getMod(char.stats.dex) : getMod(char.stats.str);
+                    return `${w.damage}${statMod >= 0 ? "+" : ""}${statMod}`;
+                  })()}</span>
                 </button>
               </div>
             )}
@@ -1916,10 +2123,11 @@ function ShopModal({ char, onBuy, onClose }: { char: Character; onBuy: (item: It
 // QUEST MODAL
 // ─────────────────────────────────────────────────
 
-function QuestModal({ quests, partyQuests, party, onAccept, onClose, nextRefresh, onClaim }: {
+function QuestModal({ quests, partyQuests, party, onAccept, onClose, nextRefresh, onClaim, charInventory }: {
   quests: Quest[]; partyQuests: Quest[]; party: Party | null;
   onAccept: (id: string) => void; onClose: () => void; nextRefresh: number;
   onClaim?: (id: string) => void;
+  charInventory?: Item[];
 }) {
   const tl = Math.max(0, nextRefresh - Date.now());
   const mins = Math.floor(tl / 60000), secs = Math.floor((tl % 60000) / 1000);
@@ -1942,28 +2150,45 @@ function QuestModal({ quests, partyQuests, party, onAccept, onClose, nextRefresh
         {partyQuests.length > 0 && (
           <div style={{ padding: "10px 12px", borderBottom: `1px solid ${C.border}` }}>
             <div style={{ fontFamily: PX, fontSize: 7, color: C.muted, marginBottom: 6, letterSpacing: 1 }}>ACTIVE</div>
-            {partyQuests.map(q => (
-              <div key={q.id} style={{ padding: "8px 10px", background: q.completed ? C.green + "12" : C.blue + "12", border: `1px solid ${q.completed ? C.green + "60" : C.blue + "30"}`, marginBottom: 6 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                  <span style={{ fontFamily: PX, fontSize: 8, color: q.completed ? C.green : C.blue }}>{q.title}</span>
-                  {q.completed ? (
-                    <button onClick={() => onClaim?.(q.id)}
-                      style={{ ...pixelBtn("primary", true), fontSize: 7, background: `linear-gradient(180deg, #2a7a2a 0%, #1a5a1a 100%)`, border: `2px solid ${C.green}` }}>
-                      CLAIM
-                    </button>
+            {partyQuests.map(q => {
+              const isDone = q.readyToTurnIn || q.completed;
+              // Gather quest progress
+              let gatherCurrent = 0;
+              let gatherReady = false;
+              if (q.gatherTarget && charInventory) {
+                gatherCurrent = charInventory.filter(i => i.name === q.gatherTarget!.itemName).length;
+                gatherReady = gatherCurrent >= q.gatherTarget.count;
+              }
+              const showTurnIn = isDone || gatherReady;
+              return (
+                <div key={q.id} style={{ padding: "8px 10px", background: showTurnIn ? C.gold + "12" : C.blue + "12", border: `1px solid ${showTurnIn ? C.gold + "60" : C.blue + "30"}`, marginBottom: 6 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                    <span style={{ fontFamily: PX, fontSize: 8, color: showTurnIn ? C.gold : C.blue }}>{q.title}</span>
+                    {showTurnIn ? (
+                      <button onClick={() => onClaim?.(q.id)}
+                        style={{ ...pixelBtn("primary", true), fontSize: 7, background: `linear-gradient(180deg, #2a7a2a 0%, #1a5a1a 100%)`, border: `2px solid ${C.green}` }}>
+                        ✅ TURN IN
+                      </button>
+                    ) : q.gatherTarget ? (
+                      <span style={{ fontFamily: MO, fontSize: 9, color: C.muted }}>{gatherCurrent}/{q.gatherTarget.count} {q.gatherTarget.itemName}</span>
+                    ) : (
+                      <span style={{ fontFamily: MO, fontSize: 9, color: C.muted }}>{q.killTarget?.current}/{q.killTarget?.count}</span>
+                    )}
+                  </div>
+                  {showTurnIn ? (
+                    <div style={{ fontFamily: PX, fontSize: 7, color: C.gold }}>✅ COMPLETE — Turn in your quest!</div>
+                  ) : q.gatherTarget ? (
+                    <div style={{ height: 4, background: C.card2 }}>
+                      <div style={{ height: "100%", width: `${Math.min(100, (gatherCurrent / q.gatherTarget.count) * 100)}%`, background: "#4cdb70" }} />
+                    </div>
                   ) : (
-                    <span style={{ fontFamily: MO, fontSize: 9, color: C.muted }}>{q.killTarget?.current}/{q.killTarget?.count}</span>
+                    <div style={{ height: 4, background: C.card2 }}>
+                      <div style={{ height: "100%", width: `${((q.killTarget?.current ?? 0) / (q.killTarget?.count ?? 1)) * 100}%`, background: C.blue }} />
+                    </div>
                   )}
                 </div>
-                {q.completed ? (
-                  <div style={{ fontFamily: PX, fontSize: 7, color: C.green }}>✅ COMPLETE — Claim at Board</div>
-                ) : (
-                  <div style={{ height: 4, background: C.card2 }}>
-                    <div style={{ height: "100%", width: `${((q.killTarget?.current ?? 0) / (q.killTarget?.count ?? 1)) * 100}%`, background: C.blue }} />
-                  </div>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -2022,7 +2247,7 @@ function ItemMenu({ item, inInventory, onUse, onEquip, onDrop, onClose }: {
 // BOTTOM HUD
 // ─────────────────────────────────────────────────
 
-function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTab, setChatTab, globalChat, partyChat, onSendChat, onEquipItem, onUnequipWeapon, onUnequipArmor, onUnequipAcc, onDropItem, onUseItem, party, onCreateParty, onLeaveParty, partyQuests }: {
+function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTab, setChatTab, globalChat, partyChat, onSendChat, onEquipItem, onUnequipWeapon, onUnequipArmor, onUnequipAcc, onDropItem, onUseItem, party, onCreateParty, onLeaveParty, partyQuests, onUseSkill, inCombat }: {
   char: Character; hudTab: HudTab; setHudTab: (t: HudTab) => void;
   hudOpen: boolean; setHudOpen: (o: boolean) => void;
   chatTab: "global" | "party"; setChatTab: (t: "global" | "party") => void;
@@ -2032,11 +2257,16 @@ function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTab, setC
   onDropItem: (id: string) => void; onUseItem: (i: Item) => void;
   party: Party | null; onCreateParty: (n: string) => void; onLeaveParty: () => void;
   partyQuests: Quest[];
+  onUseSkill: (spellName: string) => void;
+  inCombat: boolean;
 }) {
   const [itemMenu, setItemMenu] = useState<Item | null>(null);
   const [chatInput, setChatInput] = useState("");
   const [partyName, setPartyName] = useState("");
   const chatRef = useRef<HTMLDivElement>(null);
+  const [expandedSkill, setExpandedSkill] = useState<string | null>(null);
+  const [expandedItem, setExpandedItem] = useState<string | null>(null);
+  const [invCategory, setInvCategory] = useState<"usable" | "material" | "equip">("usable");
 
   useEffect(() => { if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight; }, [globalChat, partyChat]);
 
@@ -2051,6 +2281,7 @@ function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTab, setC
     { id: "inv", icon: <Package className="w-3 h-3" />, label: "BAG" },
     { id: "equip", icon: <Sword className="w-3 h-3" />, label: "EQUIP" },
     { id: "acc", icon: <Star className="w-3 h-3" />, label: "JEWEL" },
+    { id: "skills" as HudTab, icon: "✨", label: "SKILLS" },
     { id: "chat", icon: <MessageCircle className="w-3 h-3" />, label: "CHAT" },
     { id: "party", icon: <Users className="w-3 h-3" />, label: "PARTY" },
   ];
@@ -2157,22 +2388,98 @@ function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTab, setC
 
           {/* INVENTORY */}
           {hudTab === "inv" && (
-            <div style={{ height: "100%", padding: "10px 14px", overflowY: "auto" }}>
-              {char.inventory.length === 0
-                ? <div style={{ textAlign: "center", color: C.muted, fontFamily: NU, fontSize: 12, paddingTop: 40 }}>Inventory is empty</div>
-                : (
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 40px)", gap: 6 }}>
-                    {char.inventory.map(item => (
-                      <div key={item.id} style={{ position: "relative" }} title={item.name}>
-                        <SlotBox item={item} onClick={() => setItemMenu(item)} />
-                        <div style={{ position: "absolute", bottom: -1, left: 0, right: 0, textAlign: "center", fontFamily: PX, fontSize: 5, color: C.muted, overflow: "hidden", whiteSpace: "nowrap" }}>
-                          {item.name.slice(0, 5)}
+            <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+              <style>{`@keyframes item-detail-in { 0%{opacity:0;clip-path:polygon(0 0,100% 0,100% 0,0 0)} 100%{opacity:1;clip-path:polygon(0 0,100% 0,100% 100%,0 100%)} }`}</style>
+              {/* Category tabs */}
+              <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+                {(["usable", "material", "equip"] as const).map(cat => (
+                  <button key={cat} onClick={() => { setInvCategory(cat); setExpandedItem(null); }}
+                    style={{
+                      flex: 1, padding: "5px 4px", cursor: "pointer", border: "none",
+                      background: invCategory === cat ? C.blue + "20" : "transparent",
+                      borderBottom: invCategory === cat ? `2px solid ${C.blue}` : "2px solid transparent",
+                      fontFamily: PX, fontSize: 6, letterSpacing: 0.3,
+                      color: invCategory === cat ? C.blue : C.muted,
+                      transition: "all 0.15s",
+                    }}>
+                    {cat === "usable" ? "💊 USE" : cat === "material" ? "🪵 MATS" : "⚔ EQUIP"}
+                  </button>
+                ))}
+              </div>
+              {/* Item grid */}
+              <div style={{ flex: 1, padding: "8px 10px", overflowY: "auto" }}>
+                {(() => {
+                  const filtered = char.inventory.filter(i => {
+                    if (invCategory === "usable") return i.type === "consumable" && !i.material;
+                    if (invCategory === "material") return i.material;
+                    return i.type === "weapon" || i.type === "armor" || i.type === "accessory";
+                  });
+                  if (filtered.length === 0) return <div style={{ color: C.muted, fontFamily: NU, fontSize: 11, textAlign: "center", paddingTop: 20 }}>Empty</div>;
+                  return (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 5 }}>
+                      {filtered.map(item => (
+                        <div key={item.id}
+                          onClick={() => setExpandedItem(expandedItem === item.id ? null : item.id)}
+                          style={{
+                            cursor: "pointer", position: "relative",
+                            border: `2px solid ${expandedItem === item.id ? C.blue : C.border}`,
+                            background: expandedItem === item.id ? C.blue + "15" : C.card2,
+                            padding: 6, display: "flex", flexDirection: "column", alignItems: "center",
+                            transition: "border-color 0.15s, background 0.15s",
+                          }}>
+                          <span style={{ fontSize: 18 }}>
+                            {item.type === "weapon" ? "⚔" : item.type === "armor" ? "🛡" : item.type === "accessory" ? "💍" : item.material ? "🪵" : "💊"}
+                          </span>
+                          <span style={{ fontFamily: PX, fontSize: 5, color: C.muted, marginTop: 2, textAlign: "center", lineHeight: 1.2, overflow: "hidden", maxHeight: 18 }}>
+                            {item.name.slice(0, 6)}
+                          </span>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+              {/* Expanded item detail */}
+              {expandedItem && (() => {
+                const item = char.inventory.find(i => i.id === expandedItem);
+                if (!item) return null;
+                return (
+                  <div style={{
+                    borderTop: `1px solid ${C.border}`, padding: "10px 12px",
+                    background: C.card, flexShrink: 0,
+                    animation: "item-detail-in 0.2s ease-out",
+                  }}>
+                    <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+                      <span style={{ fontFamily: PX, fontSize: 7, color: C.blue, flex: 1 }}>{item.name}</span>
+                      <button onClick={() => setExpandedItem(null)} style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, fontFamily: MO, fontSize: 12 }}>×</button>
+                    </div>
+                    <div style={{ fontFamily: NU, fontSize: 10, color: C.muted, marginBottom: 6 }}>{item.description}</div>
+                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 6 }}>
+                      {item.damage && <span style={{ fontFamily: MO, fontSize: 9, color: C.red, padding: "2px 5px", background: C.card2 }}>DMG: {item.damage}</span>}
+                      {item.ac && <span style={{ fontFamily: MO, fontSize: 9, color: C.blue, padding: "2px 5px", background: C.card2 }}>AC: +{item.ac}</span>}
+                      {item.healAmount && <span style={{ fontFamily: MO, fontSize: 9, color: C.green, padding: "2px 5px", background: C.card2 }}>HEAL: {item.healAmount}</span>}
+                      {item.range && <span style={{ fontFamily: MO, fontSize: 9, color: C.muted, padding: "2px 5px", background: C.card2 }}>{item.range}ft</span>}
+                      {item.aoeRadius && <span style={{ fontFamily: MO, fontSize: 9, color: C.gold, padding: "2px 5px", background: C.card2 }}>AOE r{item.aoeRadius}</span>}
+                    </div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                      {(item.type === "consumable" && !item.material) && (
+                        !inCombat ? (
+                          <button onClick={() => { onUseItem(item); setExpandedItem(null); }}
+                            style={{ ...pixelBtn("primary", true), fontSize: 6 }}>USE</button>
+                        ) : (
+                          <span style={{ fontFamily: NU, fontSize: 10, color: C.muted }}>↑ Combat panel</span>
+                        )
+                      )}
+                      {(item.type === "weapon" || item.type === "armor" || item.type === "accessory") && (
+                        <button onClick={() => { onEquipItem(item); setExpandedItem(null); }}
+                          style={{ ...pixelBtn("primary", true), fontSize: 6 }}>EQUIP</button>
+                      )}
+                      <button onClick={() => { onDropItem(item.id); setExpandedItem(null); }}
+                        style={{ ...pixelBtn("danger", true), fontSize: 6 }}>DROP</button>
+                    </div>
                   </div>
-                )
-              }
+                );
+              })()}
             </div>
           )}
 
@@ -2186,7 +2493,12 @@ function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTab, setC
                 {char.equipment.weapon && (
                   <div style={{ marginTop: 4 }}>
                     <div style={{ fontFamily: PX, fontSize: 7, color: C.text }}>{char.equipment.weapon.name}</div>
-                    <div style={{ fontFamily: MO, fontSize: 9, color: C.muted }}>{char.equipment.weapon.damage}</div>
+                    <div style={{ fontFamily: MO, fontSize: 9, color: C.muted }}>{(() => {
+                      const w = char.equipment.weapon;
+                      const isR = (w.range ?? 5) > 5;
+                      const sm = isR ? getMod(char.stats.dex) : getMod(char.stats.str);
+                      return `${w.damage}${sm >= 0 ? "+" : ""}${sm}`;
+                    })()}</div>
                     <button onClick={onUnequipWeapon} style={{ fontFamily: NU, fontSize: 10, color: C.red + "80", background: "none", border: "none", cursor: "pointer", padding: 0, marginTop: 2 }}>unequip</button>
                   </div>
                 )}
@@ -2255,6 +2567,122 @@ function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTab, setC
                   ))}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* SKILLS */}
+          {hudTab === "skills" && (
+            <div style={{ height: "100%", padding: "8px 14px", overflowY: "auto" }}>
+              {(() => {
+                const baseSpells = CLASS_SPELLS[char.class] ?? [];
+                const spells = char.class === "Wizard" && char.spellChoice && char.spellChoice !== "Sleep"
+                  ? baseSpells.map(s => s.name === "Sleep"
+                      ? { ...s, name: char.spellChoice!, desc: WIZARD_SPELL_CHOICES.find(w => w.name === char.spellChoice)?.desc ?? s.desc }
+                      : s)
+                  : baseSpells;
+
+                // Add class-specific non-spell abilities
+                const extraAbilities: Array<{ name: string; desc: string; color: string; level: number; type: string }> = [];
+                if (char.class === "Fighter") extraAbilities.push({ name: "Second Wind", desc: `Regain 1d10+${char.level} HP (1/short rest)`, color: C.red, level: 0, type: "cantrip" });
+                if (char.class === "Ranger") extraAbilities.push({ name: "Hunter's Mark", desc: "Mark a target. Deal extra 1d6 damage to it.", color: "#4cdb70", level: 0, type: "cantrip" });
+
+                if (spells.length === 0 && extraAbilities.length === 0) return (
+                  <div style={{ color: C.muted, fontFamily: NU, fontSize: 12, textAlign: "center", paddingTop: 30 }}>
+                    No spells available for this class.
+                  </div>
+                );
+
+                return (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <style>{`
+                      @keyframes skill-expand { 0%{opacity:0;transform:skewX(6deg) scaleY(0.5)} 100%{opacity:1;transform:skewX(0deg) scaleY(1)} }
+                      @keyframes skill-sweep { 0%{background-position:-100% 0} 100%{background-position:200% 0} }
+                    `}</style>
+                    {[...spells, ...extraAbilities].map((spell) => {
+                      const isExpanded = expandedSkill === spell.name;
+                      const isCantrip = spell.level === 0;
+                      const attackType = (spell as { aoe?: boolean }).aoe ? (WIZARD_SPELL_CHOICES.find(w => w.name === spell.name)?.isCone ? "Cone AOE" : "Circle AOE")
+                        : spell.type === "heal" ? "Healing" : "Single Target";
+                      const spellColor = spell.type === "heal" ? "#4cdb70" : isCantrip ? C.blue : C.purple;
+
+                      return (
+                        <div key={spell.name} style={{ border: `1px solid ${isExpanded ? spellColor : C.border}`, transition: "border-color 0.2s" }}>
+                          <button onClick={() => setExpandedSkill(isExpanded ? null : spell.name)}
+                            style={{
+                              width: "100%", padding: "8px 10px", cursor: "pointer",
+                              background: isExpanded ? spellColor + "18" : C.card2,
+                              display: "flex", alignItems: "center", gap: 8,
+                              border: "none", borderBottom: isExpanded ? `1px solid ${spellColor}30` : "none",
+                              transition: "background 0.2s",
+                            }}>
+                            <span style={{ fontFamily: PX, fontSize: 7, color: spellColor, flex: 1, textAlign: "left" }}>{spell.name}</span>
+                            <span style={{ fontFamily: MO, fontSize: 8, color: C.muted }}>{isCantrip ? "cantrip" : `lvl ${spell.level}`}</span>
+                            <span style={{ fontFamily: MO, fontSize: 9, color: spellColor }}>{isExpanded ? "▲" : "▼"}</span>
+                          </button>
+
+                          {isExpanded && (
+                            <div style={{
+                              padding: "10px 12px", background: C.card,
+                              animation: "skill-expand 0.22s ease-out",
+                              transformOrigin: "top",
+                            }}>
+                              <div style={{
+                                height: 2, marginBottom: 8,
+                                background: `linear-gradient(90deg, transparent, ${spellColor}, transparent)`,
+                                animation: "skill-sweep 1.5s ease-in-out infinite",
+                                backgroundSize: "200% 100%",
+                              }} />
+                              <div style={{ fontFamily: NU, fontSize: 11, color: C.text + "c0", marginBottom: 6, lineHeight: 1.5 }}>{spell.desc}</div>
+                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginBottom: 8 }}>
+                                {(spell as { damage?: string }).damage && (
+                                  <div style={{ fontFamily: MO, fontSize: 9, color: C.red, background: C.card2, padding: "3px 6px" }}>
+                                    DMG: {(spell as { damage?: string }).damage}
+                                  </div>
+                                )}
+                                {(spell as { heal?: string }).heal && (
+                                  <div style={{ fontFamily: MO, fontSize: 9, color: "#4cdb70", background: C.card2, padding: "3px 6px" }}>
+                                    HEAL: {(spell as { heal?: string }).heal}
+                                  </div>
+                                )}
+                                {(spell as { range?: number }).range !== undefined && (
+                                  <div style={{ fontFamily: MO, fontSize: 9, color: C.blue, background: C.card2, padding: "3px 6px" }}>
+                                    RANGE: {(spell as { range?: number }).range}ft
+                                  </div>
+                                )}
+                                <div style={{ fontFamily: MO, fontSize: 9, color: C.gold, background: C.card2, padding: "3px 6px" }}>
+                                  {attackType}
+                                </div>
+                                {(spell as { saveStat?: keyof Stats; saveDC?: number }).saveStat && (spell as { saveDC?: number }).saveDC && (
+                                  <div style={{ fontFamily: MO, fontSize: 9, color: C.muted, background: C.card2, padding: "3px 6px", gridColumn: "span 2" }}>
+                                    {(spell as { saveStat?: string }).saveStat?.toUpperCase()} save DC {(spell as { saveDC?: number }).saveDC}
+                                  </div>
+                                )}
+                              </div>
+                              {!inCombat ? (
+                                <button onClick={() => onUseSkill(spell.name)}
+                                  style={{
+                                    width: "100%", padding: "6px", cursor: "pointer",
+                                    background: `linear-gradient(135deg, ${spellColor}30, ${spellColor}18)`,
+                                    border: `2px solid ${spellColor}`,
+                                    color: spellColor, fontFamily: PX, fontSize: 7,
+                                    boxShadow: `0 0 8px ${spellColor}30`,
+                                    transition: "box-shadow 0.2s",
+                                  }}>
+                                  ✨ USE SKILL
+                                </button>
+                              ) : (
+                                <div style={{ fontFamily: NU, fontSize: 10, color: C.muted, textAlign: "center", padding: "4px 0" }}>
+                                  ↑ Use via combat panel
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -2387,9 +2815,11 @@ export default function App() {
   const [combatMode, setCombatMode] = useState<CombatModeT>("none");
   const [effects, setEffects] = useState<VisualEffect[]>([]);
   const [dyingMonsters, setDyingMonsters] = useState<Set<string>>(new Set());
-  const [aoeHoverTile, setAoeHoverTile] = useState<{ x: number; y: number } | null>(null);
+  const [hitTokenIds, setHitTokenIds] = useState<Set<string>>(new Set());
   const [selectedSpell, setSelectedSpell] = useState<string | null>(null);
+  const [pendingBombItemId, setPendingBombItemId] = useState<string | null>(null);
   const [diceRolls, setDiceRolls] = useState<DiceRollDisplay[]>([]);
+  const [battleStart, setBattleStart] = useState(false);
   const [hudTab, setHudTab] = useState<HudTab>("char");
   const [hudOpen, setHudOpen] = useState(true);
   const [chatTab, setChatTab] = useState<"global" | "party">("global");
@@ -2398,6 +2828,9 @@ export default function App() {
   const [showShop, setShowShop] = useState(false);
   const [showQuests, setShowQuests] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
+  const [restAnim, setRestAnim] = useState<"short" | "long" | null>(null);
+  const [shopPurchaseAnim, setShopPurchaseAnim] = useState<string | null>(null);
+  const [battleBanner, setBattleBanner] = useState(false);
   const monsterTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   const char = activeCharId ? gs.characters[activeCharId] : null;
@@ -2432,6 +2865,11 @@ export default function App() {
     const effect = { ...e, id: gid() };
     setEffects(prev => [...prev, effect]);
     setTimeout(() => setEffects(prev => prev.filter(ef => ef.id !== effect.id)), 900);
+  }, []);
+
+  const addHit = useCallback((id: string) => {
+    setHitTokenIds(prev => new Set([...prev, id]));
+    setTimeout(() => setHitTokenIds(prev => { const s = new Set(prev); s.delete(id); return s; }), 380);
   }, []);
 
   const addDiceRoll = useCallback((roll: Omit<DiceRollDisplay, "id" | "phase">) => {
@@ -2470,41 +2908,50 @@ export default function App() {
     }, 300);
   }, [char?.position, screen, combat.active]);
 
-  // Check for new monsters joining combat
+  // Check for new monsters entering combat (when player moves toward them mid-combat)
   useEffect(() => {
     if (!combat.active || !char || screen !== "dungeon") return;
-    const newEntrants = gs.dungeonMonsters.filter(m =>
-      m.hp > 0 &&
-      !combat.engagedMonsterIds.includes(m.id) &&
-      dist(char.position, m.position) <= m.sightRange
+    const inSight = gs.dungeonMonsters.filter(m =>
+      m.hp > 0 && dist(char.position, m.position) <= m.sightRange
     );
-    if (newEntrants.length === 0) return;
+    // Pre-compute which are truly new using closure value (may be slightly stale — safe to read here)
+    const newOnes = inSight.filter(m => !combat.engagedMonsterIds.includes(m.id));
+    if (newOnes.length === 0) return;
+
+    // Pre-compute initiatives outside setState to avoid side effects inside updater
+    const additions = newOnes.map(m => ({ m, init: Math.min(19, d20()) }));
+
     setCombat(prev => {
-      const newOrder = [...prev.turnOrder];
-      const newEngaged = [...prev.engagedMonsterIds];
-      newEntrants.forEach(m => {
-        if (newEngaged.includes(m.id)) return;
-        const init = d20();
-        newOrder.push({ id: m.id, type: "monster", name: m.name, initiative: init });
-        newEngaged.push(m.id);
-      });
-      return { ...prev, turnOrder: newOrder, engagedMonsterIds: newEngaged };
+      // Re-check inside prev to be safe against concurrent calls
+      const engaged = new Set(prev.engagedMonsterIds);
+      const realNew = additions.filter(a => !engaged.has(a.m.id));
+      if (realNew.length === 0) return prev;
+      return {
+        ...prev,
+        turnOrder: [...prev.turnOrder, ...realNew.map(a => ({ id: a.m.id, type: "monster" as const, name: a.m.name, initiative: a.init }))],
+        engagedMonsterIds: [...prev.engagedMonsterIds, ...realNew.map(a => a.m.id)],
+      };
     });
-    notify(`⚠️ ${newEntrants.length} more ${newEntrants[0].name}(s) join the fight!`);
-    setGs(prev => ({
-      ...prev,
-      dungeonMonsters: prev.dungeonMonsters.map(m =>
-        newEntrants.some(e => e.id === m.id) ? { ...m, alerted: true } : m
-      ),
-    }));
+
+    if (newOnes.length > 0) {
+      notify(`⚠️ ${newOnes.length} ${newOnes[0].name}(s) join the fight!`);
+      setGs(prev => ({
+        ...prev,
+        dungeonMonsters: prev.dungeonMonsters.map(m =>
+          newOnes.some(n => n.id === m.id) ? { ...m, alerted: true } : m
+        ),
+      }));
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [combat.active, char?.position, gs.dungeonMonsters]);
 
   // Combat turn loop (monster AI via effect)
   const doNextTurn = useCallback(() => {
     setCombat(prev => {
+      // Guard: do nothing if combat ended or turn order is empty (prevents % 0 NaN crash)
+      if (!prev.active || prev.turnOrder.length === 0) return prev;
       const aliveM = gs.dungeonMonsters.filter(m => m.hp > 0 && prev.engagedMonsterIds.includes(m.id));
-      if (aliveM.length === 0) return prev;
+      if (aliveM.length === 0) return prev; // endCombat handled by win-condition effect
       const nextIdx = (prev.currentIndex + 1) % prev.turnOrder.length;
       const isNew = nextIdx <= prev.currentIndex;
       return {
@@ -2528,6 +2975,7 @@ export default function App() {
     if (!monster || monster.hp <= 0) { doNextTurn(); return; }
 
     const timer = setTimeout(() => {
+      if (!combat.active) return; // guard: combat may have ended while we waited
       const newLog = [...combat.log.slice(-30)];
       const newMonsters = gs.dungeonMonsters.map(m => ({ ...m }));
       const mIdx = newMonsters.findIndex(m => m.id === monster.id);
@@ -2555,6 +3003,7 @@ export default function App() {
           addDiceRoll({ type: "damage", value: dmg, total: dmg, mod: 0, max: dmg, label: monster.damage });
           addEffect({ type: "scratch", gridX: char.position.x, gridY: char.position.y });
           addEffect({ type: "number", gridX: char.position.x, gridY: char.position.y, value: `-${dmg}` });
+          addHit(char.id);
         } else {
           newLog.push(`  Miss!`);
           addEffect({ type: "miss", gridX: char.position.x, gridY: char.position.y, value: "MISS" });
@@ -2575,16 +3024,27 @@ export default function App() {
 
   function startCombat(monsterIds: string[]) {
     if (!char) return;
-    const playerInit = d20() + getMod(char.stats.dex);
+    setBattleStart(true);
+    setTimeout(() => setBattleStart(false), 1800);
+    // battleBanner removed — battleStart already shows BATTLE START animation
+    const playerInit = 20 + getMod(char.stats.dex);
     const order: Combatant[] = [{ id: char.id, type: "player", name: char.name, initiative: playerInit }];
     const engaged = gs.dungeonMonsters.filter(m => monsterIds.includes(m.id) && m.hp > 0);
-    engaged.forEach(m => { const init = d20(); order.push({ id: m.id, type: "monster", name: m.name, initiative: init }); });
+    engaged.forEach(m => {
+      // Monsters roll normally but capped at 19 so player with DEX ≥ 0 always goes first
+      const init = Math.min(19, d20());
+      order.push({ id: m.id, type: "monster", name: m.name, initiative: init });
+    });
     order.sort((a, b) => b.initiative - a.initiative);
-    const log = [`⚔ Combat! Round 1`, `${char.name} initiative: ${playerInit}`, ...engaged.map(m => `${m.name} initiative: ${order.find(o => o.id === m.id)?.initiative}`)];
+    const log = [
+      `⚔ Combat! Round 1`,
+      `${char.name} initiative: ${playerInit} (20+DEX)`,
+      ...engaged.map(m => `${m.name} initiative: ${order.find(o => o.id === m.id)?.initiative}`),
+    ];
     setGs(prev => ({ ...prev, dungeonMonsters: prev.dungeonMonsters.map(m => monsterIds.includes(m.id) ? { ...m, alerted: true } : m) }));
     setCombat({ active: true, round: 1, turnOrder: order, currentIndex: 0, actionUsed: false, bonusActionUsed: false, movedSquares: 0, log, engagedMonsterIds: monsterIds });
     setCombatMode("none");
-    notify("⚔️ Combat started!");
+    // battleBanner removed — only battleStart used now
   }
 
   function endCombat(c: CombatState) {
@@ -2603,9 +3063,9 @@ export default function App() {
       return q;
     });
     updatedPQ = updatedPQ.map(q => {
-      if (q.killTarget && q.killTarget.current >= q.killTarget.count && !q.completed) {
-        notify(`📋 Quest ready: ${q.title}! Return to Quest Board to claim reward.`);
-        return { ...q, completed: true };
+      if (q.killTarget && q.killTarget.current >= q.killTarget.count && !q.readyToTurnIn && !q.completed) {
+        notify(`📋 Quest complete: ${q.title}! Return to the Quest Board to claim your reward.`);
+        return { ...q, readyToTurnIn: true };
       }
       return q;
     });
@@ -2616,7 +3076,7 @@ export default function App() {
   }
 
   function handleSpellSelect(name: string | null) {
-    if (!name) { setCombatMode("none"); setSelectedSpell(null); return; }
+    if (!name) { setCombatMode("none"); setSelectedSpell(null); setPendingBombItemId(null); return; }
     setCombatMode("spell");
     setSelectedSpell(name);
   }
@@ -2625,7 +3085,6 @@ export default function App() {
     if (!char) return;
     const aoeSpell = WIZARD_SPELL_CHOICES.find(s => s.name === spellName);
     if (!aoeSpell) return;
-
     if (!char.spellSlots || char.spellSlots.used >= char.spellSlots.max) { notify("No spell slots!"); return; }
     updateChar(char.id, c => ({ spellSlots: { ...c.spellSlots!, used: c.spellSlots!.used + 1 } }));
 
@@ -2637,15 +3096,24 @@ export default function App() {
     const log = [...combat.log];
     const diedIds: string[] = [];
     let newMonsters = [...gs.dungeonMonsters];
-
-    gs.dungeonMonsters.filter(m => m.hp > 0 && dist(center, m.position) <= aoeSpell.aoeRadius).forEach(mt => {
+    // Monsters hit: those alive and in the cone area (aoeRadius from center as fallback)
+    const targets = gs.dungeonMonsters.filter(m => m.hp > 0 && dist(center, m.position) <= aoeSpell.aoeRadius);
+    if (targets.length === 0) {
+      notify(`${spellName} — no targets caught!`);
+      setCombat(prev => ({ ...prev, actionUsed: true }));
+      setCombatMode("none"); setSelectedSpell(null);
+      return;
+    }
+    const spMod = getSpellcastingMod(char);
+    targets.forEach(mt => {
       const saveRoll = d20();
       const saved = saveRoll >= 13;
       const rawDmg = rollDice(dmgDice);
-      const finalDmg = saved ? Math.floor(rawDmg / 2) : rawDmg;
-      log.push(`${spellName} at (${center.x},${center.y}): ${mt.name} ${saved ? "saves" : "fails"} → ${finalDmg} dmg`);
+      const finalDmg = saved ? Math.floor((rawDmg + spMod) / 2) : (rawDmg + spMod);
+      log.push(`${spellName}: ${mt.name} ${saved ? "saves" : "fails"} → ${finalDmg} dmg`);
       addEffect({ type: effectType, gridX: mt.position.x, gridY: mt.position.y });
       addEffect({ type: "number", gridX: mt.position.x, gridY: mt.position.y, value: String(finalDmg) });
+      addHit(mt.id);
       newMonsters = newMonsters.map(m => {
         if (m.id !== mt.id) return m;
         const newHp = Math.max(0, m.hp - finalDmg);
@@ -2659,16 +3127,80 @@ export default function App() {
       setDyingMonsters(prev => new Set([...prev, id]));
       setTimeout(() => setDyingMonsters(prev => { const s = new Set(prev); s.delete(id); return s; }), 1000);
     });
-    setCombatMode("none"); setSelectedSpell(null); setAoeHoverTile(null);
+    setCombatMode("none"); setSelectedSpell(null);
   }
 
-  function handleAOEClick(x: number, y: number) {
+  // Execute a bomb: apply AOE damage, consume item, mark action used
+  function executeBombEffect(bombItemId: string, targetIds: string[]) {
+    if (!char) return;
+    const bomb = char.inventory.find(i => i.id === bombItemId) ?? SHOP_ITEMS.find(i => i.id === "s13");
+    if (!bomb) return;
+    let newMonsters = [...gs.dungeonMonsters];
+    const log = [...combat.log];
+    const diedIds: string[] = [];
+    targetIds.forEach(id => {
+      const mt = gs.dungeonMonsters.find(m => m.id === id);
+      if (!mt) return;
+      const saveRoll = d20();
+      const saved = saveRoll >= (bomb.saveDC ?? 15);
+      const rawDmg = rollDice(bomb.damage ?? "3d6");
+      const finalDmg = saved ? Math.floor(rawDmg / 2) : rawDmg;
+      log.push(`${bomb.name}: ${mt.name} ${saved ? "saves" : "fails"} → ${finalDmg} dmg`);
+      addEffect({ type: "fire_aoe", gridX: mt.position.x, gridY: mt.position.y });
+      addEffect({ type: "number", gridX: mt.position.x, gridY: mt.position.y, value: String(finalDmg) });
+      addHit(id);
+      newMonsters = newMonsters.map(m => {
+        if (m.id !== id) return m;
+        const newHp = Math.max(0, m.hp - finalDmg);
+        if (newHp <= 0) diedIds.push(m.id);
+        return { ...m, hp: newHp };
+      });
+    });
+    setGs(prev => ({ ...prev, dungeonMonsters: newMonsters }));
+    if (combat.active) setCombat(prev => ({ ...prev, actionUsed: true, log }));
+    // Remove the bomb from inventory
+    updateChar(char.id, c => ({ inventory: c.inventory.filter(i => i.id !== bombItemId) }));
+    diedIds.forEach(id => {
+      setDyingMonsters(prev => new Set([...prev, id]));
+      setTimeout(() => setDyingMonsters(prev => { const s = new Set(prev); s.delete(id); return s; }), 1000);
+    });
+    notify(`💣 Bomb explodes! ${targetIds.length > 0 ? `Hit ${targetIds.length} target(s).` : "No targets hit."}`);
+  }
+
+  // Called from MapGrid when user clicks any tile in the AOE area
+  function handleAOECastFromGrid(affectedMonsterIds: string[], tileX: number, tileY: number) {
     if (!char || !selectedSpell || combatMode !== "spell") return;
-    const aoeSpell = WIZARD_SPELL_CHOICES.find(s => s.name === selectedSpell);
-    if (!aoeSpell) return;
-    const nearestInArea = gs.dungeonMonsters.filter(m => m.hp > 0 && dist({ x, y }, m.position) <= aoeSpell.aoeRadius);
-    if (nearestInArea.length === 0) { notify("No targets in area!"); return; }
-    handleCastSpellAtTile(selectedSpell, { x, y });
+    const isBomb = selectedSpell === "Small Bomb";
+
+    if (isBomb) {
+      // Bomb AOE — works in and out of combat
+      const bombId = pendingBombItemId ?? char.inventory.find(i => i.effect === "aoe_bomb")?.id;
+      if (!bombId) { notify("No bomb available!"); setCombatMode("none"); setSelectedSpell(null); setPendingBombItemId(null); return; }
+      if (!combat.active && affectedMonsterIds.length > 0) {
+        startCombat(affectedMonsterIds);
+      }
+      executeBombEffect(bombId, affectedMonsterIds);
+      setCombatMode("none"); setSelectedSpell(null); setPendingBombItemId(null);
+      return;
+    }
+
+    if (!combat.active) {
+      // Spell cast from outside combat
+      if (affectedMonsterIds.length === 0) {
+        notify("No targets in the area!");
+        setCombatMode("none"); setSelectedSpell(null); return;
+      }
+      // Start combat with monsters in AOE, then cast spell (player used action on the preemptive cast)
+      startCombat(affectedMonsterIds);
+      handleCastSpellAtTile(selectedSpell, { x: tileX, y: tileY });
+      return;
+    }
+
+    if (affectedMonsterIds.length === 0) {
+      notify("No targets caught in the area!");
+      return;
+    }
+    handleCastSpellAtTile(selectedSpell, { x: tileX, y: tileY });
   }
 
   function handleCastSpell(spellName: string, targetMonsterId: string) {
@@ -2698,7 +3230,8 @@ export default function App() {
 
     if (spell && ((spell.type === "heal" || spell.type === "cantrip") && spell.heal)) {
       // Healing spell - targets self
-      const healed = rollDice(spell.heal) + (spell.type === "heal" ? getMod(char.stats.wis) : 0);
+      const spMod = getSpellcastingMod(char);
+      const healed = spell.heal === "5" ? 5 : rollDice(spell.heal) + spMod;
       updateChar(char.id, c => ({ hp: Math.min(c.maxHp, c.hp + healed) }));
       log.push(`${char.name} casts ${spell.name}: +${healed} HP`);
       addEffect({ type: "heal", gridX: char.position.x, gridY: char.position.y, value: String(healed) });
@@ -2733,8 +3266,10 @@ export default function App() {
         setTimeout(() => setDyingMonsters(prev => { const s = new Set(prev); s.delete(id); return s; }), 1000);
       });
     } else if (spell && spell.damage && target) {
-      const dmg = rollDice(spell.damage);
-      addDiceRoll({ type: "damage", value: dmg, total: dmg, mod: 0, max: dmg, label: spell.damage });
+      const spMod = getSpellcastingMod(char);
+      const rawDmg = rollDice(spell.damage);
+      const dmg = Math.max(1, rawDmg + spMod);
+      addDiceRoll({ type: "damage", value: rawDmg, total: dmg, mod: spMod, max: rawDmg, label: spell.damage + (spMod !== 0 ? `${spMod >= 0 ? "+" : ""}${spMod}` : "") });
       // Spells with save roll (Sacred Flame, etc.)
       if (spell.saveStat && spell.saveDC) {
         const saveRoll = d20();
@@ -2748,7 +3283,7 @@ export default function App() {
       }
       const newMonsters = gs.dungeonMonsters.map(m => {
         if (m.id !== target.id) return m;
-        log.push(`${char.name} casts ${spell.name}: ${dmg} dmg to ${m.name} (${Math.max(0, m.hp - dmg)}/${m.maxHp})`);
+        log.push(`${char.name} casts ${spell.name}: ${dmg} dmg to ${m.name} (${Math.max(0, m.hp - dmg)}/${m.maxHp})${spMod !== 0 ? ` [+${spMod} spell mod]` : ""}`);
         return { ...m, hp: Math.max(0, m.hp - dmg) };
       });
       addEffect({ type: effectType, gridX: target.position.x, gridY: target.position.y });
@@ -2766,6 +3301,12 @@ export default function App() {
     setCombat(prev => ({ ...prev, actionUsed: true, log }));
     setCombatMode("none");
     setSelectedSpell(null);
+  }
+
+  function handleHealSelf() {
+    if (!char || !selectedSpell) return;
+    handleCastSpell(selectedSpell, "");
+    setCombatMode("none"); setSelectedSpell(null);
   }
 
   function handleMonsterClick(monsterId: string) {
@@ -2790,25 +3331,41 @@ export default function App() {
     const log = [...combat.log];
     log.push(`${char.name} attacks ${monster.name}: [${roll}+${mod + char.profBonus}=${total}] vs AC ${monster.ac}`);
 
+    if (weapon.name === "Longsword") {
+      // Sword impact effect centered on monster; targetX/Y = player (direction the sword comes FROM)
+      addEffect({ type: "sword_swing", gridX: monster.position.x, gridY: monster.position.y, targetX: char.position.x, targetY: char.position.y });
+    } else if (isRanged) {
+      addEffect({ type: "arrow", gridX: char.position.x, gridY: char.position.y, targetX: monster.position.x, targetY: monster.position.y });
+      // Small impact burst at monster after arrow lands
+      setTimeout(() => addEffect({ type: "slash", gridX: monster.position.x, gridY: monster.position.y }), 320);
+    }
+
     let newHp = monster.hp;
     if (total >= monster.ac) {
       const isSurprise = !monster.alerted;
-      const rawDmg = rollDice(weapon.damage ?? "1d4");
-      const finalDmg = isSurprise ? rawDmg * 2 : rawDmg;
+      const dieRoll = rollDice(weapon.damage ?? "1d4");
+      // DnD: melee adds STR mod, ranged adds DEX mod to damage
+      const dmgMod = isRanged ? getMod(char.stats.dex) : getMod(char.stats.str);
+      const withMod = Math.max(1, dieRoll + dmgMod);
+      const finalDmg = isSurprise ? withMod * 2 : withMod;
       newHp = Math.max(0, monster.hp - finalDmg);
+      const dmgLabel = `${weapon.damage}${dmgMod >= 0 ? "+" : ""}${dmgMod}`;
 
-      // Show damage dice
-      addDiceRoll({ type: "damage", value: finalDmg, total: finalDmg, mod: isSurprise ? rawDmg : 0, max: finalDmg, label: weapon.damage ?? "1d4" });
+      addDiceRoll({ type: "damage", value: dieRoll, total: finalDmg, mod: dmgMod, max: dieRoll, label: dmgLabel });
 
       if (isSurprise) {
-        log.push(`  💥 SURPRISE ATTACK! ×2 damage! ${rawDmg}×2 = ${finalDmg} dmg → ${newHp}/${monster.maxHp} HP`);
+        log.push(`  💥 SURPRISE! ×2 dmg! [${dieRoll}${dmgMod >= 0 ? "+" : ""}${dmgMod}]×2=${finalDmg} → ${newHp}/${monster.maxHp} HP`);
         addEffect({ type: "number", gridX: monster.position.x, gridY: monster.position.y, value: `×2! ${finalDmg}` });
       } else {
-        log.push(`  Hit! ${finalDmg} dmg → ${newHp}/${monster.maxHp} HP`);
+        log.push(`  Hit! [${dieRoll}${dmgMod >= 0 ? "+" : ""}${dmgMod}]=${finalDmg} dmg → ${newHp}/${monster.maxHp} HP`);
         addEffect({ type: "number", gridX: monster.position.x, gridY: monster.position.y, value: String(finalDmg) });
       }
       if (newHp === 0) log.push(`  ${monster.name} destroyed!`);
-      addEffect({ type: "slash", gridX: monster.position.x, gridY: monster.position.y });
+      // Slash effect at monster + shake
+      setTimeout(() => {
+        addEffect({ type: "slash", gridX: monster.position.x, gridY: monster.position.y });
+        addHit(monsterId);
+      }, 180);
     } else {
       log.push(`  Miss!`);
       addEffect({ type: "miss", gridX: monster.position.x, gridY: monster.position.y, value: "MISS" });
@@ -2928,15 +3485,28 @@ export default function App() {
   }
   function handleDropItem(id: string) { if (!char) return; updateChar(char.id, c => ({ inventory: c.inventory.filter(i => i.id !== id) })); notify("Item dropped."); }
   function handleUseItem(item: Item) {
-    if (!char || item.effect !== "heal" || !item.healAmount) return;
-    const healed = rollDice(item.healAmount);
-    updateChar(char.id, c => ({ hp: Math.min(c.maxHp, c.hp + healed), inventory: c.inventory.filter(i => i.id !== item.id) }));
-    notify(`🧪 ${item.name}: +${healed} HP!`);
+    if (!char) return;
+    if (item.effect === "heal" && item.healAmount) {
+      const healed = rollDice(item.healAmount);
+      updateChar(char.id, c => ({ hp: Math.min(c.maxHp, c.hp + healed), inventory: c.inventory.filter(i => i.id !== item.id) }));
+      notify(`🧪 ${item.name}: +${healed} HP!`);
+    } else if (item.effect === "aoe_bomb") {
+      // Bombs use AOE targeting — enter spell mode so the map shows the circle
+      setCombatMode("spell");
+      setSelectedSpell("Small Bomb");
+      setPendingBombItemId(item.id);
+      notify("💣 Bomb ready — select target area on the map. Click Cancel to abort.");
+    } else {
+      notify(`Used ${item.name}.`);
+      updateChar(char.id, c => ({ inventory: c.inventory.filter(i => i.id !== item.id) }));
+    }
   }
   function handleBuyItem(item: Item) {
     if (!char || char.gold < item.value) return;
     updateChar(char.id, c => ({ gold: c.gold - item.value, inventory: [...c.inventory, { ...item, id: gid() }] }));
     notify(`Bought ${item.name} for ${item.value}g`);
+    setShopPurchaseAnim(item.name);
+    setTimeout(() => setShopPurchaseAnim(null), 1200);
   }
   function handleAcceptQuest(qid: string) {
     if (!gs.party) { notify("Join or create a party first!"); return; }
@@ -2948,14 +3518,44 @@ export default function App() {
   function handleQuestClaim(questId: string) {
     if (!char) return;
     const q = gs.partyQuests.find(pq => pq.id === questId);
-    if (!q || !q.completed) return;
+    if (!q) return;
+
+    // Handle gather quests (branch collection etc.)
+    if (q.gatherTarget) {
+      const { itemName, count } = q.gatherTarget;
+      const currentChar = gs.characters[char.id];
+      const matchingItems = currentChar.inventory.filter(i => i.name === itemName);
+      if (matchingItems.length < count) {
+        notify(`Need ${count} ${itemName} (have ${matchingItems.length}). Collect more!`);
+        return;
+      }
+      // Remove items and give rewards
+      let removed = 0;
+      updateChar(char.id, c => ({
+        inventory: c.inventory.filter(i => {
+          if (i.name === itemName && removed < count) { removed++; return false; }
+          return true;
+        }),
+        exp: c.exp + q.reward.exp,
+        gold: c.gold + q.reward.gold,
+      }));
+      setGs(prev => ({
+        ...prev,
+        partyQuests: prev.partyQuests.filter(pq => pq.id !== questId),
+        party: prev.party ? { ...prev.party, questIds: prev.party.questIds.filter(id => id !== questId) } : null,
+      }));
+      notify(`✅ Quest Complete! +${q.reward.exp} EXP, +${q.reward.gold} gold`);
+      return;
+    }
+
+    if (!q.readyToTurnIn && !q.completed) return;
     updateChar(char.id, ch => ({ exp: ch.exp + q.reward.exp, gold: ch.gold + q.reward.gold }));
     setGs(prev => ({
       ...prev,
       partyQuests: prev.partyQuests.filter(pq => pq.id !== questId),
       party: prev.party ? { ...prev.party, questIds: prev.party.questIds.filter(id => id !== questId) } : null,
     }));
-    notify(`✅ Quest claimed: ${q.title}! +${q.reward.exp}EXP +${q.reward.gold}g`);
+    notify(`✅ Reward claimed: +${q.reward.exp} EXP, +${q.reward.gold} gold!`);
   }
   function handleSendChat(text: string, ch: "global" | "party") {
     if (!char) return;
@@ -2969,6 +3569,48 @@ export default function App() {
     notify(`Party "${name}" created!`);
   }
   function handleLeaveParty() { setGs(prev => ({ ...prev, party: null, partyQuests: [] })); notify("Left party."); }
+
+  function handleUseSkillFromHUD(spellName: string) {
+    if (!char) return;
+    if (spellName === "Second Wind") {
+      const healed = rollDice("1d10") + char.level;
+      updateChar(char.id, c => ({ hp: Math.min(c.maxHp, c.hp + healed) }));
+      notify(`⚔️ Second Wind! +${healed} HP`);
+      return;
+    }
+    if (spellName === "Hunter's Mark") {
+      notify("Hunter's Mark: Your next attack deals +1d6 damage.");
+      return;
+    }
+    const allSpells = CLASS_SPELLS[char.class] ?? [];
+    const spell = allSpells.find(s => s.name === spellName);
+    if (!spell) return;
+
+    if (spell.type === "heal" || (spell.type === "cantrip" && spell.heal)) {
+      if (combat.active) {
+        handleSpellSelect(spellName);
+      } else {
+        if (spell.level > 0) {
+          if (!char.spellSlots || char.spellSlots.used >= char.spellSlots.max) { notify("No spell slots!"); return; }
+          updateChar(char.id, c => ({ spellSlots: { ...c.spellSlots!, used: c.spellSlots!.used + 1 } }));
+        }
+        const spMod = getSpellcastingMod(char);
+        const healed = spell.heal === "5" ? 5 : rollDice(spell.heal ?? "1d4") + spMod;
+        updateChar(char.id, c => ({ hp: Math.min(c.maxHp, c.hp + healed) }));
+        addEffect({ type: "heal", gridX: char.position.x, gridY: char.position.y, value: String(healed) });
+        notify(`✨ ${spell.name}: +${healed} HP`);
+      }
+      return;
+    }
+
+    // Attack spells: block in town safe zone
+    if (screen === "town") { notify("Cannot use attack spells in a safe zone."); return; }
+    // In combat or dungeon: enter targeting mode
+    handleSpellSelect(spellName);
+    if (!combat.active) {
+      notify(`${spellName} ready — select a target on the map!`);
+    }
+  }
 
   // ── NAVIGATION ──
 
@@ -3065,45 +3707,12 @@ export default function App() {
                 combat={combat} fogRevealed={fogRevealed} combatMode={combatMode}
                 selectedSpell={selectedSpell ?? undefined}
                 onTileClick={handleTileClick} onMonsterClick={handleMonsterClick}
+                onAOECast={handleAOECastFromGrid}
                 effects={effects}
-                aoeHoverTile={aoeHoverTile}
-                onAOEHover={setAoeHoverTile}
-                onAOEClick={handleAOEClick}
-                dyingMonsters={dyingMonsters} />
+                dyingMonsters={dyingMonsters}
+                hitTokenIds={hitTokenIds}
+                onHealSelf={handleHealSelf} />
 
-              {/* Pre-emptive attack bar — shows when in dungeon, not in combat, monsters nearby */}
-              {screen === "dungeon" && !combat.active && (() => {
-                const nearbyMonsters = gs.dungeonMonsters.filter(m => m.hp > 0 && dist(char.position, m.position) <= m.sightRange + 1);
-                if (nearbyMonsters.length === 0) return null;
-                return (
-                  <div style={{
-                    position: "absolute", bottom: 4, left: "50%", transform: "translateX(-50%)",
-                    zIndex: 30, display: "flex", alignItems: "center", gap: 8,
-                    background: C.card, border: `2px solid ${C.red}60`,
-                    boxShadow: `0 0 14px ${C.red}40`, padding: "8px 14px",
-                  }}>
-                    <span style={{ fontFamily: PX, fontSize: 7, color: C.red }}>⚠ {nearbyMonsters.length} ENEMY NEAR</span>
-                    <button
-                      onClick={() => startCombat(nearbyMonsters.map(m => m.id))}
-                      style={{ ...pixelBtn("danger", true), fontSize: 7 }}>
-                      ⚔ ENGAGE FIRST
-                    </button>
-                    {char.equipment.weapon && nearbyMonsters.some(m => dist(char.position, m.position) <= Math.ceil((char.equipment.weapon!.range ?? 5) / 5)) && (
-                      <button
-                        onClick={() => {
-                          startCombat(nearbyMonsters.map(m => m.id));
-                          setTimeout(() => {
-                            const closest = nearbyMonsters.sort((a, b) => dist(char.position, a.position) - dist(char.position, b.position))[0];
-                            if (closest) handleAttackMonster(closest.id);
-                          }, 100);
-                        }}
-                        style={{ ...pixelBtn("danger", true), fontSize: 7 }}>
-                        ⚔ STRIKE FIRST
-                      </button>
-                    )}
-                  </div>
-                );
-              })()}
 
               {/* Combat panel */}
               {combat.active && (
@@ -3116,14 +3725,70 @@ export default function App() {
 
               {/* Rest buttons (out of combat, has used slots) */}
               {!combat.active && char.spellSlots && char.spellSlots.used > 0 && (
-                <div style={{ position: "absolute", top: 4, left: 4, display: "flex", gap: 6 }}>
-                  <button onClick={() => { updateChar(char.id, c => ({ spellSlots: { ...c.spellSlots!, used: Math.max(0, c.spellSlots!.used - 1) } })); notify("Short rest: 1 slot recovered."); }}
-                    style={{ ...pixelBtn("ghost", true), fontSize: 7, display: "flex", alignItems: "center", gap: 4 }}>
-                    <RotateCcw className="w-2.5 h-2.5" />SHORT REST
+                <div style={{ position: "absolute", top: 4, left: 4, display: "flex", gap: 6, alignItems: "center" }}>
+                  <style>{`
+                    @keyframes rest-pulse { 0%,100%{box-shadow:0 0 8px rgba(76,219,112,0.3)} 50%{box-shadow:0 0 16px rgba(76,219,112,0.7)} }
+                    @keyframes engage-burst { 0%{transform:scale(0) rotate(-180deg);opacity:0} 55%{transform:scale(1.15) rotate(4deg);opacity:1} 75%{transform:scale(0.96)} 100%{transform:scale(1) rotate(0deg);opacity:1} }
+                    @keyframes engage-aura { 0%,100%{box-shadow:0 0 8px #f44336,0 0 16px #c0392b40} 50%{box-shadow:0 0 14px #f44336,0 0 28px #c0392b70} }
+                  `}</style>
+                  <button onClick={() => {
+                    updateChar(char.id, c => ({ spellSlots: { ...c.spellSlots!, used: Math.max(0, c.spellSlots!.used - 1) } }));
+                    notify("Short rest: 1 slot recovered.");
+                    setRestAnim("short"); setTimeout(() => setRestAnim(null), 600);
+                  }}
+                    style={{
+                      ...pixelBtn("ghost", true), fontSize: 7, display: "flex", alignItems: "center", gap: 4,
+                      animation: restAnim === "short" ? "rest-pulse 0.6s ease-out" : "none",
+                      boxShadow: restAnim === "short" ? "0 0 12px rgba(76,219,112,0.6)" : undefined,
+                    }}>
+                    <RotateCcw className="w-2.5 h-2.5" />SHORT
                   </button>
-                  <button onClick={() => { updateChar(char.id, c => ({ hp: c.maxHp, spellSlots: c.spellSlots ? { ...c.spellSlots, used: 0 } : undefined })); notify("Long rest: Full recovery!"); }}
-                    style={{ ...pixelBtn("ghost", true), fontSize: 7, display: "flex", alignItems: "center", gap: 4 }}>
-                    <BookOpen className="w-2.5 h-2.5" />LONG REST
+                  <button onClick={() => {
+                    updateChar(char.id, c => ({ hp: c.maxHp, spellSlots: c.spellSlots ? { ...c.spellSlots, used: 0 } : undefined }));
+                    notify("Long rest: Full recovery!");
+                    setRestAnim("long"); setTimeout(() => setRestAnim(null), 600);
+                  }}
+                    style={{
+                      ...pixelBtn("ghost", true), fontSize: 7, display: "flex", alignItems: "center", gap: 4,
+                      animation: restAnim === "long" ? "rest-pulse 0.6s ease-out" : "none",
+                      boxShadow: restAnim === "long" ? "0 0 12px rgba(76,219,112,0.6)" : undefined,
+                    }}>
+                    <BookOpen className="w-2.5 h-2.5" />LONG
+                  </button>
+                  {/* Engage First button — appears when enemies are nearby */}
+                  {screen === "dungeon" && !combat.active && (() => {
+                    const nearbyM = gs.dungeonMonsters.filter(m => m.hp > 0 && dist(char.position, m.position) <= m.sightRange + 2);
+                    if (nearbyM.length === 0) return null;
+                    return (
+                      <button onClick={() => startCombat(nearbyM.map(m => m.id))}
+                        style={{
+                          ...pixelBtn("danger", true), fontSize: 7,
+                          display: "flex", alignItems: "center", gap: 4,
+                          animation: "engage-burst 0.5s ease-out, engage-aura 1.4s 0.5s ease-in-out infinite",
+                        }}>
+                        ⚔ ENGAGE!
+                      </button>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* Cancel targeting mode (outside combat) */}
+              {combatMode !== "none" && !combat.active && (
+                <div style={{
+                  position: "absolute", top: 4, right: 4, zIndex: 25,
+                  display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4,
+                }}>
+                  <div style={{
+                    fontFamily: PX, fontSize: 7, color: C.blue, padding: "4px 8px",
+                    background: C.card + "ee", border: `1px solid ${C.blue}60`,
+                    boxShadow: `0 0 8px ${C.blue}40`,
+                  }}>
+                    {selectedSpell === "Small Bomb" ? "💣 SELECT BOMB TARGET" : "✨ SELECT SPELL TARGET"}
+                  </div>
+                  <button onClick={() => { setCombatMode("none"); setSelectedSpell(null); setPendingBombItemId(null); }}
+                    style={{ ...pixelBtn("ghost", true), fontSize: 7 }}>
+                    ✕ CANCEL
                   </button>
                 </div>
               )}
@@ -3149,11 +3814,13 @@ export default function App() {
           onSendChat={handleSendChat} onEquipItem={handleEquipItem} onUnequipWeapon={handleUnequipWeapon}
           onUnequipArmor={handleUnequipArmor} onUnequipAcc={handleUnequipAcc}
           onDropItem={handleDropItem} onUseItem={handleUseItem}
-          party={gs.party} onCreateParty={handleCreateParty} onLeaveParty={handleLeaveParty} partyQuests={gs.partyQuests} />
+          party={gs.party} onCreateParty={handleCreateParty} onLeaveParty={handleLeaveParty} partyQuests={gs.partyQuests}
+          onUseSkill={handleUseSkillFromHUD}
+          inCombat={combat.active} />
 
         {/* Modals */}
         {showShop && <ShopModal char={char} onBuy={handleBuyItem} onClose={() => setShowShop(false)} />}
-        {showQuests && <QuestModal quests={gs.availableQuests} partyQuests={gs.partyQuests} party={gs.party} onAccept={handleAcceptQuest} onClose={() => setShowQuests(false)} nextRefresh={gs.questRefreshAt} onClaim={handleQuestClaim} />}
+        {showQuests && <QuestModal quests={gs.availableQuests} partyQuests={gs.partyQuests} party={gs.party} onAccept={handleAcceptQuest} onClose={() => setShowQuests(false)} nextRefresh={gs.questRefreshAt} onClaim={handleQuestClaim} charInventory={char.inventory} />}
 
         {/* ★ Centered special tile dialog (blocks movement while open) */}
         {specialDialog && (
@@ -3180,6 +3847,43 @@ export default function App() {
           }}>
             {notification}
           </div>
+        )}
+
+        {/* battleBanner COMBAT! overlay removed — battleStart (BATTLE START!) is used instead */}
+
+        {/* Shop purchase flash */}
+        {shopPurchaseAnim && (
+          <div style={{ position: "fixed", inset: 0, zIndex: 9994, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <style>{`@keyframes shop-flash { 0%{opacity:0;transform:scale(0.5) translateY(20px)} 20%{opacity:1;transform:scale(1.1) translateY(0)} 70%{opacity:1;transform:scale(1)} 100%{opacity:0;transform:scale(0.9) translateY(-10px)} }`}</style>
+            <div style={{
+              fontFamily: PX, fontSize: 14, color: C.gold,
+              textShadow: `0 0 20px ${C.gold}, 2px 2px 0 #000`,
+              animation: "shop-flash 1.2s ease-out forwards",
+              background: C.card, border: `2px solid ${C.gold}`,
+              padding: "12px 24px",
+              boxShadow: `0 0 30px ${C.gold}50`,
+            }}>⭐ PURCHASED: {shopPurchaseAnim}</div>
+          </div>
+        )}
+
+        {/* BATTLE START animation overlay */}
+        {battleStart && (
+          <>
+            <style>{`@keyframes battle-start-fly { 0%{transform:skewX(-15deg) translateX(-300px) scale(0.4);opacity:0} 25%{transform:skewX(-15deg) translateX(20px) scale(1.15);opacity:1} 45%{transform:skewX(-12deg) translateX(0) scale(1);opacity:1} 75%{transform:skewX(-12deg) translateX(0) scale(1);opacity:1} 100%{transform:skewX(-12deg) translateX(300px) scale(0.8);opacity:0} }`}</style>
+            <div style={{
+              position: "fixed", inset: 0, zIndex: 9000, display: "flex", alignItems: "center", justifyContent: "center",
+              pointerEvents: "none", background: "rgba(0,0,0,0.15)",
+            }}>
+              <div style={{
+                fontFamily: PX, fontSize: 36, color: C.red, fontStyle: "italic", letterSpacing: 4,
+                textShadow: `0 0 30px ${C.red}, 0 0 60px ${C.red}80, 4px 4px 0 #000, -2px -2px 0 #000`,
+                animation: "battle-start-fly 1.8s cubic-bezier(0.1,0,0.9,1) forwards",
+                whiteSpace: "nowrap",
+              }}>
+                ⚔ BATTLE START! ⚔
+              </div>
+            </div>
+          </>
         )}
       </div>
     );
