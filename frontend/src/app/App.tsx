@@ -1552,14 +1552,14 @@ function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode, select
         <div onClick={() => isHealSpell && onHealSelf?.()}
           style={{
             position: "absolute",
-            left: pos.x * CELL + 3, top: pos.y * CELL + 3,
+            transform: `translate(${pos.x * CELL + 3}px, ${pos.y * CELL + 3}px)`,
             width: CELL - 6, height: CELL - 6,
             background: CLASS_CFG[char.class].color + "cc",
             border: `2px solid ${CLASS_CFG[char.class].color}`,
             boxShadow: `0 0 10px ${CLASS_CFG[char.class].color}70`,
             display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: 18, zIndex: 10, overflow: "visible",
-            transition: "left 0.15s, top 0.15s",
+            transition: "transform 0.15s linear",
             animation: hitTokenIds?.has(char.id) ? "dnd-shake 0.35s ease-in-out" : undefined,
             cursor: isHealSpell ? "pointer" : "default",
           }}>
@@ -1653,45 +1653,55 @@ function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode, select
             );
           }
           if (e.type === "sword_swing") {
-            // Impact slash at monster position; targetX/Y = player (sword comes FROM player direction)
             const fromX = (e.targetX ?? e.gridX - 1) * CELL + CELL / 2;
             const fromY = (e.targetY ?? e.gridY) * CELL + CELL / 2;
-            // Angle the sword impact comes from (player → monster direction, then 180° for "arriving at")
-            const impactAngle = Math.atan2(ey - fromY, ex - fromX) * 180 / Math.PI;
-            const SZ = CELL * 2.6;
+            const dx = ex - fromX;
+            const dy = ey - fromY;
+            const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            const SZ = CELL * 3;
             return (
               <div key={e.id} style={{
                 position: "absolute", pointerEvents: "none", zIndex: 55,
-                left: ex - SZ / 2, top: ey - SZ / 2, width: SZ, height: SZ,
-                transform: `rotate(${impactAngle}deg)`,
-                transformOrigin: "50% 50%",
-                animation: "dnd-sword-thrust 0.42s ease-out forwards",
+                left: fromX - SZ / 2, top: fromY - SZ / 2, width: SZ, height: SZ,
+                transformOrigin: "center",
               }}>
-                <svg width={SZ} height={SZ} viewBox={`0 0 ${SZ} ${SZ}`} style={{ overflow: "visible" }}>
-                  <defs>
-                    <linearGradient id={`sg${e.id}`} x1="100%" y1="0%" x2="0%" y2="0%">
-                      <stop offset="0%" stopColor="#c0a828" />
-                      <stop offset="35%" stopColor="#d8d8f8" />
-                      <stop offset="100%" stopColor="rgba(255,255,255,0.6)" />
-                    </linearGradient>
-                  </defs>
-                  {/* Blade arrives from right, tip at center, pointing left */}
-                  <polygon points={`${SZ*0.08},${SZ/2-4} ${SZ*0.08},${SZ/2+4} ${SZ*0.72},${SZ/2+2} ${SZ*0.82},${SZ/2} ${SZ*0.72},${SZ/2-2}`}
-                    fill={`url(#sg${e.id})`} />
-                  <line x1={SZ*0.1} y1={SZ/2} x2={SZ*0.78} y2={SZ/2}
-                    stroke="rgba(255,255,255,0.5)" strokeWidth="1.2" strokeLinecap="round" />
-                  <rect x={SZ*0.03} y={SZ/2-9} width="5" height="18" rx="1" fill="#d0a830" />
-                  {/* Slash impact marks — fan out from contact point */}
-                  <line x1={SZ*0.82} y1={SZ/2-20} x2={SZ*0.72} y2={SZ/2+4}
-                    stroke="rgba(255,255,255,0.85)" strokeWidth="3" strokeLinecap="round"
-                    style={{ animation: "dnd-slash-trail 0.42s ease-in forwards" }} />
-                  <line x1={SZ*0.88} y1={SZ/2-12} x2={SZ*0.74} y2={SZ/2+12}
-                    stroke="rgba(255,255,255,0.5)" strokeWidth="2" strokeLinecap="round"
-                    style={{ animation: "dnd-slash-trail 0.42s ease-in forwards" }} />
-                  <line x1={SZ*0.76} y1={SZ/2-24} x2={SZ*0.68} y2={SZ/2+2}
-                    stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" strokeLinecap="round"
-                    style={{ animation: "dnd-slash-trail 0.42s ease-in forwards" }} />
-                </svg>
+                <style>{`
+                  @keyframes epic-sword-slash-${e.id} {
+                    0% { transform: rotate(${angle - 70}deg) translate(-10px, -10px) scale(0.5); opacity: 0; }
+                    20% { transform: rotate(${angle - 40}deg) translate(0, 0) scale(1.2); opacity: 1; }
+                    50% { transform: rotate(${angle + 60}deg) translate(${dist * 0.8}px, 0) scale(1.3); opacity: 1; filter: drop-shadow(0 0 10px rgba(255,255,255,0.8)); }
+                    100% { transform: rotate(${angle + 80}deg) translate(${dist + 10}px, 0) scale(0.8); opacity: 0; }
+                  }
+                  @keyframes epic-wave-${e.id} {
+                    0% { transform: rotate(${angle}deg) translate(${dist * 0.2}px, 0) scale(0.5); opacity: 0; }
+                    30% { transform: rotate(${angle}deg) translate(${dist * 0.5}px, 0) scale(1.2); opacity: 1; }
+                    100% { transform: rotate(${angle}deg) translate(${dist + 20}px, 0) scale(2); opacity: 0; }
+                  }
+                `}</style>
+                <div style={{ position: "absolute", inset: 0, animation: `epic-sword-slash-${e.id} 0.4s cubic-bezier(0.1, 0.8, 0.2, 1) forwards` }}>
+                  <svg width={SZ} height={SZ} viewBox={`0 0 ${SZ} ${SZ}`} style={{ overflow: "visible" }}>
+                    <defs>
+                      <linearGradient id={`sg${e.id}`} x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#fff" />
+                        <stop offset="50%" stopColor="#d8d8f8" />
+                        <stop offset="100%" stopColor="#888" />
+                      </linearGradient>
+                    </defs>
+                    {/* Blade pointing right: x from SZ*0.2 to SZ*0.9, y centered around SZ/2 */}
+                    <polygon points={`${SZ*0.2},${SZ/2-4} ${SZ*0.2},${SZ/2+4} ${SZ*0.8},${SZ/2+6} ${SZ*0.9},${SZ/2} ${SZ*0.8},${SZ/2-6}`} fill={`url(#sg${e.id})`} />
+                    {/* Crossguard */}
+                    <rect x={SZ*0.2} y={SZ/2-15} width="6" height="30" fill="#c0a828" rx="2" />
+                    {/* Handle */}
+                    <rect x={SZ*0.05} y={SZ/2-3} width={SZ*0.15} height="6" fill="#553311" />
+                  </svg>
+                </div>
+                <div style={{ position: "absolute", inset: 0, animation: `epic-wave-${e.id} 0.35s ease-out forwards`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <svg width={SZ} height={SZ} viewBox={`0 0 ${SZ} ${SZ}`} style={{ overflow: "visible" }}>
+                    <path d={`M ${SZ*0.7} ${SZ*0.2} Q ${SZ*0.9} ${SZ*0.5} ${SZ*0.7} ${SZ*0.8}`} fill="none" stroke="rgba(255, 255, 255, 0.9)" strokeWidth="6" style={{ filter: "drop-shadow(0 0 10px #fff)" }} strokeLinecap="round" />
+                    <path d={`M ${SZ*0.65} ${SZ*0.3} Q ${SZ*0.8} ${SZ*0.5} ${SZ*0.65} ${SZ*0.7}`} fill="none" stroke="rgba(0, 255, 255, 0.6)" strokeWidth="10" strokeLinecap="round" style={{ filter: "blur(4px)" }} />
+                  </svg>
+                </div>
               </div>
             );
           }
@@ -2829,6 +2839,7 @@ export default function App() {
   const [showQuests, setShowQuests] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
   const [restAnim, setRestAnim] = useState<"short" | "long" | null>(null);
+  const [zoom, setZoom] = useState(1.3);
   const [shopPurchaseAnim, setShopPurchaseAnim] = useState<string | null>(null);
   const [battleBanner, setBattleBanner] = useState(false);
   const monsterTimerRef = useRef<ReturnType<typeof setTimeout>>();
@@ -3128,6 +3139,9 @@ export default function App() {
       setTimeout(() => setDyingMonsters(prev => { const s = new Set(prev); s.delete(id); return s; }), 1000);
     });
     setCombatMode("none"); setSelectedSpell(null);
+    if (!combat.active && targets.length > 0) {
+      setTimeout(() => startCombat(targets.map(m => m.id)), 600);
+    }
   }
 
   // Execute a bomb: apply AOE damage, consume item, mark action used
@@ -3165,6 +3179,9 @@ export default function App() {
       setTimeout(() => setDyingMonsters(prev => { const s = new Set(prev); s.delete(id); return s; }), 1000);
     });
     notify(`💣 Bomb explodes! ${targetIds.length > 0 ? `Hit ${targetIds.length} target(s).` : "No targets hit."}`);
+    if (!combat.active && targetIds.length > 0) {
+      setTimeout(() => startCombat(targetIds), 600);
+    }
   }
 
   // Called from MapGrid when user clicks any tile in the AOE area
@@ -3301,6 +3318,9 @@ export default function App() {
     setCombat(prev => ({ ...prev, actionUsed: true, log }));
     setCombatMode("none");
     setSelectedSpell(null);
+    if (!combat.active && target) {
+      setTimeout(() => startCombat([target.id]), 600);
+    }
   }
 
   function handleHealSelf() {
@@ -3432,6 +3452,38 @@ export default function App() {
     // Normal tile — move directly
     updateChar(char.id, { position: { x, y } });
   }
+
+  // Keyboard movement (WASD / Arrows)
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((screen !== "town" && screen !== "dungeon") || !char || specialDialog) return;
+
+      let dx = 0, dy = 0;
+      if (e.key === "w" || e.key === "W" || e.key === "ArrowUp") dy = -1;
+      if (e.key === "s" || e.key === "S" || e.key === "ArrowDown") dy = 1;
+      if (e.key === "a" || e.key === "A" || e.key === "ArrowLeft") dx = -1;
+      if (e.key === "d" || e.key === "D" || e.key === "ArrowRight") dx = 1;
+
+      if (dx === 0 && dy === 0) return;
+
+      if (combat.active) {
+        if (combat.turnOrder[combat.currentIndex]?.id !== char.id) return;
+        if (combatMode !== "move") {
+          setCombatMode("move");
+          return;
+        }
+      }
+
+      const newX = Math.max(0, Math.min(COLS - 1, char.position.x + dx));
+      const newY = Math.max(0, Math.min(ROWS - 1, char.position.y + dy));
+
+      if (newX === char.position.x && newY === char.position.y) return;
+      handleTileClick(newX, newY);
+    }
+    
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [screen, char, specialDialog, combat.active, combat.turnOrder, combat.currentIndex, combatMode]);
 
   function handleSpecialYes() {
     if (!char || !specialDialog) return;
@@ -3699,20 +3751,42 @@ export default function App() {
           </div>
         </div>
 
-        {/* Map area */}
-        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", position: "relative", background: screen === "dungeon" ? "#040310" : "#080e04" }}>
-          {/* Use CSS transform to scale the map to fit the screen if it's too small, preventing scrollbars */}
-          <div style={{ transform: "scale(min(1, calc(100vw / 780), calc((100vh - 250px) / 590)))", transformOrigin: "center", transition: "transform 0.2s" }}>
-            <div style={{ position: "relative" }}>
-              <MapGrid mode={screen} char={char} monsters={gs.dungeonMonsters}
-                combat={combat} fogRevealed={fogRevealed} combatMode={combatMode}
-                selectedSpell={selectedSpell ?? undefined}
-                onTileClick={handleTileClick} onMonsterClick={handleMonsterClick}
-                onAOECast={handleAOECastFromGrid}
-                effects={effects}
-                dyingMonsters={dyingMonsters}
-                hitTokenIds={hitTokenIds}
-                onHealSelf={handleHealSelf} />
+        {/* Map area - Camera Follow Mode */}
+        <div 
+          onWheel={(e) => {
+            if (e.deltaY < 0) setZoom(z => Math.min(2.5, z + 0.1));
+            else setZoom(z => Math.max(0.6, z - 0.1));
+          }}
+          style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", position: "relative", background: screen === "dungeon" ? "#040310" : "#080e04" }}>
+          {/* Zoom in slightly and translate map inversely to player position to keep player centered */}
+          {(() => {
+             const mapScale = zoom;
+             const charX = char.position.x * 38 + 19; // 38 is CELL size, 19 is half
+             const charY = char.position.y * 38 + 19;
+             const centerX = (20 * 38) / 2;
+             const centerY = (15 * 38) / 2;
+             const offsetX = centerX - charX;
+             const offsetY = centerY - charY;
+             return (
+               <div style={{ 
+                 transform: `scale(${mapScale}) translate(${offsetX}px, ${offsetY}px)`, 
+                 transformOrigin: "center", 
+                 transition: "transform 0.15s linear" 
+               }}>
+                 <div style={{ position: "relative" }}>
+                   <MapGrid mode={screen} char={char} monsters={gs.dungeonMonsters}
+                     combat={combat} fogRevealed={fogRevealed} combatMode={combatMode}
+                     selectedSpell={selectedSpell ?? undefined}
+                     onTileClick={handleTileClick} onMonsterClick={handleMonsterClick}
+                     onAOECast={handleAOECastFromGrid}
+                     effects={effects}
+                     dyingMonsters={dyingMonsters}
+                     hitTokenIds={hitTokenIds}
+                     onHealSelf={handleHealSelf} />
+                 </div>
+               </div>
+             );
+          })()}
 
 
               {/* Combat panel */}
@@ -3756,23 +3830,27 @@ export default function App() {
                     }}>
                     <BookOpen className="w-2.5 h-2.5" />LONG
                   </button>
-                  {/* Engage First button — appears when enemies are nearby */}
-                  {screen === "dungeon" && !combat.active && (() => {
-                    const nearbyM = gs.dungeonMonsters.filter(m => m.hp > 0 && dist(char.position, m.position) <= m.sightRange + 2);
-                    if (nearbyM.length === 0) return null;
-                    return (
-                      <button onClick={() => startCombat(nearbyM.map(m => m.id))}
-                        style={{
-                          ...pixelBtn("danger", true), fontSize: 7,
-                          display: "flex", alignItems: "center", gap: 4,
-                          animation: "engage-burst 0.5s ease-out, engage-aura 1.4s 0.5s ease-in-out infinite",
-                        }}>
-                        ⚔ ENGAGE!
-                      </button>
-                    );
-                  })()}
                 </div>
               )}
+
+              {/* Engage First button — appears when enemies are nearby (Moved to top center) */}
+              {screen === "dungeon" && !combat.active && (() => {
+                const nearbyM = gs.dungeonMonsters.filter(m => m.hp > 0 && dist(char.position, m.position) <= m.sightRange + 2);
+                if (nearbyM.length === 0) return null;
+                return (
+                  <div style={{ position: "absolute", top: 24, left: "50%", transform: "translateX(-50%)", zIndex: 100 }}>
+                    <button onClick={() => startCombat(nearbyM.map(m => m.id))}
+                      style={{
+                        ...pixelBtn("danger", true), fontSize: 16, padding: "10px 24px",
+                        display: "flex", alignItems: "center", gap: 8,
+                        animation: "engage-burst 0.5s ease-out, engage-aura 1.4s 0.5s ease-in-out infinite",
+                        boxShadow: "0 0 20px rgba(255, 0, 0, 0.8), 0 0 40px rgba(255, 50, 0, 0.5)"
+                      }}>
+                      ⚔ ENGAGE!
+                    </button>
+                  </div>
+                );
+              })()}
 
               {/* Cancel targeting mode (outside combat) */}
               {combatMode !== "none" && !combat.active && (
@@ -3805,8 +3883,6 @@ export default function App() {
                   🚪 Reach north exit · Avoid monsters or fight!
                 </div>
               )}
-            </div>
-          </div>
         </div>
 
         {/* HUD */}
@@ -3870,18 +3946,45 @@ export default function App() {
         {/* BATTLE START animation overlay */}
         {battleStart && (
           <>
-            <style>{`@keyframes battle-start-fly { 0%{transform:skewX(-15deg) translateX(-300px) scale(0.4);opacity:0} 25%{transform:skewX(-15deg) translateX(20px) scale(1.15);opacity:1} 45%{transform:skewX(-12deg) translateX(0) scale(1);opacity:1} 75%{transform:skewX(-12deg) translateX(0) scale(1);opacity:1} 100%{transform:skewX(-12deg) translateX(300px) scale(0.8);opacity:0} }`}</style>
+            <style>{`
+              @keyframes epic-flash { 0%{background:rgba(255,255,255,0.85)} 15%{background:rgba(0,0,0,0.85)} 100%{background:rgba(0,0,0,0)} }
+              @keyframes epic-shake { 0%,100%{transform:translate(0,0)} 10%,30%,50%,70%,90%{transform:translate(-10px, 8px)} 20%,40%,60%,80%{transform:translate(10px, -8px)} }
+              @keyframes epic-fly-left { 
+                0%{transform:translateX(-100vw) scale(1.5);opacity:0;filter:blur(10px)} 
+                20%{transform:translateX(10px) scale(1);opacity:1;filter:blur(0);text-shadow:0 0 100px red, 8px 8px 0 #000} 
+                25%{transform:translateX(0) scale(1.1)} 
+                80%{transform:translateX(0) scale(1);opacity:1} 
+                100%{transform:translateX(-100vw) scale(0.5);opacity:0;filter:blur(5px)} 
+              }
+              @keyframes epic-fly-right { 
+                0%{transform:translateX(100vw) scale(1.5);opacity:0;filter:blur(10px)} 
+                20%{transform:translateX(-10px) scale(1);opacity:1;filter:blur(0);text-shadow:0 0 100px red, 8px 8px 0 #000} 
+                25%{transform:translateX(0) scale(1.1)} 
+                80%{transform:translateX(0) scale(1);opacity:1} 
+                100%{transform:translateX(100vw) scale(0.5);opacity:0;filter:blur(5px)} 
+              }
+            `}</style>
             <div style={{
               position: "fixed", inset: 0, zIndex: 9000, display: "flex", alignItems: "center", justifyContent: "center",
-              pointerEvents: "none", background: "rgba(0,0,0,0.15)",
+              pointerEvents: "none", animation: "epic-flash 1.8s ease-out forwards",
             }}>
-              <div style={{
-                fontFamily: PX, fontSize: 36, color: C.red, fontStyle: "italic", letterSpacing: 4,
-                textShadow: `0 0 30px ${C.red}, 0 0 60px ${C.red}80, 4px 4px 0 #000, -2px -2px 0 #000`,
-                animation: "battle-start-fly 1.8s cubic-bezier(0.1,0,0.9,1) forwards",
-                whiteSpace: "nowrap",
-              }}>
-                ⚔ BATTLE START! ⚔
+              <div style={{ animation: "epic-shake 0.5s ease-in-out", display: "flex", gap: 16 }}>
+                <div style={{
+                  fontFamily: PX, fontSize: 64, color: "#fff", fontStyle: "italic", letterSpacing: 8,
+                  textShadow: `0 0 50px ${C.red}, 0 0 80px #800000, 6px 6px 0 #000, -3px -3px 0 #000`,
+                  animation: "epic-fly-left 1.8s cubic-bezier(0.1, 0, 0.2, 1) forwards",
+                  whiteSpace: "nowrap",
+                }}>
+                  ⚔ BATTLE
+                </div>
+                <div style={{
+                  fontFamily: PX, fontSize: 64, color: "#fff", fontStyle: "italic", letterSpacing: 8,
+                  textShadow: `0 0 50px ${C.red}, 0 0 80px #800000, 6px 6px 0 #000, -3px -3px 0 #000`,
+                  animation: "epic-fly-right 1.8s cubic-bezier(0.1, 0, 0.2, 1) forwards",
+                  whiteSpace: "nowrap",
+                }}>
+                  START! ⚔
+                </div>
               </div>
             </div>
           </>
