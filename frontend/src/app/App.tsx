@@ -1883,7 +1883,7 @@ function CombatPanel({ combat, char, monsters, combatMode, setCombatMode, select
       `}</style>
 
       {/* ══ LEFT PANEL: Turn order + Combat Log ══ */}
-      <div style={{ position: "absolute", left: 4, top: 4, zIndex: 20, display: "flex", flexDirection: "column", gap: 3, width: 180 }}>
+      <div style={{ position: "absolute", left: 4, top: 4, zIndex: 20, display: "flex", flexDirection: "column", gap: 3, width: 180, filter: `drop-shadow(0 4px 8px rgba(0,0,0,0.8)) drop-shadow(0 0 12px ${turnColor}aa)` }}>
 
         {/* Turn Banner */}
         <div style={{
@@ -1948,7 +1948,7 @@ function CombatPanel({ combat, char, monsters, combatMode, setCombatMode, select
 
       {/* ══ RIGHT PANEL: Actions ══ */}
       {isPlayer && (
-        <div style={{ position: "absolute", right: 4, top: 4, zIndex: 20, display: "flex", flexDirection: "column", gap: 3, width: 190 }}>
+        <div style={{ position: "absolute", right: 4, top: 4, zIndex: 20, display: "flex", flexDirection: "column", gap: 3, width: 190, filter: `drop-shadow(0 4px 8px rgba(0,0,0,0.8)) drop-shadow(0 0 12px ${turnColor}aa)` }}>
 
           {/* MOVE */}
           <button className="cp-right-btn" onClick={() => { setCombatMode(combatMode === "move" ? "none" : "move"); setActionTab("none"); }}
@@ -2112,7 +2112,7 @@ function CombatPanel({ combat, char, monsters, combatMode, setCombatMode, select
 
       {/* Enemy turn: indicator on right */}
       {!isPlayer && (
-        <div style={{ position: "absolute", right: 4, top: 4, zIndex: 20 }}>
+        <div style={{ position: "absolute", right: 4, top: 4, zIndex: 20, filter: `drop-shadow(0 4px 8px rgba(0,0,0,0.8)) drop-shadow(0 0 12px ${turnColor}aa)` }}>
           <div style={{
             ...rightCard(0),
             padding: "10px 14px 10px 20px", background: "linear-gradient(260deg, rgba(80,10,10,0.8), rgba(40,5,5,0.8))",
