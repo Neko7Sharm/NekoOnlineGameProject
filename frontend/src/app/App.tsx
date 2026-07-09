@@ -3700,8 +3700,9 @@ export default function App() {
         </div>
 
         {/* Map area */}
-        <div style={{ flex: 1, overflow: "auto", position: "relative", background: screen === "dungeon" ? "#040310" : "#080e04" }}>
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "center", padding: 12, minHeight: "100%" }}>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", position: "relative", background: screen === "dungeon" ? "#040310" : "#080e04" }}>
+          {/* Use CSS transform to scale the map to fit the screen if it's too small, preventing scrollbars */}
+          <div style={{ transform: "scale(min(1, calc(100vw / 780), calc((100vh - 250px) / 590)))", transformOrigin: "center", transition: "transform 0.2s" }}>
             <div style={{ position: "relative" }}>
               <MapGrid mode={screen} char={char} monsters={gs.dungeonMonsters}
                 combat={combat} fogRevealed={fogRevealed} combatMode={combatMode}
