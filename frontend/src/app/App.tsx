@@ -2904,6 +2904,7 @@ export default function App() {
   const [showShop, setShowShop] = useState(false);
   const [showQuests, setShowQuests] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
+  const [actionText, setActionText] = useState<{ text: string; color: string } | null>(null);
   const [restAnim, setRestAnim] = useState<"short" | "long" | null>(null);
   const [zoom, setZoom] = useState(1.3);
   const [shopPurchaseAnim, setShopPurchaseAnim] = useState<string | null>(null);
@@ -3068,32 +3069,65 @@ export default function App() {
         newLog.push(`${monster.name} moves.`);
       }
       newMonsters[mIdx] = { ...newMonsters[mIdx], position: newPos };
+      
+      // Immediately commit position change
+      setGs(prev => ({ ...prev, dungeonMonsters: newMonsters }));
+
       const nd = dist(newPos, char.position);
       if (nd <= Math.ceil((monster.range ?? 5) / 5)) {
         const atkRoll = d20() + monster.attackMod;
-        newLog.push(`${monster.name} attacks ${char.name}: [${atkRoll}] vs AC ${char.ac}`);
+        const logEntry = `${monster.name} attacks ${char.name}: [${atkRoll}] vs AC ${char.ac}`;
+        
         addDiceRoll({ type: "hit", value: atkRoll, total: atkRoll, mod: monster.attackMod, max: 20, label: `vs AC ${char.ac}` });
-        if (atkRoll >= char.ac) {
-          const dmg = rollDice(monster.damage);
-          charHp = Math.max(0, charHp - dmg);
-          newLog.push(`  Hit! ${char.name} takes ${dmg} dmg. (${charHp}/${char.maxHp})`);
-          addDiceRoll({ type: "damage", value: dmg, total: dmg, mod: 0, max: dmg, label: monster.damage });
-          addEffect({ type: "scratch", gridX: char.position.x, gridY: char.position.y });
-          addEffect({ type: "number", gridX: char.position.x, gridY: char.position.y, value: `-${dmg}` });
-          addHit(char.id);
-        } else {
-          newLog.push(`  Miss!`);
-          addEffect({ type: "miss", gridX: char.position.x, gridY: char.position.y, value: "MISS" });
-        }
+        
+        setTimeout(() => {
+          if (!combat.active) return;
+          if (atkRoll >= char.ac) {
+            setActionText({ text: "HIT!", color: C.red });
+            setTimeout(() => setActionText(null), 1000);
+            
+            setTimeout(() => {
+              if (!combat.active) return;
+              const dmg = rollDice(monster.damage);
+              
+              setGs(prevGs => {
+                const c = prevGs.characters[char.id];
+                if (!c) return prevGs;
+                const newHp = Math.max(0, c.hp - dmg);
+                
+                addDiceRoll({ type: "damage", value: dmg, total: dmg, mod: 0, max: dmg, label: monster.damage });
+                addEffect({ type: "scratch", gridX: char.position.x, gridY: char.position.y });
+                addEffect({ type: "number", gridX: char.position.x, gridY: char.position.y, value: `-${dmg}` });
+                addHit(char.id);
+                
+                setCombat(prevC => ({
+                  ...prevC, 
+                  log: [...newLog, logEntry, `  Hit! ${char.name} takes ${dmg} dmg. (${newHp}/${c.maxHp})`]
+                }));
+                
+                if (newHp <= 0) {
+                  notify("💀 Defeated!");
+                  setCombat(INIT_COMBAT);
+                  setCombatMode("none");
+                } else {
+                  doNextTurn();
+                }
+                
+                return { ...prevGs, characters: { ...prevGs.characters, [char.id]: { ...c, hp: newHp } } };
+              });
+            }, 500);
+          } else {
+            setActionText({ text: "MISS!", color: C.muted });
+            setTimeout(() => setActionText(null), 1000);
+            addEffect({ type: "miss", gridX: char.position.x, gridY: char.position.y, value: "MISS" });
+            setCombat(prevC => ({ ...prevC, log: [...newLog, logEntry, `  Miss!`] }));
+            setTimeout(() => doNextTurn(), 400);
+          }
+        }, 600);
+      } else {
+        setCombat(prev => ({ ...prev, log: newLog }));
+        doNextTurn();
       }
-      setGs(prev => ({
-        ...prev,
-        dungeonMonsters: newMonsters,
-        characters: { ...prev.characters, [char.id]: { ...prev.characters[char.id], hp: charHp } },
-      }));
-      setCombat(prev => ({ ...prev, log: newLog }));
-      if (charHp <= 0) { notify("💀 Defeated!"); setCombat(INIT_COMBAT); setCombatMode("none"); return; }
-      doNextTurn();
     }, 700);
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3411,58 +3445,81 @@ export default function App() {
     const roll = d20();
     const total = roll + mod + char.profBonus;
 
+    // Use action early to prevent spam
+    setCombat(prev => ({ ...prev, actionUsed: true }));
+    setCombatMode("none");
+    setActionTab("none");
+
     // Show attack roll dice
     addDiceRoll({ type: "hit", value: roll, total, mod: mod + char.profBonus, max: 20, label: `vs AC ${monster.ac}` });
 
-    const log = [...combat.log];
-    log.push(`${char.name} attacks ${monster.name}: [${roll}+${mod + char.profBonus}=${total}] vs AC ${monster.ac}`);
-
     if (weapon.name === "Longsword") {
-      // Sword impact effect centered on monster; targetX/Y = player (direction the sword comes FROM)
       addEffect({ type: "sword_swing", gridX: monster.position.x, gridY: monster.position.y, targetX: char.position.x, targetY: char.position.y });
     } else if (isRanged) {
       addEffect({ type: "arrow", gridX: char.position.x, gridY: char.position.y, targetX: monster.position.x, targetY: monster.position.y });
-      // Small impact burst at monster after arrow lands
       setTimeout(() => addEffect({ type: "slash", gridX: monster.position.x, gridY: monster.position.y }), 320);
     }
 
-    let newHp = monster.hp;
-    if (total >= monster.ac) {
+    // Wait for dice to land (600ms) before showing Hit/Miss
+    setTimeout(() => {
+      const isHit = total >= monster.ac;
       const isSurprise = !monster.alerted;
-      const dieRoll = rollDice(weapon.damage ?? "1d4");
-      // DnD: melee adds STR mod, ranged adds DEX mod to damage
-      const dmgMod = isRanged ? getMod(char.stats.dex) : getMod(char.stats.str);
-      const withMod = Math.max(1, dieRoll + dmgMod);
-      const finalDmg = isSurprise ? withMod * 2 : withMod;
-      newHp = Math.max(0, monster.hp - finalDmg);
-      const dmgLabel = `${weapon.damage}${dmgMod >= 0 ? "+" : ""}${dmgMod}`;
+      const logEntry = `${char.name} attacks ${monster.name}: [${roll}+${mod + char.profBonus}=${total}] vs AC ${monster.ac}`;
+      
+      if (isHit) {
+        setActionText({ text: isSurprise ? "AMBUSH!" : "HIT!", color: C.blue });
+        setTimeout(() => setActionText(null), 1000);
 
-      addDiceRoll({ type: "damage", value: dieRoll, total: finalDmg, mod: dmgMod, max: dieRoll, label: dmgLabel });
+        setTimeout(() => {
+          // Re-fetch monster state safely
+          setGs(prevGs => {
+            const m = prevGs.dungeonMonsters.find(mm => mm.id === monsterId);
+            if (!m) return prevGs;
 
-      if (isSurprise) {
-        log.push(`  💥 SURPRISE! ×2 dmg! [${dieRoll}${dmgMod >= 0 ? "+" : ""}${dmgMod}]×2=${finalDmg} → ${newHp}/${monster.maxHp} HP`);
-        addEffect({ type: "number", gridX: monster.position.x, gridY: monster.position.y, value: `×2! ${finalDmg}` });
+            const dieRoll = rollDice(weapon.damage ?? "1d4");
+            const dmgMod = isRanged ? getMod(char.stats.dex) : getMod(char.stats.str);
+            const withMod = Math.max(1, dieRoll + dmgMod);
+            const finalDmg = isSurprise ? withMod * 2 : withMod;
+            const newHp = Math.max(0, m.hp - finalDmg);
+            const dmgLabel = `${weapon.damage}${dmgMod >= 0 ? "+" : ""}${dmgMod}`;
+
+            addDiceRoll({ type: "damage", value: dieRoll, total: finalDmg, mod: dmgMod, max: dieRoll, label: dmgLabel });
+
+            setCombat(prevC => {
+              const newLog = [...prevC.log, logEntry];
+              if (isSurprise) {
+                newLog.push(`  💥 SURPRISE! ×2 dmg! [${dieRoll}${dmgMod >= 0 ? "+" : ""}${dmgMod}]×2=${finalDmg} → ${newHp}/${m.maxHp} HP`);
+                addEffect({ type: "number", gridX: m.position.x, gridY: m.position.y, value: `×2! ${finalDmg}` });
+              } else {
+                newLog.push(`  Hit! [${dieRoll}${dmgMod >= 0 ? "+" : ""}${dmgMod}]=${finalDmg} dmg → ${newHp}/${m.maxHp} HP`);
+                addEffect({ type: "number", gridX: m.position.x, gridY: m.position.y, value: String(finalDmg) });
+              }
+              if (newHp === 0) newLog.push(`  ${m.name} destroyed!`);
+              return { ...prevC, log: newLog };
+            });
+
+            setTimeout(() => {
+              addEffect({ type: "slash", gridX: m.position.x, gridY: m.position.y });
+              addHit(monsterId);
+            }, 180);
+
+            if (newHp <= 0) {
+              setDyingMonsters(prev => new Set([...prev, monsterId]));
+              setTimeout(() => setDyingMonsters(prev => { const s = new Set(prev); s.delete(monsterId); return s; }), 1000);
+            }
+
+            return { ...prevGs, dungeonMonsters: prevGs.dungeonMonsters.map(mm => mm.id === monsterId ? { ...mm, hp: newHp, alerted: true } : mm) };
+          });
+        }, 500);
       } else {
-        log.push(`  Hit! [${dieRoll}${dmgMod >= 0 ? "+" : ""}${dmgMod}]=${finalDmg} dmg → ${newHp}/${monster.maxHp} HP`);
-        addEffect({ type: "number", gridX: monster.position.x, gridY: monster.position.y, value: String(finalDmg) });
+        setActionText({ text: "MISS!", color: C.muted });
+        setTimeout(() => setActionText(null), 1000);
+        
+        addEffect({ type: "miss", gridX: monster.position.x, gridY: monster.position.y, value: "MISS" });
+        setCombat(prevC => ({ ...prevC, log: [...prevC.log, logEntry, `  Miss!`] }));
+        setGs(prevGs => ({ ...prevGs, dungeonMonsters: prevGs.dungeonMonsters.map(mm => mm.id === monsterId ? { ...mm, alerted: true } : mm) }));
       }
-      if (newHp === 0) log.push(`  ${monster.name} destroyed!`);
-      // Slash effect at monster + shake
-      setTimeout(() => {
-        addEffect({ type: "slash", gridX: monster.position.x, gridY: monster.position.y });
-        addHit(monsterId);
-      }, 180);
-    } else {
-      log.push(`  Miss!`);
-      addEffect({ type: "miss", gridX: monster.position.x, gridY: monster.position.y, value: "MISS" });
-    }
-    setGs(prev => ({ ...prev, dungeonMonsters: prev.dungeonMonsters.map(m => m.id === monsterId ? { ...m, hp: newHp, alerted: true } : m) }));
-    if (newHp <= 0) {
-      setDyingMonsters(prev => new Set([...prev, monsterId]));
-      setTimeout(() => setDyingMonsters(prev => { const s = new Set(prev); s.delete(monsterId); return s; }), 1000);
-    }
-    setCombat(prev => ({ ...prev, actionUsed: true, log }));
-    setCombatMode("none");
+    }, 600);
   }
 
   function revealFog(pos: { x: number; y: number }) {
@@ -4010,6 +4067,31 @@ export default function App() {
             whiteSpace: "nowrap", pointerEvents: "none",
           }}>
             {notification}
+          </div>
+        )}
+
+        {/* Action text overlay (Hit/Miss) */}
+        {actionText && (
+          <div style={{
+            position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+            zIndex: 9999, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center"
+          }}>
+            <style>{`
+              @keyframes action-text-pop {
+                0% { transform: scale(3) rotate(-15deg); opacity: 0; filter: blur(10px); }
+                30% { transform: scale(0.9) rotate(5deg); opacity: 1; filter: blur(0); }
+                50% { transform: scale(1.1) rotate(-2deg); }
+                80% { transform: scale(1) rotate(0deg); opacity: 1; }
+                100% { transform: scale(1.2) translateY(-20px); opacity: 0; filter: blur(5px); }
+              }
+            `}</style>
+            <div style={{
+              fontFamily: PX, fontSize: 64, color: "#fff",
+              textShadow: `4px 4px 0 rgba(0,0,0,0.8), 0 0 40px ${actionText.color}`,
+              WebkitTextStroke: `2px ${actionText.color}`,
+              animation: "action-text-pop 0.8s cubic-bezier(0.1, 0.9, 0.2, 1) forwards",
+              letterSpacing: 4,
+            }}>{actionText.text}</div>
           </div>
         )}
 
