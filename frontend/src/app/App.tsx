@@ -1742,55 +1742,65 @@ function DiceRollOverlay({ rolls }: { rolls: DiceRollDisplay[] }) {
   const [tick, setTick] = useState(0);
   useEffect(() => {
     if (!rolls.some(r => r.phase === "rolling")) return;
-    const iv = setInterval(() => setTick(t => t + 1), 65);
+    const iv = setInterval(() => setTick(t => t + 1), 60);
     return () => clearInterval(iv);
   }, [rolls]);
 
   if (rolls.length === 0) return null;
   const COLORS: Record<DiceRollDisplay["type"], { bg: string; border: string; col: string; label: string }> = {
-    hit:    { bg: "#0a1a3a", border: C.blue,     col: C.blue,     label: "HIT ROLL" },
-    save:   { bg: "#0a2a0a", border: "#4cdb70",  col: "#4cdb70",  label: "SAVE ROLL" },
-    damage: { bg: "#2a0a00", border: "#ff8c00",  col: "#ff8c00",  label: "DAMAGE" },
+    hit:    { bg: "linear-gradient(135deg, rgba(20,50,100,0.95), rgba(10,20,50,0.95))", border: C.blue,     col: C.blue,     label: "HIT ROLL" },
+    save:   { bg: "linear-gradient(135deg, rgba(20,80,30,0.95), rgba(10,30,15,0.95))", border: "#4cdb70",  col: "#4cdb70",  label: "SAVE ROLL" },
+    damage: { bg: "linear-gradient(135deg, rgba(100,20,10,0.95), rgba(40,10,5,0.95))", border: "#ff3333",  col: "#ffaa33",  label: "DAMAGE" },
   };
 
   return (
     <>
       <style>{`
-        @keyframes dnd-dice-in { 0%{opacity:0;transform:translateY(-50px) rotate(-180deg) scale(0.3)} 60%{opacity:1;transform:translateY(6px) rotate(12deg) scale(1.08)} 80%{transform:translateY(-3px) rotate(-4deg) scale(0.96)} 100%{opacity:1;transform:translateY(0) rotate(0deg) scale(1)} }
-        @keyframes dnd-dice-out { 0%{opacity:1;transform:scale(1)} 100%{opacity:0;transform:scale(0.6) translateY(-18px)} }
-        @keyframes dnd-dice-spin { 0%{transform:rotateX(0deg)} 100%{transform:rotateX(360deg)} }
-        @keyframes dnd-dice-nums { 0%,100%{opacity:0.4} 50%{opacity:1} }
+        @keyframes dnd-dice-roll {
+          0% { transform: translateY(-80px) rotate(-15deg) scale(0.5); opacity: 0; filter: blur(4px); }
+          50% { transform: translateY(10px) rotate(5deg) scale(1.1); opacity: 1; filter: blur(0); }
+          100% { transform: translateY(0) rotate(0deg) scale(1); opacity: 1; filter: blur(0); }
+        }
+        @keyframes dnd-dice-slam {
+          0% { transform: scale(1.4) skewX(-10deg); filter: brightness(2) drop-shadow(0 0 30px rgba(255,255,255,0.8)); }
+          40% { transform: scale(0.9) skewX(2deg); filter: brightness(1.2) drop-shadow(0 0 10px rgba(255,255,255,0.3)); }
+          100% { transform: scale(1) skewX(-5deg); filter: brightness(1) drop-shadow(0 0 20px rgba(0,0,0,0.8)); }
+        }
+        @keyframes dnd-dice-nums { 0%,100%{opacity:0.6; transform: scale(0.95)} 50%{opacity:1; transform: scale(1.05)} }
       `}</style>
-      <div style={{ position: "fixed", top: 74, left: "50%", transform: "translateX(-50%)", zIndex: 9998, display: "flex", gap: 10, pointerEvents: "none" }}>
+      <div style={{ position: "fixed", top: 40, left: "50%", transform: "translateX(-50%)", zIndex: 9998, display: "flex", gap: 20, pointerEvents: "none" }}>
         {rolls.map(r => {
           const c = COLORS[r.type];
           const spinning = r.phase === "rolling";
           const dispVal = spinning ? ((tick * 13 + r.max * 7) % r.max) + 1 : r.value;
           return (
             <div key={r.id} style={{
-              background: c.bg, border: `2px solid ${c.border}`,
-              boxShadow: `0 0 18px ${c.border}70, 0 0 36px ${c.border}30`,
-              padding: "10px 14px", textAlign: "center", minWidth: 68,
-              animation: spinning ? "dnd-dice-in 0.4s cubic-bezier(0.22,1,0.36,1) both" : "none",
+              background: c.bg,
+              borderLeft: `6px solid ${c.border}`,
+              borderRight: `6px solid ${c.border}`,
+              padding: "16px 28px", textAlign: "center", minWidth: 100,
+              clipPath: "polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%)",
+              animation: spinning ? "dnd-dice-roll 0.4s cubic-bezier(0.2,0,0,1) forwards" : "dnd-dice-slam 0.5s cubic-bezier(0.1,0.9,0.2,1) forwards",
               position: "relative",
+              transform: "skewX(-5deg)",
             }}>
-              <PixelCorners color={c.border} size={5} />
-              <div style={{ fontFamily: MO, fontSize: 7, color: c.col, letterSpacing: 1, marginBottom: 5, opacity: 0.8 }}>{c.label}</div>
+              <div style={{ fontFamily: PX, fontSize: 11, color: "#fff", letterSpacing: 2, marginBottom: 6, opacity: 0.9, textShadow: "1px 1px 0 rgba(0,0,0,0.8)" }}>{c.label}</div>
               {/* The number */}
               <div style={{
-                fontFamily: PX, fontSize: spinning ? 20 : 26, color: c.col, lineHeight: 1,
-                filter: spinning ? "blur(1.5px)" : "none",
-                transition: "filter 0.3s, font-size 0.2s",
-                animation: spinning ? "dnd-dice-nums 0.12s linear infinite" : "none",
+                fontFamily: PX, fontSize: spinning ? 32 : 46, color: spinning ? "#fff" : c.col, lineHeight: 1,
+                filter: spinning ? "blur(1px)" : "none",
+                transition: "filter 0.1s, font-size 0.2s",
+                animation: spinning ? "dnd-dice-nums 0.1s linear infinite" : "none",
+                textShadow: spinning ? "none" : `2px 2px 0 rgba(0,0,0,0.8), 0 0 25px ${c.border}`,
               }}>{dispVal}</div>
               {/* Modifier line */}
               {r.phase === "done" && r.mod !== 0 && (
-                <div style={{ fontFamily: MO, fontSize: 7, color: c.col + "80", marginTop: 4 }}>
-                  {r.mod > 0 ? `+${r.mod}` : r.mod} = <span style={{ color: c.col }}>{r.total}</span>
+                <div style={{ fontFamily: PX, fontSize: 12, color: "#fff", marginTop: 8, textShadow: "1px 1px 0 rgba(0,0,0,0.8)" }}>
+                  {r.mod > 0 ? `+${r.mod}` : r.mod} = <span style={{ color: c.border, fontSize: 18 }}>{r.total}</span>
                 </div>
               )}
               {r.phase === "done" && r.mod === 0 && (
-                <div style={{ fontFamily: MO, fontSize: 7, color: c.col + "60", marginTop: 3 }}>{r.label}</div>
+                <div style={{ fontFamily: PX, fontSize: 10, color: "rgba(255,255,255,0.7)", marginTop: 8 }}>{r.label}</div>
               )}
             </div>
           );
@@ -2943,7 +2953,7 @@ export default function App() {
     const r: DiceRollDisplay = { ...roll, id: gid(), phase: "rolling" };
     setDiceRolls(prev => [...prev.slice(-4), r]);
     setTimeout(() => setDiceRolls(prev => prev.map(d => d.id === r.id ? { ...d, phase: "done" } : d)), 520);
-    setTimeout(() => setDiceRolls(prev => prev.filter(d => d.id !== r.id)), 2800);
+    setTimeout(() => setDiceRolls(prev => prev.filter(d => d.id !== r.id)), 3500);
   }, []);
 
   const updateChar = useCallback((id: string, upd: Partial<Character> | ((c: Character) => Partial<Character>)) => {
@@ -3993,7 +4003,7 @@ export default function App() {
         {/* Toast notification */}
         {notification && (
           <div style={{
-            position: "fixed", top: 70, left: "50%", transform: "translateX(-50%)",
+            position: "fixed", bottom: 120, left: "50%", transform: "translateX(-50%)",
             zIndex: 9990, background: C.card, border: `2px solid ${C.blue}`,
             boxShadow: C.glowStrong, padding: "10px 20px",
             fontFamily: PX, fontSize: 8, color: C.text, letterSpacing: 0.5,
