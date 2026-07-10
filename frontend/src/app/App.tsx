@@ -6,7 +6,7 @@ import _p4 from "../imports/profile4.png";
 import {
   Sword, Shield, User, Package, MessageCircle, Users,
   ChevronDown, ChevronUp, ChevronRight, X, Plus, LogOut, Heart, Zap,
-  RotateCcw, BookOpen, Star, Send, Move, AlertTriangle, CheckCircle
+  RotateCcw, BookOpen, Star, Send, Move, AlertTriangle, CheckCircle, Trash2
 } from "lucide-react";
 
 // ─────────────────────────────────────────────────
@@ -691,10 +691,10 @@ function AuthScreen({ onLogin }: { onLogin: (u: string, ids: string[], gs: GameS
 // CHAR SELECT
 // ─────────────────────────────────────────────────
 
-function CharSelectScreen({ session, characters, onSelect, onCreateNew, onLogout }: {
+function CharSelectScreen({ session, characters, onSelect, onCreateNew, onLogout, onDelete }: {
   session: { username: string; charIds: string[] };
   characters: Record<string, Character>;
-  onSelect: (id: string) => void; onCreateNew: () => void; onLogout: () => void;
+  onSelect: (id: string) => void; onCreateNew: () => void; onLogout: () => void; onDelete: (id: string) => void;
 }) {
   const chars = session.charIds.map(id => characters[id]).filter(Boolean);
   const canCreate = chars.length < 5;
@@ -712,8 +712,8 @@ function CharSelectScreen({ session, characters, onSelect, onCreateNew, onLogout
               Welcome, <span style={{ color: C.text }}>{session.username}</span> · {chars.length}/5 characters
             </div>
           </div>
-          <button onClick={onLogout} style={{ ...pixelBtn("ghost", true), display: "flex", alignItems: "center", gap: 6 }}>
-            <LogOut className="w-3 h-3" />OUT
+          <button onClick={onLogout} style={{ ...pixelBtn("ghost", true), display: "flex", alignItems: "center", gap: 6, color: C.red }}>
+            <LogOut className="w-3 h-3" />LOGOUT
           </button>
         </div>
 
@@ -722,51 +722,66 @@ function CharSelectScreen({ session, characters, onSelect, onCreateNew, onLogout
           {chars.map(char => {
             const cfg = CLASS_CFG[char.class];
             return (
-              <button key={char.id} onClick={() => onSelect(char.id)}
-                style={{
-                  ...panel, padding: "14px 16px", cursor: "pointer",
-                  display: "flex", alignItems: "center", gap: 14,
-                  width: "100%", textAlign: "left",
-                  transition: "box-shadow 0.2s, border-color 0.2s",
-                }}
-                onMouseEnter={e => {
-                  (e.currentTarget as HTMLDivElement).style.borderColor = C.blue;
-                  (e.currentTarget as HTMLDivElement).style.boxShadow = C.glowStrong;
-                }}
-                onMouseLeave={e => {
-                  (e.currentTarget as HTMLDivElement).style.borderColor = C.border;
-                  (e.currentTarget as HTMLDivElement).style.boxShadow = C.glow;
-                }}>
-                {/* Avatar */}
-                <div style={{
-                  width: 52, height: 52, flexShrink: 0, overflow: "hidden",
-                  border: `2px solid ${cfg.color}60`, position: "relative",
-                }}>
-                  {char.avatar
-                    ? <img src={char.avatar} alt={char.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                    : <div style={{ width: "100%", height: "100%", background: cfg.color + "30", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>{cfg.icon}</div>
-                  }
-                </div>
-                {/* Info */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                    <span style={{ fontFamily: PX, fontSize: 9, color: C.text }}>{char.name}</span>
-                    <span style={{ fontFamily: NU, fontSize: 11, padding: "2px 6px", background: cfg.color + "25", color: cfg.color, border: `1px solid ${cfg.color}40` }}>
-                      {cfg.icon} {char.class}
-                    </span>
-                    <span style={{ fontFamily: MO, fontSize: 10, color: C.muted }}>Lv.{char.level}</span>
+              <div key={char.id} style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => onSelect(char.id)}
+                  style={{
+                    ...panel, padding: "14px 16px", cursor: "pointer",
+                    display: "flex", alignItems: "center", gap: 14,
+                    flex: 1, textAlign: "left",
+                    transition: "box-shadow 0.2s, border-color 0.2s",
+                  }}
+                  onMouseEnter={e => {
+                    (e.currentTarget as HTMLButtonElement).style.borderColor = C.blue;
+                    (e.currentTarget as HTMLButtonElement).style.boxShadow = C.glowStrong;
+                  }}
+                  onMouseLeave={e => {
+                    (e.currentTarget as HTMLButtonElement).style.borderColor = C.border;
+                    (e.currentTarget as HTMLButtonElement).style.boxShadow = C.glow;
+                  }}>
+                  {/* Avatar */}
+                  <div style={{
+                    width: 52, height: 52, flexShrink: 0, overflow: "hidden",
+                    border: `2px solid ${cfg.color}60`, position: "relative",
+                  }}>
+                    {char.avatar
+                      ? <img src={char.avatar} alt={char.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      : <div style={{ width: "100%", height: "100%", background: cfg.color + "30", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>{cfg.icon}</div>
+                    }
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                      <Heart className="w-3 h-3" style={{ color: C.red }} />
-                      <span style={{ fontFamily: MO, fontSize: 10, color: C.text }}>{char.hp}/{char.maxHp}</span>
+                  {/* Info */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                      <span style={{ fontFamily: PX, fontSize: 9, color: C.text }}>{char.name}</span>
+                      <span style={{ fontFamily: NU, fontSize: 11, padding: "2px 6px", background: cfg.color + "25", color: cfg.color, border: `1px solid ${cfg.color}40` }}>
+                        {cfg.icon} {char.class}
+                      </span>
+                      <span style={{ fontFamily: MO, fontSize: 10, color: C.muted }}>Lv.{char.level}</span>
                     </div>
-                    <div style={{ flex: 1 }}><HpBar hp={char.hp} maxHp={char.maxHp} size="sm" /></div>
-                    <GoldBadge amount={char.gold} />
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <Heart className="w-3 h-3" style={{ color: C.red }} />
+                        <span style={{ fontFamily: MO, fontSize: 10, color: C.text }}>{char.hp}/{char.maxHp}</span>
+                      </div>
+                      <div style={{ flex: 1 }}><HpBar hp={char.hp} maxHp={char.maxHp} size="sm" /></div>
+                      <GoldBadge amount={char.gold} />
+                    </div>
                   </div>
-                </div>
-                <ChevronRight className="w-4 h-4" style={{ color: C.muted, flexShrink: 0 }} />
-              </button>
+                  <ChevronRight className="w-4 h-4" style={{ color: C.muted, flexShrink: 0 }} />
+                </button>
+                <button 
+                  onClick={() => onDelete(char.id)}
+                  style={{
+                    ...pixelBtn("ghost", true),
+                    width: 50,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    color: C.red, border: `1px solid ${C.border}`,
+                    background: C.card
+                  }}
+                  title="Delete Character"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
             );
           })}
         </div>
@@ -1121,8 +1136,8 @@ function CharCreateScreen({ onCreated, onBack }: { onCreated: (c: Character) => 
 // WORLD MAP
 // ─────────────────────────────────────────────────
 
-function WorldMapScreen({ char, onEnterTown, onEnterDungeon, onLogout }: {
-  char: Character; onEnterTown: () => void; onEnterDungeon: () => void; onLogout: () => void;
+function WorldMapScreen({ char, onEnterTown, onEnterDungeon, onLogout, onExitToCharSelect }: {
+  char: Character; onEnterTown: () => void; onEnterDungeon: () => void; onLogout: () => void; onExitToCharSelect: () => void;
 }) {
   const cfg = CLASS_CFG[char.class];
   return (
@@ -1144,8 +1159,11 @@ function WorldMapScreen({ char, onEnterTown, onEnterDungeon, onLogout }: {
             <Heart className="w-3 h-3" /><span style={{ fontFamily: MO }}>{char.hp}/{char.maxHp}</span>
           </div>
           <GoldBadge amount={char.gold} />
-          <button onClick={onLogout} style={{ ...pixelBtn("ghost", true), display: "flex", alignItems: "center", gap: 4 }}>
-            <LogOut className="w-3 h-3" />EXIT
+          <button onClick={onExitToCharSelect} style={{ ...pixelBtn("ghost", true), display: "flex", alignItems: "center", gap: 4, color: C.blue }}>
+            <Users className="w-3 h-3" />HEROES
+          </button>
+          <button onClick={onLogout} style={{ ...pixelBtn("ghost", true), display: "flex", alignItems: "center", gap: 4, color: C.red }}>
+            <LogOut className="w-3 h-3" />OUT
           </button>
         </div>
       </div>
@@ -3089,32 +3107,34 @@ export default function App() {
             setTimeout(() => {
               if (!combat.active) return;
               const dmg = rollDice(monster.damage);
+              let newHp = 0;
+              let cMaxHp = 0;
               
               setGs(prevGs => {
                 const c = prevGs.characters[char.id];
                 if (!c) return prevGs;
-                const newHp = Math.max(0, c.hp - dmg);
-                
-                addDiceRoll({ type: "damage", value: dmg, total: dmg, mod: 0, max: dmg, label: monster.damage });
-                addEffect({ type: "scratch", gridX: char.position.x, gridY: char.position.y });
-                addEffect({ type: "number", gridX: char.position.x, gridY: char.position.y, value: `-${dmg}` });
-                addHit(char.id);
-                
-                setCombat(prevC => ({
-                  ...prevC, 
-                  log: [...newLog, logEntry, `  Hit! ${char.name} takes ${dmg} dmg. (${newHp}/${c.maxHp})`]
-                }));
-                
-                if (newHp <= 0) {
-                  notify("💀 Defeated!");
-                  setCombat(INIT_COMBAT);
-                  setCombatMode("none");
-                } else {
-                  doNextTurn();
-                }
-                
+                newHp = Math.max(0, c.hp - dmg);
+                cMaxHp = c.maxHp;
                 return { ...prevGs, characters: { ...prevGs.characters, [char.id]: { ...c, hp: newHp } } };
               });
+              
+              addDiceRoll({ type: "damage", value: dmg, total: dmg, mod: 0, max: dmg, label: monster.damage });
+              addEffect({ type: "scratch", gridX: char.position.x, gridY: char.position.y });
+              addEffect({ type: "number", gridX: char.position.x, gridY: char.position.y, value: `-${dmg}` });
+              addHit(char.id);
+              
+              setCombat(prevC => ({
+                ...prevC, 
+                log: [...newLog, logEntry, `  Hit! ${char.name} takes ${dmg} dmg. (${newHp}/${cMaxHp})`]
+              }));
+              
+              if (newHp <= 0) {
+                notify("💀 Defeated!");
+                setCombat(INIT_COMBAT);
+                setCombatMode("none");
+              } else {
+                doNextTurn();
+              }
             }, 500);
           } else {
             setActionText({ text: "MISS!", color: C.muted });
@@ -3386,31 +3406,89 @@ export default function App() {
       const spMod = getSpellcastingMod(char);
       const rawDmg = rollDice(spell.damage);
       const dmg = Math.max(1, rawDmg + spMod);
-      addDiceRoll({ type: "damage", value: rawDmg, total: dmg, mod: spMod, max: rawDmg, label: spell.damage + (spMod !== 0 ? `${spMod >= 0 ? "+" : ""}${spMod}` : "") });
+      const dmgLabel = spell.damage + (spMod !== 0 ? `${spMod >= 0 ? "+" : ""}${spMod}` : "");
+
+      // Close UI early
+      setCombat(prev => ({ ...prev, actionUsed: true }));
+      setCombatMode("none");
+      setSelectedSpell(null);
+
       // Spells with save roll (Sacred Flame, etc.)
       if (spell.saveStat && spell.saveDC) {
         const saveRoll = d20();
+        const saved = saveRoll >= spell.saveDC;
+        const logEntry = `${char.name} casts ${spell.name}: Save roll [${saveRoll}] vs DC ${spell.saveDC}`;
+        
         addDiceRoll({ type: "save", value: saveRoll, total: saveRoll, mod: 0, max: 20, label: `Save DC ${spell.saveDC}` });
-        if (saveRoll >= spell.saveDC) {
-          log.push(`${char.name} casts ${spell.name}: ${target.name} saves! No damage.`);
+        
+        setTimeout(() => {
+          if (saved) {
+            setActionText({ text: "SAVE!", color: C.muted });
+            setTimeout(() => setActionText(null), 1000);
+            
+            addEffect({ type: effectType, gridX: target.position.x, gridY: target.position.y });
+            setCombat(prevC => ({ ...prevC, log: [...prevC.log, logEntry, `  ${target.name} saves! No damage.`] }));
+            
+            if (!combat.active) setTimeout(() => startCombat([target.id]), 600);
+          } else {
+            setActionText({ text: "HIT!", color: C.red });
+            setTimeout(() => setActionText(null), 1000);
+            
+            setTimeout(() => {
+              let newHp = 0;
+              setGs(prevGs => {
+                const m = prevGs.dungeonMonsters.find(mm => mm.id === target.id);
+                if (!m) return prevGs;
+                newHp = Math.max(0, m.hp - dmg);
+                return { ...prevGs, dungeonMonsters: prevGs.dungeonMonsters.map(mm => mm.id === target.id ? { ...mm, hp: newHp, alerted: true } : mm) };
+              });
+              
+              addDiceRoll({ type: "damage", value: rawDmg, total: dmg, mod: spMod, max: rawDmg, label: dmgLabel });
+              
+              setCombat(prevC => ({ ...prevC, log: [...prevC.log, logEntry, `  ${target.name} fails save! ${dmg} dmg → ${newHp}/${target.maxHp}`] }));
+              
+              addEffect({ type: effectType, gridX: target.position.x, gridY: target.position.y });
+              addEffect({ type: "number", gridX: target.position.x, gridY: target.position.y, value: String(dmg) });
+              
+              if (newHp <= 0) {
+                setDyingMonsters(prev => new Set([...prev, target.id]));
+                setTimeout(() => setDyingMonsters(prev => { const s = new Set(prev); s.delete(target.id); return s; }), 1000);
+              }
+
+              if (!combat.active) setTimeout(() => startCombat([target.id]), 600);
+            }, 500);
+          }
+        }, 600);
+      } else {
+        // Spells without save roll (like Fire Bolt, Magic Missile)
+        setActionText({ text: "HIT!", color: C.red });
+        setTimeout(() => setActionText(null), 1000);
+        
+        setTimeout(() => {
+          let newHp = 0;
+          setGs(prevGs => {
+            const m = prevGs.dungeonMonsters.find(mm => mm.id === target.id);
+            if (!m) return prevGs;
+            newHp = Math.max(0, m.hp - dmg);
+            return { ...prevGs, dungeonMonsters: prevGs.dungeonMonsters.map(mm => mm.id === target.id ? { ...mm, hp: newHp, alerted: true } : mm) };
+          });
+          
+          addDiceRoll({ type: "damage", value: rawDmg, total: dmg, mod: spMod, max: rawDmg, label: dmgLabel });
+          
+          setCombat(prevC => ({ ...prevC, log: [...prevC.log, `${char.name} casts ${spell.name}: ${dmg} dmg to ${target.name} (${newHp}/${target.maxHp})${spMod !== 0 ? ` [+${spMod} spell mod]` : ""}`] }));
+          
           addEffect({ type: effectType, gridX: target.position.x, gridY: target.position.y });
-          setCombat(prev => ({ ...prev, actionUsed: true, log }));
-          setCombatMode("none"); setSelectedSpell(null); return;
-        }
+          addEffect({ type: "number", gridX: target.position.x, gridY: target.position.y, value: String(dmg) });
+          
+          if (newHp <= 0) {
+            setDyingMonsters(prev => new Set([...prev, target.id]));
+            setTimeout(() => setDyingMonsters(prev => { const s = new Set(prev); s.delete(target.id); return s; }), 1000);
+          }
+
+          if (!combat.active) setTimeout(() => startCombat([target.id]), 600);
+        }, 500);
       }
-      const newMonsters = gs.dungeonMonsters.map(m => {
-        if (m.id !== target.id) return m;
-        log.push(`${char.name} casts ${spell.name}: ${dmg} dmg to ${m.name} (${Math.max(0, m.hp - dmg)}/${m.maxHp})${spMod !== 0 ? ` [+${spMod} spell mod]` : ""}`);
-        return { ...m, hp: Math.max(0, m.hp - dmg) };
-      });
-      addEffect({ type: effectType, gridX: target.position.x, gridY: target.position.y });
-      addEffect({ type: "number", gridX: target.position.x, gridY: target.position.y, value: String(dmg) });
-      setGs(prev => ({ ...prev, dungeonMonsters: newMonsters }));
-      const newHp = Math.max(0, target.hp - dmg);
-      if (newHp <= 0) {
-        setDyingMonsters(prev => new Set([...prev, target.id]));
-        setTimeout(() => setDyingMonsters(prev => { const s = new Set(prev); s.delete(target.id); return s; }), 1000);
-      }
+      return; // Return early since state is handled asynchronously
     } else if (target) {
       log.push(`${char.name} casts ${spellName}... no effect.`);
     }
@@ -3448,7 +3526,6 @@ export default function App() {
     // Use action early to prevent spam
     setCombat(prev => ({ ...prev, actionUsed: true }));
     setCombatMode("none");
-    setActionTab("none");
 
     // Show attack roll dice
     addDiceRoll({ type: "hit", value: roll, total, mod: mod + char.profBonus, max: 20, label: `vs AC ${monster.ac}` });
@@ -3471,45 +3548,50 @@ export default function App() {
         setTimeout(() => setActionText(null), 1000);
 
         setTimeout(() => {
-          // Re-fetch monster state safely
+          // Calculate everything before applying state to avoid side effects inside functional updates
+          const dieRoll = rollDice(weapon.damage ?? "1d4");
+          const dmgMod = isRanged ? getMod(char.stats.dex) : getMod(char.stats.str);
+          const withMod = Math.max(1, dieRoll + dmgMod);
+          const finalDmg = isSurprise ? withMod * 2 : withMod;
+          
+          let newHp = 0;
           setGs(prevGs => {
             const m = prevGs.dungeonMonsters.find(mm => mm.id === monsterId);
             if (!m) return prevGs;
-
-            const dieRoll = rollDice(weapon.damage ?? "1d4");
-            const dmgMod = isRanged ? getMod(char.stats.dex) : getMod(char.stats.str);
-            const withMod = Math.max(1, dieRoll + dmgMod);
-            const finalDmg = isSurprise ? withMod * 2 : withMod;
-            const newHp = Math.max(0, m.hp - finalDmg);
-            const dmgLabel = `${weapon.damage}${dmgMod >= 0 ? "+" : ""}${dmgMod}`;
-
-            addDiceRoll({ type: "damage", value: dieRoll, total: finalDmg, mod: dmgMod, max: dieRoll, label: dmgLabel });
-
-            setCombat(prevC => {
-              const newLog = [...prevC.log, logEntry];
-              if (isSurprise) {
-                newLog.push(`  💥 SURPRISE! ×2 dmg! [${dieRoll}${dmgMod >= 0 ? "+" : ""}${dmgMod}]×2=${finalDmg} → ${newHp}/${m.maxHp} HP`);
-                addEffect({ type: "number", gridX: m.position.x, gridY: m.position.y, value: `×2! ${finalDmg}` });
-              } else {
-                newLog.push(`  Hit! [${dieRoll}${dmgMod >= 0 ? "+" : ""}${dmgMod}]=${finalDmg} dmg → ${newHp}/${m.maxHp} HP`);
-                addEffect({ type: "number", gridX: m.position.x, gridY: m.position.y, value: String(finalDmg) });
-              }
-              if (newHp === 0) newLog.push(`  ${m.name} destroyed!`);
-              return { ...prevC, log: newLog };
-            });
-
-            setTimeout(() => {
-              addEffect({ type: "slash", gridX: m.position.x, gridY: m.position.y });
-              addHit(monsterId);
-            }, 180);
-
-            if (newHp <= 0) {
-              setDyingMonsters(prev => new Set([...prev, monsterId]));
-              setTimeout(() => setDyingMonsters(prev => { const s = new Set(prev); s.delete(monsterId); return s; }), 1000);
-            }
-
+            newHp = Math.max(0, m.hp - finalDmg);
             return { ...prevGs, dungeonMonsters: prevGs.dungeonMonsters.map(mm => mm.id === monsterId ? { ...mm, hp: newHp, alerted: true } : mm) };
           });
+
+          const dmgLabel = `${weapon.damage}${dmgMod >= 0 ? "+" : ""}${dmgMod}`;
+          addDiceRoll({ type: "damage", value: dieRoll, total: finalDmg, mod: dmgMod, max: dieRoll, label: dmgLabel });
+
+          setCombat(prevC => {
+            const newLog = [...prevC.log, logEntry];
+            if (isSurprise) {
+              newLog.push(`  💥 SURPRISE! ×2 dmg! [${dieRoll}${dmgMod >= 0 ? "+" : ""}${dmgMod}]×2=${finalDmg} → ${newHp}/${monster.maxHp} HP`);
+            } else {
+              newLog.push(`  Hit! [${dieRoll}${dmgMod >= 0 ? "+" : ""}${dmgMod}]=${finalDmg} dmg → ${newHp}/${monster.maxHp} HP`);
+            }
+            if (newHp === 0) newLog.push(`  ${monster.name} destroyed!`);
+            return { ...prevC, log: newLog };
+          });
+
+          if (isSurprise) {
+            addEffect({ type: "number", gridX: monster.position.x, gridY: monster.position.y, value: `×2! ${finalDmg}` });
+          } else {
+            addEffect({ type: "number", gridX: monster.position.x, gridY: monster.position.y, value: String(finalDmg) });
+          }
+
+          setTimeout(() => {
+            addEffect({ type: "slash", gridX: monster.position.x, gridY: monster.position.y });
+            addHit(monsterId);
+          }, 180);
+
+          if (newHp <= 0) {
+            setDyingMonsters(prev => new Set([...prev, monsterId]));
+            setTimeout(() => setDyingMonsters(prev => { const s = new Set(prev); s.delete(monsterId); return s; }), 1000);
+          }
+
         }, 500);
       } else {
         setActionText({ text: "MISS!", color: C.muted });
@@ -3801,6 +3883,16 @@ export default function App() {
     setCreatingChar(false); setActiveCharId(c.id); setScreen("worldMap");
   }
   function handleLogout() { setSession(null); setActiveCharId(null); setScreen("auth"); setCombat(INIT_COMBAT); }
+  function handleDeleteChar(id: string) {
+    if (!confirm("Are you sure you want to delete this hero?")) return;
+    setGs(prev => {
+      const newChars = { ...prev.characters };
+      delete newChars[id];
+      const newAccs = prev.accounts.map(a => a.username === session?.username ? { ...a, charIds: a.charIds.filter(cid => cid !== id) } : a);
+      return { ...prev, characters: newChars, accounts: newAccs };
+    });
+    setSession(prev => prev ? { ...prev, charIds: prev.charIds.filter(cid => cid !== id) } : null);
+  }
   function enterTown() { if (!char) return; updateChar(char.id, { position: TOWN_ENTER, currentMap: "town" }); setScreen("town"); setCombat(INIT_COMBAT); }
   function enterDungeon() {
     if (!char) return;
@@ -3815,9 +3907,9 @@ export default function App() {
   if (screen === "auth") return <AuthScreen onLogin={handleLogin} />;
   if (screen === "charSelect") {
     if (creatingChar) return <CharCreateScreen onCreated={handleCreateChar} onBack={() => setCreatingChar(false)} />;
-    return <CharSelectScreen session={session!} characters={gs.characters} onSelect={handleSelectChar} onCreateNew={() => setCreatingChar(true)} onLogout={handleLogout} />;
+    return <CharSelectScreen session={session!} characters={gs.characters} onSelect={handleSelectChar} onCreateNew={() => setCreatingChar(true)} onLogout={handleLogout} onDelete={handleDeleteChar} />;
   }
-  if (screen === "worldMap" && char) return <WorldMapScreen char={char} onEnterTown={enterTown} onEnterDungeon={enterDungeon} onLogout={handleLogout} />;
+  if (screen === "worldMap" && char) return <WorldMapScreen char={char} onEnterTown={enterTown} onEnterDungeon={enterDungeon} onExitToCharSelect={() => { setActiveCharId(null); setScreen("charSelect"); }} onLogout={handleLogout} />;
 
   if ((screen === "town" || screen === "dungeon") && char) {
     const cfg = CLASS_CFG[char.class];
@@ -4078,11 +4170,11 @@ export default function App() {
           }}>
             <style>{`
               @keyframes action-text-pop {
-                0% { transform: scale(3) rotate(-15deg); opacity: 0; filter: blur(10px); }
-                30% { transform: scale(0.9) rotate(5deg); opacity: 1; filter: blur(0); }
+                0% { transform: scale(3) rotate(-15deg); opacity: 0; }
+                30% { transform: scale(0.9) rotate(5deg); opacity: 1; }
                 50% { transform: scale(1.1) rotate(-2deg); }
                 80% { transform: scale(1) rotate(0deg); opacity: 1; }
-                100% { transform: scale(1.2) translateY(-20px); opacity: 0; filter: blur(5px); }
+                100% { transform: scale(1.2) translateY(-20px); opacity: 0; }
               }
             `}</style>
             <div style={{
@@ -4117,20 +4209,25 @@ export default function App() {
           <>
             <style>{`
               @keyframes epic-flash { 0%{background:rgba(255,255,255,0.85)} 15%{background:rgba(0,0,0,0.85)} 100%{background:rgba(0,0,0,0)} }
-              @keyframes epic-shake { 0%,100%{transform:translate(0,0)} 10%,30%,50%,70%,90%{transform:translate(-10px, 8px)} 20%,40%,60%,80%{transform:translate(10px, -8px)} }
+              @keyframes epic-shake { 
+                0%,100%{transform:translate(0,0) scale(1)} 
+                25%{transform:translate(-3px, 2px) scale(1.02)} 
+                50%{transform:translate(3px, -2px) scale(0.98)} 
+                75%{transform:translate(-2px, -1px) scale(1.01)} 
+              }
               @keyframes epic-fly-left { 
-                0%{transform:translateX(-100vw) scale(1.5);opacity:0;filter:blur(10px)} 
-                20%{transform:translateX(10px) scale(1);opacity:1;filter:blur(0);text-shadow:0 0 100px red, 8px 8px 0 #000} 
-                25%{transform:translateX(0) scale(1.1)} 
-                80%{transform:translateX(0) scale(1);opacity:1} 
-                100%{transform:translateX(-100vw) scale(0.5);opacity:0;filter:blur(5px)} 
+                0%{transform:translateX(-100vw) scale(1) skewX(20deg); opacity:0;} 
+                15%{transform:translateX(10px) scale(1) skewX(0); opacity:1; text-shadow:0 0 100px red, 8px 8px 0 #000} 
+                20%{transform:translateX(0) scale(1.1)} 
+                85%{transform:translateX(0) scale(1); opacity:1;} 
+                100%{transform:translateX(-100vw) scale(1) skewX(-20deg); opacity:0;} 
               }
               @keyframes epic-fly-right { 
-                0%{transform:translateX(100vw) scale(1.5);opacity:0;filter:blur(10px)} 
-                20%{transform:translateX(-10px) scale(1);opacity:1;filter:blur(0);text-shadow:0 0 100px red, 8px 8px 0 #000} 
-                25%{transform:translateX(0) scale(1.1)} 
-                80%{transform:translateX(0) scale(1);opacity:1} 
-                100%{transform:translateX(100vw) scale(0.5);opacity:0;filter:blur(5px)} 
+                0%{transform:translateX(100vw) scale(1) skewX(-20deg); opacity:0;} 
+                15%{transform:translateX(-10px) scale(1) skewX(0); opacity:1; text-shadow:0 0 100px red, 8px 8px 0 #000} 
+                20%{transform:translateX(0) scale(1.1)} 
+                85%{transform:translateX(0) scale(1); opacity:1;} 
+                100%{transform:translateX(100vw) scale(1) skewX(20deg); opacity:0;} 
               }
             `}</style>
             <div style={{
