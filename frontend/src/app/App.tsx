@@ -63,7 +63,7 @@ interface Combatant { id: string; type: "player" | "monster"; name: string; init
 interface CombatState {
   active: boolean; round: number;
   turnOrder: Combatant[]; currentIndex: number;
-  actionUsed: boolean; bonusActionUsed: boolean; movedSquares: number;
+  movedSquares: number;
   log: string[]; engagedMonsterIds: string[];
   mainActions: number; extraActions: number; reactionUsed: boolean;
   buffs: Array<{ id: FighterSkillId; label: string; acBonus?: number; attackBonus?: number; damageBonus?: number; damageReduction?: number; ignoreAc?: boolean }>;
@@ -365,10 +365,12 @@ const BRANCH_ITEM: Omit<Item, "id"> = {
 const PIXEL_AVATARS = PROFILE_PRESETS;
 
 const SHOP_ITEMS: Item[] = [
-  { id: "s1", name: "Longsword", type: "weapon", damage: "1d8", damageType: "slashing", range: 5, value: 15, description: "Classic blade." },
-  { id: "s2", name: "Dagger", type: "weapon", damage: "1d4", damageType: "piercing", range: 20, value: 2, description: "Light and quick." },
-  { id: "s3", name: "Handaxe", type: "weapon", damage: "1d6", damageType: "slashing", range: 20, value: 5, description: "Throwable axe." },
-  { id: "s4", name: "Shortbow", type: "weapon", damage: "1d6", damageType: "piercing", range: 80, value: 25, description: "Hunting bow." },
+  { id: "s1", name: "Longsword", type: "weapon", damage: "1d8", damageType: "slashing", range: 5, value: 15, handedness: "1H", description: "Classic 1H blade." },
+  { id: "s1a", name: "Greatsword", type: "weapon", damage: "2d6", damageType: "slashing", range: 5, value: 50, handedness: "2H", description: "Heavy 2H sword. Requires both hands." },
+  { id: "s1b", name: "Battleaxe", type: "weapon", damage: "1d10", damageType: "slashing", range: 5, value: 30, handedness: "2H", description: "Fierce 2H axe." },
+  { id: "s2", name: "Dagger", type: "weapon", damage: "1d4", damageType: "piercing", range: 20, value: 2, handedness: "1H", description: "Light and quick." },
+  { id: "s3", name: "Handaxe", type: "weapon", damage: "1d6", damageType: "slashing", range: 20, value: 5, handedness: "1H", description: "Throwable axe." },
+  { id: "s4", name: "Shortbow", type: "weapon", damage: "1d6", damageType: "piercing", range: 80, value: 25, handedness: "2H", description: "Hunting bow. Requires two hands." },
   { id: "s5", name: "Leather Armor", type: "armor", ac: 13, value: 10, description: "Supple leather. AC 13." },
   { id: "s6", name: "Chain Mail", type: "armor", ac: 16, value: 75, description: "Interlocked rings. AC 16." },
   { id: "s7", name: "Shield", type: "armor", ac: 2, value: 10, description: "Wooden shield. +2 AC." },
@@ -2074,7 +2076,7 @@ function CombatPanel({ combat, char, monsters, combatMode, setCombatMode, select
           </button>
 
           {/* ACTION TABS */}
-          {!combat.actionUsed ? (
+          {combat.mainActions > 0 || combat.extraActions > 0 ? (
             <>
               {[
                 { id: "attack" as const, icon: "⚔", label: "ATTACK", col: C.red },
@@ -2106,7 +2108,7 @@ function CombatPanel({ combat, char, monsters, combatMode, setCombatMode, select
           )}
 
           {/* ATTACK sub-panel */}
-          {!combat.actionUsed && actionTab === "attack" && char.equipment.mainHand && (
+          {combat.mainActions > 0 && actionTab === "attack" && char.equipment.mainHand && (
             <button className="cp-right-btn"
               onClick={() => setCombatMode(combatMode === "attack" ? "none" : "attack")}
               style={{
@@ -2129,7 +2131,7 @@ function CombatPanel({ combat, char, monsters, combatMode, setCombatMode, select
           )}
 
           {/* SKILL sub-panel */}
-          {!combat.actionUsed && actionTab === "skill" && (
+          {combat.mainActions > 0 && actionTab === "skill" && (
             <div style={{ position: "relative" }}>
               {spells.filter(s => s.level === 0 || hasSlots).map((spell, si) => {
                 const isActive = combatMode === "spell" && selectedSpell === spell.name;
@@ -2174,7 +2176,7 @@ function CombatPanel({ combat, char, monsters, combatMode, setCombatMode, select
           )}
 
           {/* ITEM sub-panel */}
-          {!combat.actionUsed && actionTab === "item" && (
+          {(combat.mainActions > 0 || combat.extraActions > 0) && actionTab === "item" && (
             usableItems.length === 0 ? (
               <div style={{ ...rightCard(220), padding: "9px 14px", background: "rgba(12,10,28,0.88)", textAlign: "right" }}>
                 <span style={{ fontFamily: MO, fontSize: 10, color: "rgba(255,255,255,0.28)" }}>No items</span>
@@ -2256,7 +2258,10 @@ const IDLE_QUOTES = [
   "Do you need any help finding something?",
   "Take your time! Good equipment is an adventurer's best friend.",
   "Just browsing? Let me know if something catches your eye.",
-  "My prices are fair, I promise!"
+  "My prices are fair, I promise!",
+  "We've got new stock coming in soon, but these are top tier!",
+  "Need a stronger weapon for the dungeon? You're in the right place.",
+  "Don't venture out unprepared! Stock up on potions here."
 ];
 
 // ─────────────────────────────────────────────────
@@ -3174,6 +3179,7 @@ function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTab, setC
                     </div>
                     <div style={{ fontFamily: NU, fontSize: 10, color: C.muted, marginBottom: 6 }}>{item.description}</div>
                     <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 6 }}>
+                      {item.handedness && <span style={{ fontFamily: MO, fontSize: 9, color: C.text, padding: "2px 5px", background: C.card2 }}>{item.handedness}</span>}
                       {item.damage && <span style={{ fontFamily: MO, fontSize: 9, color: C.red, padding: "2px 5px", background: C.card2 }}>DMG: {item.damage}</span>}
                       {item.ac && <span style={{ fontFamily: MO, fontSize: 9, color: C.blue, padding: "2px 5px", background: C.card2 }}>AC: +{item.ac}</span>}
                       {item.healAmount && <span style={{ fontFamily: MO, fontSize: 9, color: C.green, padding: "2px 5px", background: C.card2 }}>HEAL: {item.healAmount}</span>}
@@ -3543,7 +3549,7 @@ function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTab, setC
 
 const INIT_COMBAT: CombatState = {
   active: false, round: 0, turnOrder: [], currentIndex: 0,
-  actionUsed: false, bonusActionUsed: false, movedSquares: 0,
+  movedSquares: 0,
   mainActions: 1, extraActions: 1, reactionUsed: false, buffs: [],
 
   log: [], engagedMonsterIds: [],
@@ -3706,7 +3712,7 @@ export default function App() {
       return {
         ...prev, currentIndex: nextIdx,
         round: isNew ? prev.round + 1 : prev.round,
-        actionUsed: false, bonusActionUsed: false, movedSquares: 0, mainActions: 1, extraActions: 1, reactionUsed: false,
+        movedSquares: 0, mainActions: 1, extraActions: 1, reactionUsed: false,
         log: isNew ? [...prev.log.slice(-30), `── Round ${prev.round + 1} ──`] : prev.log,
       };
     });
@@ -3824,7 +3830,7 @@ export default function App() {
       ...engaged.map(m => `${m.name} initiative: ${order.find(o => o.id === m.id)?.initiative}`),
     ];
     setGs(prev => ({ ...prev, dungeonMonsters: prev.dungeonMonsters.map(m => monsterIds.includes(m.id) ? { ...m, alerted: true } : m) }));
-    setCombat({ active: true, round: 1, turnOrder: order, currentIndex: 0, actionUsed: false, bonusActionUsed: false, movedSquares: 0, mainActions: 1, extraActions: 1, reactionUsed: false, buffs: [], log, engagedMonsterIds: monsterIds });
+    setCombat({ active: true, round: 1, turnOrder: order, currentIndex: 0, movedSquares: 0, mainActions: 1, extraActions: 1, reactionUsed: false, buffs: [], log, engagedMonsterIds: monsterIds });
     setCombatMode("none");
     // battleBanner removed — only battleStart used now
   }
@@ -3882,7 +3888,7 @@ export default function App() {
     const targets = gs.dungeonMonsters.filter(m => m.hp > 0 && dist(center, m.position) <= aoeSpell.aoeRadius);
     if (targets.length === 0) {
       notify(`${spellName} — no targets caught!`);
-      setCombat(prev => ({ ...prev, actionUsed: true }));
+      setCombat(prev => ({ ...prev, mainActions: Math.max(0, prev.mainActions - 1) }));
       setCombatMode("none"); setSelectedSpell(null);
       return;
     }
@@ -3904,7 +3910,7 @@ export default function App() {
       });
     });
     setGs(prev => ({ ...prev, dungeonMonsters: newMonsters }));
-    setCombat(prev => ({ ...prev, actionUsed: true, log }));
+    setCombat(prev => ({ ...prev, mainActions: Math.max(0, prev.mainActions - 1), log }));
     diedIds.forEach(id => {
       setDyingMonsters(prev => new Set([...prev, id]));
       setTimeout(() => setDyingMonsters(prev => { const s = new Set(prev); s.delete(id); return s; }), 1000);
@@ -3942,7 +3948,7 @@ export default function App() {
       });
     });
     setGs(prev => ({ ...prev, dungeonMonsters: newMonsters }));
-    if (combat.active) setCombat(prev => ({ ...prev, actionUsed: true, log }));
+    if (combat.active) setCombat(prev => ({ ...prev, mainActions: Math.max(0, prev.mainActions - 1), log }));
     // Remove the bomb from inventory
     updateChar(char.id, c => ({ inventory: c.inventory.filter(i => i.id !== bombItemId) }));
     diedIds.forEach(id => {
@@ -4060,7 +4066,7 @@ export default function App() {
       const dmgLabel = spell.damage + (spMod !== 0 ? `${spMod >= 0 ? "+" : ""}${spMod}` : "");
 
       // Close UI early
-      setCombat(prev => ({ ...prev, actionUsed: true }));
+      setCombat(prev => ({ ...prev, mainActions: Math.max(0, prev.mainActions - 1) }));
       setCombatMode("none");
       setSelectedSpell(null);
 
@@ -4144,7 +4150,7 @@ export default function App() {
       log.push(`${char.name} casts ${spellName}... no effect.`);
     }
 
-    setCombat(prev => ({ ...prev, actionUsed: true, log }));
+    setCombat(prev => ({ ...prev, mainActions: Math.max(0, prev.mainActions - 1), log }));
     setCombatMode("none");
     setSelectedSpell(null);
     if (!combat.active && target) {
@@ -4164,7 +4170,7 @@ export default function App() {
   }
 
   function handleAttackMonster(monsterId: string) {
-    if (!char || !combat.active || combat.actionUsed) return;
+    if (!char || !combat.active || combat.mainActions <= 0) return;
     const weapon = char.equipment.mainHand;
     if (!weapon) return;
     const monster = gs.dungeonMonsters.find(m => m.id === monsterId);
@@ -4175,7 +4181,7 @@ export default function App() {
     const total = roll + mod + char.profBonus;
 
     // Use action early to prevent spam
-    setCombat(prev => ({ ...prev, actionUsed: true }));
+    setCombat(prev => ({ ...prev, mainActions: Math.max(0, prev.mainActions - 1) }));
     setCombatMode("none");
 
     // Show attack roll dice
@@ -4373,11 +4379,23 @@ export default function App() {
       let eq = { ...c.equipment };
       if (item.type === "weapon") {
         if (item.handedness === "2H") {
-          [eq.mainHand, eq.offHand, eq.twoHand].filter(Boolean).forEach(old => newInv.push(old!));
-          eq.mainHand = null; eq.offHand = null; eq.twoHand = item;
-        } else if (!eq.twoHand && !eq.mainHand) eq.mainHand = { ...item, handedness: "1H" };
-        else if (!eq.twoHand && !eq.offHand) eq.offHand = { ...item, handedness: "1H" };
-        else { const old = eq.twoHand ?? eq.mainHand; if (old) newInv.push(old); eq.twoHand = null; eq.mainHand = { ...item, handedness: "1H" }; }
+          if (eq.mainHand) newInv.push(eq.mainHand);
+          if (eq.offHand) newInv.push(eq.offHand);
+          eq.mainHand = item;
+          eq.offHand = null;
+        } else {
+          if (eq.mainHand?.handedness === "2H") {
+            newInv.push(eq.mainHand);
+            eq.mainHand = { ...item, handedness: "1H" };
+          } else if (!eq.mainHand) {
+            eq.mainHand = { ...item, handedness: "1H" };
+          } else if (!eq.offHand) {
+            eq.offHand = { ...item, handedness: "1H" };
+          } else {
+            newInv.push(eq.mainHand);
+            eq.mainHand = { ...item, handedness: "1H" };
+          }
+        }
       }
       else if (item.type === "armor") { const old = eq.armor; eq.armor = item; if (old) newInv.push(old); }
       else if (item.type === "accessory") {
@@ -4415,7 +4433,7 @@ export default function App() {
       addEffect({ type: "heal", gridX: char.position.x, gridY: char.position.y });
       addEffect({ type: "number", gridX: char.position.x, gridY: char.position.y, value: `+${healed}` });
       if (combat.active) {
-        setCombat(prev => ({ ...prev, actionUsed: true, log: [...prev.log, `${char.name} uses ${item.name} (+${healed} HP)`] }));
+        setCombat(prev => ({ ...prev, extraActions: Math.max(0, prev.extraActions - 1), log: [...prev.log, `${char.name} uses ${item.name} (+${healed} HP)`] }));
       }
     } else if (item.effect === "aoe_bomb") {
       // Bombs use AOE targeting — enter spell mode so the map shows the circle
