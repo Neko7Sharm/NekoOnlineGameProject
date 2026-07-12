@@ -18,8 +18,6 @@ import {
 
 type Screen = "auth" | "charSelect" | "charCreate" | "worldMap" | "town" | "dungeon";
 type CharClass = "Fighter" | "Cleric" | "Paladin" | "Ranger" | "Wizard";
-type FighterSkillId = "shield_wall" | "counter_attack" | "action_surge" | "second_wind" | "warriors_focus" | "samurais_focus" | "berserkers_rage";
-type FighterSubclass = "archery" | "defense" | "duelwield" | "berserker" | "samurai" | "protection" | "swordmage";
 type ItemType = "weapon" | "armor" | "accessory" | "consumable";
 type HudTab = "char" | "inv" | "equip" | "acc" | "chat" | "party" | "skills";
 type CombatModeT = "none" | "move" | "attack" | "spell";
@@ -28,7 +26,6 @@ interface Stats { str: number; dex: number; con: number; int: number; wis: numbe
 interface Item {
   id: string; name: string; type: ItemType; description: string; value: number;
   damage?: string; damageType?: string; range?: number;
-  handedness?: "1H" | "2H";
   ac?: number; healAmount?: string; effect?: string; stat?: keyof Stats; bonus?: number;
   material?: boolean;
   saveStat?: keyof Stats;
@@ -36,12 +33,12 @@ interface Item {
   aoeRadius?: number;
 }
 interface Equipment {
-  mainHand: Item | null; offHand: Item | null; twoHand: Item | null; armor: Item | null;
+  weapon: Item | null; armor: Item | null;
   accessories: [Item | null, Item | null, Item | null];
 }
 interface Character {
   id: string; name: string; avatar: string; class: CharClass;
-  level: number; exp: number; gold: number; stats: Stats; statPoints: number;
+  level: number; exp: number; gold: number; stats: Stats;
   hp: number; maxHp: number; ac: number; profBonus: number;
   skills: string[]; savingThrows: string[];
   spellSlots?: { used: number; max: number };
@@ -49,10 +46,6 @@ interface Character {
   customSkills?: string[]; // player-chosen proficiency skills
   inventory: Item[]; equipment: Equipment;
   position: { x: number; y: number }; currentMap: "town" | "dungeon";
-  lastShortRestTime?: number;
-  fighterSkills?: FighterSkillId[];
-  fighterSubclass?: FighterSubclass;
-  skillUses?: Partial<Record<FighterSkillId, number>>;
 }
 interface Monster {
   id: string; name: string; hp: number; maxHp: number; ac: number;
@@ -63,10 +56,8 @@ interface Combatant { id: string; type: "player" | "monster"; name: string; init
 interface CombatState {
   active: boolean; round: number;
   turnOrder: Combatant[]; currentIndex: number;
-  movedSquares: number;
+  actionUsed: boolean; bonusActionUsed: boolean; movedSquares: number;
   log: string[]; engagedMonsterIds: string[];
-  mainActions: number; extraActions: number; reactionUsed: boolean;
-  buffs: Array<{ id: FighterSkillId; label: string; acBonus?: number; attackBonus?: number; damageBonus?: number; damageReduction?: number; ignoreAc?: boolean }>;
 }
 interface VisualEffect {
   id: string;
@@ -192,59 +183,23 @@ const MOVE_SQUARES = 4; const SIGHT = 6;
 const TOWN_ENTER = { x: 10, y: 13 };
 const DUNGEON_ENTER = { x: 10, y: 13 };
 const DUNGEON_EXIT = { x: 9, y: 0 };
-const LEVEL_CAP = 5;
-const EXP_TO_LEVEL = [0, 0, 500, 1000, 2000, 4000, 8000]; // Index is level (1->2 is 500, 2->3 is 1000)
 
-const FIGHTER_SKILLS: Record<FighterSkillId, { name: string; kind: "main" | "extra" | "reaction"; rest: "long" | "short"; desc: string }> = {
-  shield_wall: { name: "Shield Wall", kind: "main", rest: "long", desc: "Gain AC 2 + level and halve incoming damage for this combat." },
-  counter_attack: { name: "Counter Attack", kind: "reaction", rest: "long", desc: "On a melee miss against you, immediately make a weapon attack." },
-  action_surge: { name: "Action Surge", kind: "extra", rest: "long", desc: "Gain one additional main action this turn." },
-  second_wind: { name: "Second Wind", kind: "extra", rest: "long", desc: "Restore 1d10 + twice your level HP." },
-  warriors_focus: { name: "Warrior's Focus", kind: "main", rest: "short", desc: "Gain 1d4 + level to weapon hit rolls for this combat." },
-  samurais_focus: { name: "Samurai's Focus", kind: "main", rest: "long", desc: "Your next weapon attack ignores AC." },
-  berserkers_rage: { name: "Berserker's Rage", kind: "main", rest: "long", desc: "Gain 1d6 + STR damage and halve incoming damage for this combat." },
-};
-const FIGHTER_SUBCLASSES: Record<FighterSubclass, { name: string; desc: string }> = {
-  archery: { name: "Archery", desc: "Bow attacks gain +2 hit roll." }, defense: { name: "Defense", desc: "Gain +1 AC." },
-  duelwield: { name: "Duelwield", desc: "Two one-handed weapons attack twice per main action, each for 60% damage." },
-  berserker: { name: "Berserker", desc: "Two-handed melee attacks gain +2 hit roll." },
-  samurai: { name: "Samurai", desc: "Melee attacks gain +2 hit roll; +3 instead if you did not attack last turn." },
-  protection: { name: "Protection", desc: "Reaction: impose disadvantage on an adjacent enemy attack." },
-  swordmage: { name: "Swordmage", desc: "Gain one Wizard level-1 spell and one spell slot." },
-};
 const TOWN_SPECIAL: Record<string, { label: string; type: string; icon: string; prompt: string; color: string }> = {
-  // Shop (Top Left)
-  "3,2": { label: "General Store", type: "shop", icon: "🏪", prompt: "Enter the General Store?", color: "#c45000" },
   "4,2": { label: "General Store", type: "shop", icon: "🏪", prompt: "Enter the General Store?", color: "#c45000" },
   "5,2": { label: "General Store", type: "shop", icon: "🏪", prompt: "Enter the General Store?", color: "#c45000" },
-  "3,3": { label: "General Store", type: "shop", icon: "🏪", prompt: "Enter the General Store?", color: "#c45000" },
+  "6,2": { label: "General Store", type: "shop", icon: "🏪", prompt: "Enter the General Store?", color: "#c45000" },
   "4,3": { label: "General Store", type: "shop", icon: "🏪", prompt: "Enter the General Store?", color: "#c45000" },
   "5,3": { label: "General Store", type: "shop", icon: "🏪", prompt: "Enter the General Store?", color: "#c45000" },
-  // Quest Board (Top Right)
+  "6,3": { label: "General Store", type: "shop", icon: "🏪", prompt: "Enter the General Store?", color: "#c45000" },
+  "13,2": { label: "Quest Board", type: "quest", icon: "📋", prompt: "Check the Quest Board?", color: "#1e4aaa" },
   "14,2": { label: "Quest Board", type: "quest", icon: "📋", prompt: "Check the Quest Board?", color: "#1e4aaa" },
   "15,2": { label: "Quest Board", type: "quest", icon: "📋", prompt: "Check the Quest Board?", color: "#1e4aaa" },
-  "16,2": { label: "Quest Board", type: "quest", icon: "📋", prompt: "Check the Quest Board?", color: "#1e4aaa" },
+  "13,3": { label: "Quest Board", type: "quest", icon: "📋", prompt: "Check the Quest Board?", color: "#1e4aaa" },
   "14,3": { label: "Quest Board", type: "quest", icon: "📋", prompt: "Check the Quest Board?", color: "#1e4aaa" },
   "15,3": { label: "Quest Board", type: "quest", icon: "📋", prompt: "Check the Quest Board?", color: "#1e4aaa" },
-  "16,3": { label: "Quest Board", type: "quest", icon: "📋", prompt: "Check the Quest Board?", color: "#1e4aaa" },
-  // Inn (Bottom Left)
-  "3,11": { label: "Resting Inn", type: "inn", icon: "🛏️", prompt: "Enter the Inn to take a Long Rest?", color: "#8a5a2a" },
-  "4,11": { label: "Resting Inn", type: "inn", icon: "🛏️", prompt: "Enter the Inn to take a Long Rest?", color: "#8a5a2a" },
-  "5,11": { label: "Resting Inn", type: "inn", icon: "🛏️", prompt: "Enter the Inn to take a Long Rest?", color: "#8a5a2a" },
-  "3,12": { label: "Resting Inn", type: "inn", icon: "🛏️", prompt: "Enter the Inn to take a Long Rest?", color: "#8a5a2a" },
-  "4,12": { label: "Resting Inn", type: "inn", icon: "🛏️", prompt: "Enter the Inn to take a Long Rest?", color: "#8a5a2a" },
-  "5,12": { label: "Resting Inn", type: "inn", icon: "🛏️", prompt: "Enter the Inn to take a Long Rest?", color: "#8a5a2a" },
-  // Adoration Statue (Bottom Right)
-  "14,11": { label: "Adoration Statue", type: "statue", icon: "🗿", prompt: "Pray at the Adoration Statue to level up?", color: "#7a7a8a" },
-  "15,11": { label: "Adoration Statue", type: "statue", icon: "🗿", prompt: "Pray at the Adoration Statue to level up?", color: "#7a7a8a" },
-  "16,11": { label: "Adoration Statue", type: "statue", icon: "🗿", prompt: "Pray at the Adoration Statue to level up?", color: "#7a7a8a" },
-  "14,12": { label: "Adoration Statue", type: "statue", icon: "🗿", prompt: "Pray at the Adoration Statue to level up?", color: "#7a7a8a" },
-  "15,12": { label: "Adoration Statue", type: "statue", icon: "🗿", prompt: "Pray at the Adoration Statue to level up?", color: "#7a7a8a" },
-  "16,12": { label: "Adoration Statue", type: "statue", icon: "🗿", prompt: "Pray at the Adoration Statue to level up?", color: "#7a7a8a" },
-  // Town Gate (Bottom Center)
-  "9,14": { label: "Town Gate", type: "exit", icon: "🗺️", prompt: "Leave Millhaven and return to the World Map?", color: "#1a5a1a" },
-  "10,14": { label: "Town Gate", type: "exit", icon: "🗺️", prompt: "Leave Millhaven and return to the World Map?", color: "#1a5a1a" },
-  "11,14": { label: "Town Gate", type: "exit", icon: "🗺️", prompt: "Leave Millhaven and return to the World Map?", color: "#1a5a1a" },
+  "9,13": { label: "Town Gate", type: "exit", icon: "🗺️", prompt: "Leave Millhaven and return to the World Map?", color: "#1a5a1a" },
+  "10,13": { label: "Town Gate", type: "exit", icon: "🗺️", prompt: "Leave Millhaven and return to the World Map?", color: "#1a5a1a" },
+  "11,13": { label: "Town Gate", type: "exit", icon: "🗺️", prompt: "Leave Millhaven and return to the World Map?", color: "#1a5a1a" },
 };
 
 const CLASS_CFG: Record<CharClass, {
@@ -365,12 +320,10 @@ const BRANCH_ITEM: Omit<Item, "id"> = {
 const PIXEL_AVATARS = PROFILE_PRESETS;
 
 const SHOP_ITEMS: Item[] = [
-  { id: "s1", name: "Longsword", type: "weapon", damage: "1d8", damageType: "slashing", range: 5, value: 15, handedness: "1H", description: "Classic 1H blade." },
-  { id: "s1a", name: "Greatsword", type: "weapon", damage: "2d6", damageType: "slashing", range: 5, value: 50, handedness: "2H", description: "Heavy 2H sword. Requires both hands." },
-  { id: "s1b", name: "Battleaxe", type: "weapon", damage: "1d10", damageType: "slashing", range: 5, value: 30, handedness: "2H", description: "Fierce 2H axe." },
-  { id: "s2", name: "Dagger", type: "weapon", damage: "1d4", damageType: "piercing", range: 20, value: 2, handedness: "1H", description: "Light and quick." },
-  { id: "s3", name: "Handaxe", type: "weapon", damage: "1d6", damageType: "slashing", range: 20, value: 5, handedness: "1H", description: "Throwable axe." },
-  { id: "s4", name: "Shortbow", type: "weapon", damage: "1d6", damageType: "piercing", range: 80, value: 25, handedness: "2H", description: "Hunting bow. Requires two hands." },
+  { id: "s1", name: "Longsword", type: "weapon", damage: "1d8", damageType: "slashing", range: 5, value: 15, description: "Classic blade." },
+  { id: "s2", name: "Dagger", type: "weapon", damage: "1d4", damageType: "piercing", range: 20, value: 2, description: "Light and quick." },
+  { id: "s3", name: "Handaxe", type: "weapon", damage: "1d6", damageType: "slashing", range: 20, value: 5, description: "Throwable axe." },
+  { id: "s4", name: "Shortbow", type: "weapon", damage: "1d6", damageType: "piercing", range: 80, value: 25, description: "Hunting bow." },
   { id: "s5", name: "Leather Armor", type: "armor", ac: 13, value: 10, description: "Supple leather. AC 13." },
   { id: "s6", name: "Chain Mail", type: "armor", ac: 16, value: 75, description: "Interlocked rings. AC 16." },
   { id: "s7", name: "Shield", type: "armor", ac: 2, value: 10, description: "Wooden shield. +2 AC." },
@@ -445,7 +398,7 @@ function calcAC(char: Character): number {
   const armorAC = char.equipment.armor?.ac ?? (10 + dexMod);
   const addDex = ["Leather Armor", "Mage Robes"].includes(armorName);
   const accAC = char.equipment.accessories.reduce((s, a) => s + (a?.ac ?? 0), 0);
-  const shieldAC = char.equipment.offHand?.name.toLowerCase().includes("shield") ? (char.equipment.offHand.ac ?? 2) : 0;
+  return armorAC + (addDex ? dexMod : 0) + accAC;
 }
 
 function createCharacter(name: string, avatar: string, cls: CharClass, customStats?: Stats, selectedSkills?: string[], spellChoice?: string): Character {
@@ -465,14 +418,14 @@ function createCharacter(name: string, avatar: string, cls: CharClass, customSta
   const extra: Item[] = (cfg.extra ?? []).map(e => ({ ...e, id: gid() }));
   const char: Character = {
     id: gid(), name, avatar, class: cls,
-    level: 1, exp: 0, gold: 10, statPoints: 0,
+    level: 1, exp: 0, gold: 10,
     stats, hp: maxHp, maxHp, ac: cfg.acBase,
     profBonus: 2, skills: cfg.skills, savingThrows: cfg.saves,
     spellSlots: cfg.spellMax ? { used: 0, max: cfg.spellMax } : undefined,
     spellChoice,
     customSkills: selectedSkills ?? cfg.skills,
     inventory: extra,
-    equipment: { mainHand: { ...weapon, handedness: "1H" }, offHand: null, twoHand: null, armor, accessories: [null, null, null] },
+    equipment: { weapon, armor, accessories: [null, null, null] },
     position: { x: 10, y: 7 }, currentMap: "town",
   };
   char.ac = calcAC(char);
@@ -521,22 +474,10 @@ function genQuests(n = 10): Quest[] {
 
 const SAVE_KEY = "dnd_online_v2";
 
-function migrateState(state: GameState): GameState {
-  const characters = Object.fromEntries(Object.entries(state.characters ?? {}).map(([id, raw]) => {
-    const c = raw as Character & { equipment: Equipment & { weapon?: Item | null } };
-    const eq = c.equipment ?? {} as Equipment;
-    const legacyWeapon = eq.mainHand ?? eq.weapon ?? null;
-    return [id, { ...c, statPoints: c.statPoints ?? 0, fighterSkills: c.fighterSkills ?? [], skillUses: c.skillUses ?? {},
-      equipment: { mainHand: legacyWeapon, offHand: eq.offHand ?? null, twoHand: eq.twoHand ?? null, armor: eq.armor ?? null, accessories: eq.accessories ?? [null, null, null] },
-    }];
-  }));
-  return { ...state, characters };
-}
-
 function loadState(): GameState {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
-    if (raw) return migrateState(JSON.parse(raw));
+    if (raw) return JSON.parse(raw);
   } catch {}
   return {
     accounts: [], characters: {},
@@ -1175,7 +1116,7 @@ function CharCreateScreen({ onCreated, onBack }: { onCreated: (c: Character) => 
             )}
             <div style={{ marginBottom: 14 }}>
               <div style={{ fontFamily: PX, fontSize: 7, color: C.muted, marginBottom: 8, letterSpacing: 1 }}>STARTING EQUIPMENT</div>
-              {[preview.equipment.mainHand, preview.equipment.armor].filter(Boolean).map(item => item && (
+              {[preview.equipment.weapon, preview.equipment.armor].filter(Boolean).map(item => item && (
                 <div key={item.id} style={{ display: "flex", gap: 8, fontFamily: NU, fontSize: 12, marginBottom: 4 }}>
                   <span style={{ color: CLASS_CFG[cls].color }}>{item.type === "weapon" ? "⚔" : "🛡"}</span>
                   <span style={{ color: C.text }}>{item.name}</span>
@@ -1323,29 +1264,13 @@ function WorldMapScreen({ char, onEnterTown, onEnterDungeon, onLogout, onExitToC
 
 function getTownTile(x: number, y: number): { bg: string; isWall: boolean } {
   if (x === 0 || y === 0 || x === COLS - 1 || y === ROWS - 1) return { bg: "#080c10", isWall: true };
-  
-  // Buildings
-  if (x >= 2 && x <= 6 && y >= 1 && y <= 4) return { bg: "#2d1a08", isWall: false }; // shop
-  if (x >= 13 && x <= 17 && y >= 1 && y <= 4) return { bg: "#081428", isWall: false }; // quest
-  if (x >= 2 && x <= 6 && y >= 10 && y <= 13) return { bg: "#3a2008", isWall: false }; // inn
-  if (x >= 13 && x <= 17 && y >= 10 && y <= 13) return { bg: "#202028", isWall: false }; // statue
-
-  // Fountain center (visual only)
-  if (x >= 9 && x <= 11 && y >= 6 && y <= 8) return { bg: "#081c30", isWall: false };
-
-  // Roads
-  const isHorizontalRoad = (y >= 7 && y <= 8) && (x >= 4 && x <= 15);
-  const isVerticalRoad = (x >= 9 && x <= 11) && (y >= 3 && y <= 14);
-  const isInnRoad = (x >= 5 && x <= 8) && (y >= 11 && y <= 12);
-  const isStatueRoad = (x >= 12 && x <= 14) && (y >= 11 && y <= 12);
-  if (isHorizontalRoad || isVerticalRoad || isInnRoad || isStatueRoad) return { bg: "#4a3a28", isWall: false };
-
-  // Gate
-  if (y >= 14 && x >= 9 && x <= 11) return { bg: "#0a2010", isWall: false }; // gate
-
-  // Grass background
+  if (x >= 3 && x <= 7 && y >= 1 && y <= 4) return { bg: "#2d1a08", isWall: false }; // shop
+  if (x >= 12 && x <= 16 && y >= 1 && y <= 4) return { bg: "#081428", isWall: false }; // quest
+  if (x >= 9 && x <= 11 && y >= 6 && y <= 8) return { bg: "#081c30", isWall: false }; // fountain
+  if (y === 7 || y === 8 || x === 10 || x === 11) return { bg: "#4a3a28", isWall: false }; // road
+  if (y >= 12 && x >= 8 && x <= 12) return { bg: "#0a2010", isWall: false }; // gate
   const h = (x * 3 + y * 7) % 3;
-  return { bg: h === 0 ? "#1a3a12" : h === 1 ? "#1e4216" : "#1c3e14", isWall: false };
+  return { bg: h === 0 ? "#1a3a12" : h === 1 ? "#1e4216" : "#1c3e14", isWall: false }; // grass variation
 }
 
 function getDungeonTile(x: number, y: number): { bg: string; isWall: boolean } {
@@ -1427,8 +1352,8 @@ function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode, select
   }
 
   const attackableM = new Set<string>();
-  if (combat.active && combatMode === "attack" && char.equipment.mainHand) {
-    const rs = Math.ceil((char.equipment.mainHand.range ?? 5) / 5);
+  if (combat.active && combatMode === "attack" && char.equipment.weapon) {
+    const rs = Math.ceil((char.equipment.weapon.range ?? 5) / 5);
     monsters.filter(m => m.hp > 0).forEach(m => { if (dist(pos, m.position) <= rs) attackableM.add(m.id); });
   }
 
@@ -1683,7 +1608,7 @@ function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode, select
                 position: "absolute", left: ex - 20, top: ey - 16,
                 fontFamily: MO, fontSize: e.type === "miss" ? 10 : 13,
                 fontWeight: "bold", pointerEvents: "none", zIndex: 50,
-                color: e.type === "miss" ? C.muted : e.value?.startsWith('+') ? "#4cdb70" : C.red,
+                color: e.type === "miss" ? C.muted : C.red,
                 textShadow: "1px 1px 0 #000, -1px -1px 0 #000",
                 animation: "dnd-float-up 0.8s ease-out forwards",
               }}>{e.value}</div>
@@ -1910,12 +1835,11 @@ function DiceRollOverlay({ rolls }: { rolls: DiceRollDisplay[] }) {
 // COMBAT PANEL
 // ─────────────────────────────────────────────────
 
-function CombatPanel({ combat, char, monsters, combatMode, setCombatMode, selectedSpell, onEndTurn, onSelectSpell, onFlee, onUseItem }: {
+function CombatPanel({ combat, char, monsters, combatMode, setCombatMode, selectedSpell, onEndTurn, onSelectSpell, onFlee }: {
   combat: CombatState; char: Character; monsters: Monster[];
   combatMode: CombatModeT; setCombatMode: (m: CombatModeT) => void;
   selectedSpell?: string;
   onEndTurn: () => void; onSelectSpell: (name: string | null) => void; onFlee: () => void;
-  onUseItem: (item: Item) => void;
 }) {
   const current = combat.turnOrder[combat.currentIndex];
   const isPlayer = current?.type === "player";
@@ -2076,7 +2000,7 @@ function CombatPanel({ combat, char, monsters, combatMode, setCombatMode, select
           </button>
 
           {/* ACTION TABS */}
-          {combat.mainActions > 0 || combat.extraActions > 0 ? (
+          {!combat.actionUsed ? (
             <>
               {[
                 { id: "attack" as const, icon: "⚔", label: "ATTACK", col: C.red },
@@ -2108,30 +2032,25 @@ function CombatPanel({ combat, char, monsters, combatMode, setCombatMode, select
           )}
 
           {/* ATTACK sub-panel */}
-          {combat.mainActions > 0 && actionTab === "attack" && char.equipment.mainHand && (
-            <button className="cp-right-btn"
-              onClick={() => setCombatMode(combatMode === "attack" ? "none" : "attack")}
-              style={{
-                ...rightCard(220),
-                padding: "9px 14px 9px 20px",
-                background: "linear-gradient(260deg, rgba(60,10,10,0.95), rgba(30,5,5,0.95))",
-                border: "none", cursor: "pointer", width: "100%",
-                display: "flex", flexDirection: "column", alignItems: "flex-end", textAlign: "right"
-              }}>
-              <div style={{
-                color: combatMode === "attack" ? C.red : "rgba(255,255,255,0.85)",
-                fontFamily: PX, fontSize: 9, letterSpacing: 1,
-                display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, width: "100%"
-              }}>
-                <span style={{ fontFamily: MO, fontSize: 9, color: C.red + "99" }}>{char.equipment.mainHand.damage}</span>
-                ⚔ {char.equipment.mainHand.name.slice(0, 14)}
-              </div>
-              <div style={{ fontFamily: MO, fontSize: 9, color: "rgba(255,255,255,0.35)", marginTop: 4, width: "100%" }}>Click target on map</div>
-            </button>
+          {!combat.actionUsed && actionTab === "attack" && char.equipment.weapon && (
+            <div style={{ ...rightCard(220), padding: "9px 14px 9px 20px", background: "linear-gradient(260deg, rgba(60,10,10,0.95), rgba(30,5,5,0.95))" }}>
+              <button className="cp-right-btn"
+                onClick={() => setCombatMode(combatMode === "attack" ? "none" : "attack")}
+                style={{
+                  background: "none", border: "none", width: "100%", padding: 0, cursor: "pointer",
+                  color: combatMode === "attack" ? C.red : "rgba(255,255,255,0.85)",
+                  fontFamily: PX, fontSize: 9, letterSpacing: 1,
+                  display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, textAlign: "right",
+                }}>
+                <span style={{ fontFamily: MO, fontSize: 9, color: C.red + "99" }}>{char.equipment.weapon.damage}</span>
+                ⚔ {char.equipment.weapon.name.slice(0, 14)}
+              </button>
+              <div style={{ fontFamily: MO, fontSize: 9, color: "rgba(255,255,255,0.35)", marginTop: 4, textAlign: "right" }}>Click target on map</div>
+            </div>
           )}
 
           {/* SKILL sub-panel */}
-          {combat.mainActions > 0 && actionTab === "skill" && (
+          {!combat.actionUsed && actionTab === "skill" && (
             <div style={{ position: "relative" }}>
               {spells.filter(s => s.level === 0 || hasSlots).map((spell, si) => {
                 const isActive = combatMode === "spell" && selectedSpell === spell.name;
@@ -2176,14 +2095,13 @@ function CombatPanel({ combat, char, monsters, combatMode, setCombatMode, select
           )}
 
           {/* ITEM sub-panel */}
-          {(combat.mainActions > 0 || combat.extraActions > 0) && actionTab === "item" && (
+          {!combat.actionUsed && actionTab === "item" && (
             usableItems.length === 0 ? (
               <div style={{ ...rightCard(220), padding: "9px 14px", background: "rgba(12,10,28,0.88)", textAlign: "right" }}>
                 <span style={{ fontFamily: MO, fontSize: 10, color: "rgba(255,255,255,0.28)" }}>No items</span>
               </div>
             ) : usableItems.map((item, ii) => (
               <button key={item.id} className="cp-right-btn"
-                onClick={() => onUseItem(item)}
                 style={{
                   ...rightCard(220 + ii * 40),
                   border: "none", padding: "9px 14px 9px 20px", width: "100%", textAlign: "right",
@@ -2258,117 +2176,8 @@ const IDLE_QUOTES = [
   "Do you need any help finding something?",
   "Take your time! Good equipment is an adventurer's best friend.",
   "Just browsing? Let me know if something catches your eye.",
-  "My prices are fair, I promise!",
-  "We've got new stock coming in soon, but these are top tier!",
-  "Need a stronger weapon for the dungeon? You're in the right place.",
-  "Don't venture out unprepared! Stock up on potions here."
+  "My prices are fair, I promise!"
 ];
-
-// ─────────────────────────────────────────────────
-// INN MODAL
-// ─────────────────────────────────────────────────
-function InnModal({ char, onLongRest, onClose }: { char: Character; onLongRest: () => void; onClose: () => void }) {
-  return (
-    <div style={{ position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
-      <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.75)" }} onClick={onClose} />
-      <div style={{ ...modalPanel, width: 340, position: "relative", display: "flex" }}>
-        
-        {/* Left Side: NPC Image */}
-        <div style={{ width: 120, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", position: "relative" }}>
-          <img src="/assets/npc_01.png" style={{ width: 120, height: 160, objectFit: "contain", filter: "drop-shadow(2px 4px 6px rgba(0,0,0,0.5))", transform: "translateX(-10px)" }} alt="Innkeeper" />
-        </div>
-        
-        {/* Right Side: Dialog */}
-        <div style={{ flex: 1, paddingLeft: 10, display: "flex", flexDirection: "column" }}>
-          <div style={{ fontFamily: PX, fontSize: 14, color: "#e3a854", marginBottom: 6, borderBottom: "1px solid rgba(227,168,84,0.3)", paddingBottom: 4 }}>
-            Resting Inn
-          </div>
-          <div style={{ fontFamily: NU, fontSize: 11, color: "rgba(255,255,255,0.85)", lineHeight: 1.5, marginBottom: 12, minHeight: 45 }}>
-            "Welcome, weary traveler. Would you like a warm meal and a comfortable bed for the night? It will fully restore your HP and abilities."
-          </div>
-          
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: "auto" }}>
-            <button onClick={() => { onLongRest(); onClose(); }} style={{ ...pixelBtn("primary", true), width: "100%", justifyContent: "center" }}>
-              <BookOpen className="w-4 h-4 mr-2" /> TAKE A LONG REST (FREE)
-            </button>
-            <button onClick={onClose} style={{ ...pixelBtn("ghost", true), width: "100%", justifyContent: "center" }}>
-              LEAVE
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────
-// STATUE MODAL
-// ─────────────────────────────────────────────────
-function StatueModal({ char, onLevelUp, onAddStat, onClose }: { char: Character; onLevelUp: () => void; onAddStat: (stat: keyof Stats) => void; onClose: () => void }) {
-  const currentExp = char.exp;
-  const reqExp = char.level < LEVEL_CAP ? EXP_TO_LEVEL[char.level] : null;
-  const canLevelUp = reqExp !== null && currentExp >= reqExp;
-
-  return (
-    <div style={{ position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
-      <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.75)" }} onClick={onClose} />
-      <div style={{ ...modalPanel, width: 380, position: "relative", display: "flex", flexDirection: "column" }}>
-        
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, borderBottom: "1px solid rgba(255,255,255,0.2)", paddingBottom: 6 }}>
-          <div style={{ fontFamily: PX, fontSize: 16, color: "#a8c0d8" }}>Adoration Statue</div>
-          <button onClick={onClose} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer", fontSize: 18 }}>✕</button>
-        </div>
-
-        <div style={{ display: "flex", gap: 16 }}>
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center" }}>
-             <img src="/assets/npc_02.png" style={{ width: 100, height: 140, objectFit: "contain", filter: "drop-shadow(0 0 10px rgba(168,192,216,0.3))" }} alt="Statue Avatar" />
-             <div style={{ fontFamily: NU, fontSize: 12, color: C.muted, marginTop: 8, textAlign: "center" }}>
-               "Offer your experience and awaken your true potential."
-             </div>
-          </div>
-
-          <div style={{ flex: 1.5, display: "flex", flexDirection: "column", gap: 12 }}>
-            <div style={{ background: "rgba(0,0,0,0.3)", padding: 10, borderRadius: 4, border: "1px solid rgba(255,255,255,0.1)" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontFamily: PX, fontSize: 10, marginBottom: 4 }}>
-                <span style={{ color: "rgba(255,255,255,0.7)" }}>LEVEL {char.level}</span>
-                {reqExp ? <span style={{ color: canLevelUp ? C.green : C.gold }}>{currentExp} / {reqExp} EXP</span> : <span style={{ color: C.gold }}>MAX LEVEL</span>}
-              </div>
-              <div style={{ height: 6, background: "rgba(0,0,0,0.5)", borderRadius: 3, overflow: "hidden" }}>
-                <div style={{ height: "100%", background: canLevelUp ? C.green : C.gold, width: reqExp ? `${Math.min(100, (currentExp / reqExp) * 100)}%` : "100%" }} />
-              </div>
-              {reqExp && (
-                <button onClick={onLevelUp} disabled={!canLevelUp} style={{ ...pixelBtn(canLevelUp ? "primary" : "ghost", true), width: "100%", marginTop: 8, opacity: canLevelUp ? 1 : 0.5 }}>
-                  {canLevelUp ? "LEVEL UP" : "NOT ENOUGH EXP"}
-                </button>
-              )}
-            </div>
-
-            <div style={{ background: "rgba(0,0,0,0.3)", padding: 10, borderRadius: 4, border: "1px solid rgba(255,255,255,0.1)" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                <div style={{ fontFamily: PX, fontSize: 10, color: "rgba(255,255,255,0.7)" }}>ATTRIBUTES</div>
-                <div style={{ fontFamily: MO, fontSize: 10, color: char.statPoints > 0 ? C.green : C.muted }}>Points: {char.statPoints}</div>
-              </div>
-              
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-                {(["str", "dex", "con", "int", "wis", "cha"] as const).map(stat => (
-                  <div key={stat} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(255,255,255,0.05)", padding: "4px 8px", borderRadius: 2 }}>
-                    <span style={{ fontFamily: PX, fontSize: 9, color: "rgba(255,255,255,0.8)", textTransform: "uppercase" }}>{stat} {char.stats[stat]}</span>
-                    {char.statPoints > 0 && (
-                      <button onClick={() => onAddStat(stat)} style={{ background: C.green + "40", border: "none", color: C.green, width: 16, height: 16, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontFamily: MO, fontSize: 10 }}>
-                        +
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
-      </div>
-    </div>
-  );
-}
 
 function ShopModal({ char, onBuy, onClose }: { char: Character; onBuy: (item: Item) => void; onClose: () => void }) {
   const [tab, setTab] = useState<"weapon" | "armor" | "consumable" | "accessory">("weapon");
@@ -3179,7 +2988,6 @@ function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTab, setC
                     </div>
                     <div style={{ fontFamily: NU, fontSize: 10, color: C.muted, marginBottom: 6 }}>{item.description}</div>
                     <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 6 }}>
-                      {item.handedness && <span style={{ fontFamily: MO, fontSize: 9, color: C.text, padding: "2px 5px", background: C.card2 }}>{item.handedness}</span>}
                       {item.damage && <span style={{ fontFamily: MO, fontSize: 9, color: C.red, padding: "2px 5px", background: C.card2 }}>DMG: {item.damage}</span>}
                       {item.ac && <span style={{ fontFamily: MO, fontSize: 9, color: C.blue, padding: "2px 5px", background: C.card2 }}>AC: +{item.ac}</span>}
                       {item.healAmount && <span style={{ fontFamily: MO, fontSize: 9, color: C.green, padding: "2px 5px", background: C.card2 }}>HEAL: {item.healAmount}</span>}
@@ -3211,44 +3019,20 @@ function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTab, setC
           {/* EQUIPMENT */}
           {hudTab === "equip" && (
             <div style={{ height: "100%", padding: "10px 14px", overflowY: "auto", display: "flex", gap: 14 }}>
-              {/* Main Hand */}
+              {/* Weapon */}
               <div>
-                <div style={{ fontFamily: PX, fontSize: 7, color: C.muted, marginBottom: 6, letterSpacing: 1 }}>MAIN HAND</div>
-                <SlotBox item={char.equipment.mainHand} onClick={char.equipment.mainHand ? () => setItemMenu(char.equipment.mainHand!) : undefined} />
-                {char.equipment.mainHand && (
+                <div style={{ fontFamily: PX, fontSize: 7, color: C.muted, marginBottom: 6, letterSpacing: 1 }}>WEAPON</div>
+                <SlotBox item={char.equipment.weapon} onClick={char.equipment.weapon ? () => setItemMenu(char.equipment.weapon!) : undefined} />
+                {char.equipment.weapon && (
                   <div style={{ marginTop: 4 }}>
-                    <div style={{ fontFamily: PX, fontSize: 7, color: C.text }}>{char.equipment.mainHand.name}</div>
+                    <div style={{ fontFamily: PX, fontSize: 7, color: C.text }}>{char.equipment.weapon.name}</div>
                     <div style={{ fontFamily: MO, fontSize: 9, color: C.muted }}>{(() => {
-                      const w = char.equipment.mainHand;
-                      if (!w) return "";
+                      const w = char.equipment.weapon;
                       const isR = (w.range ?? 5) > 5;
                       const sm = isR ? getMod(char.stats.dex) : getMod(char.stats.str);
                       return `${w.damage}${sm >= 0 ? "+" : ""}${sm}`;
                     })()}</div>
-                    <button onClick={onUnequipMainHand} style={{ fontFamily: NU, fontSize: 10, color: C.red + "80", background: "none", border: "none", cursor: "pointer", padding: 0, marginTop: 2 }}>unequip</button>
-                  </div>
-                )}
-              </div>
-              <div style={{ width: 1, background: C.border }} />
-              {/* Off Hand */}
-              <div>
-                <div style={{ fontFamily: PX, fontSize: 7, color: C.muted, marginBottom: 6, letterSpacing: 1 }}>OFF HAND</div>
-                <SlotBox item={char.equipment.offHand} onClick={char.equipment.offHand ? () => setItemMenu(char.equipment.offHand!) : undefined} />
-                {char.equipment.offHand && (
-                  <div style={{ marginTop: 4 }}>
-                    <div style={{ fontFamily: PX, fontSize: 7, color: C.text }}>{char.equipment.offHand.name}</div>
-                    <div style={{ fontFamily: MO, fontSize: 9, color: C.muted }}>{(() => {
-                      const w = char.equipment.offHand;
-                      if (!w) return "";
-                      if (w.damage) {
-                        const isR = (w.range ?? 5) > 5;
-                        const sm = isR ? getMod(char.stats.dex) : getMod(char.stats.str);
-                        return `${w.damage}${sm >= 0 ? "+" : ""}${sm}`;
-                      }
-                      if (w.ac) return `+${w.ac} AC`;
-                      return "";
-                    })()}</div>
-                    <button onClick={onUnequipOffHand} style={{ fontFamily: NU, fontSize: 10, color: C.red + "80", background: "none", border: "none", cursor: "pointer", padding: 0, marginTop: 2 }}>unequip</button>
+                    <button onClick={onUnequipWeapon} style={{ fontFamily: NU, fontSize: 10, color: C.red + "80", background: "none", border: "none", cursor: "pointer", padding: 0, marginTop: 2 }}>unequip</button>
                   </div>
                 )}
               </div>
@@ -3549,9 +3333,7 @@ function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTab, setC
 
 const INIT_COMBAT: CombatState = {
   active: false, round: 0, turnOrder: [], currentIndex: 0,
-  movedSquares: 0,
-  mainActions: 1, extraActions: 1, reactionUsed: false, buffs: [],
-
+  actionUsed: false, bonusActionUsed: false, movedSquares: 0,
   log: [], engagedMonsterIds: [],
 };
 
@@ -3577,8 +3359,6 @@ export default function App() {
   // Special tile dialog (replaces old moveConfirm)
   const [specialDialog, setSpecialDialog] = useState<{ x: number; y: number; tile: { label: string; type: string; icon: string; prompt: string; color: string } } | null>(null);
   const [showShop, setShowShop] = useState(false);
-  const [showInn, setShowInn] = useState(false);
-  const [showStatue, setShowStatue] = useState(false);
   const [showQuests, setShowQuests] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
   const [actionText, setActionText] = useState<{ text: string; color: string } | null>(null);
@@ -3712,7 +3492,7 @@ export default function App() {
       return {
         ...prev, currentIndex: nextIdx,
         round: isNew ? prev.round + 1 : prev.round,
-        movedSquares: 0, mainActions: 1, extraActions: 1, reactionUsed: false,
+        actionUsed: false, bonusActionUsed: false, movedSquares: 0,
         log: isNew ? [...prev.log.slice(-30), `── Round ${prev.round + 1} ──`] : prev.log,
       };
     });
@@ -3766,12 +3546,14 @@ export default function App() {
             setTimeout(() => {
               if (!combat.active) return;
               const dmg = rollDice(monster.damage);
-              const newHp = Math.max(0, charHp - dmg);
-              const cMaxHp = char.maxHp;
+              let newHp = 0;
+              let cMaxHp = 0;
               
               setGs(prevGs => {
                 const c = prevGs.characters[char.id];
                 if (!c) return prevGs;
+                newHp = Math.max(0, c.hp - dmg);
+                cMaxHp = c.maxHp;
                 return { ...prevGs, characters: { ...prevGs.characters, [char.id]: { ...c, hp: newHp } } };
               });
               
@@ -3830,7 +3612,7 @@ export default function App() {
       ...engaged.map(m => `${m.name} initiative: ${order.find(o => o.id === m.id)?.initiative}`),
     ];
     setGs(prev => ({ ...prev, dungeonMonsters: prev.dungeonMonsters.map(m => monsterIds.includes(m.id) ? { ...m, alerted: true } : m) }));
-    setCombat({ active: true, round: 1, turnOrder: order, currentIndex: 0, movedSquares: 0, mainActions: 1, extraActions: 1, reactionUsed: false, buffs: [], log, engagedMonsterIds: monsterIds });
+    setCombat({ active: true, round: 1, turnOrder: order, currentIndex: 0, actionUsed: false, bonusActionUsed: false, movedSquares: 0, log, engagedMonsterIds: monsterIds });
     setCombatMode("none");
     // battleBanner removed — only battleStart used now
   }
@@ -3888,7 +3670,7 @@ export default function App() {
     const targets = gs.dungeonMonsters.filter(m => m.hp > 0 && dist(center, m.position) <= aoeSpell.aoeRadius);
     if (targets.length === 0) {
       notify(`${spellName} — no targets caught!`);
-      setCombat(prev => ({ ...prev, mainActions: Math.max(0, prev.mainActions - 1) }));
+      setCombat(prev => ({ ...prev, actionUsed: true }));
       setCombatMode("none"); setSelectedSpell(null);
       return;
     }
@@ -3910,7 +3692,7 @@ export default function App() {
       });
     });
     setGs(prev => ({ ...prev, dungeonMonsters: newMonsters }));
-    setCombat(prev => ({ ...prev, mainActions: Math.max(0, prev.mainActions - 1), log }));
+    setCombat(prev => ({ ...prev, actionUsed: true, log }));
     diedIds.forEach(id => {
       setDyingMonsters(prev => new Set([...prev, id]));
       setTimeout(() => setDyingMonsters(prev => { const s = new Set(prev); s.delete(id); return s; }), 1000);
@@ -3948,7 +3730,7 @@ export default function App() {
       });
     });
     setGs(prev => ({ ...prev, dungeonMonsters: newMonsters }));
-    if (combat.active) setCombat(prev => ({ ...prev, mainActions: Math.max(0, prev.mainActions - 1), log }));
+    if (combat.active) setCombat(prev => ({ ...prev, actionUsed: true, log }));
     // Remove the bomb from inventory
     updateChar(char.id, c => ({ inventory: c.inventory.filter(i => i.id !== bombItemId) }));
     diedIds.forEach(id => {
@@ -4066,7 +3848,7 @@ export default function App() {
       const dmgLabel = spell.damage + (spMod !== 0 ? `${spMod >= 0 ? "+" : ""}${spMod}` : "");
 
       // Close UI early
-      setCombat(prev => ({ ...prev, mainActions: Math.max(0, prev.mainActions - 1) }));
+      setCombat(prev => ({ ...prev, actionUsed: true }));
       setCombatMode("none");
       setSelectedSpell(null);
 
@@ -4150,7 +3932,7 @@ export default function App() {
       log.push(`${char.name} casts ${spellName}... no effect.`);
     }
 
-    setCombat(prev => ({ ...prev, mainActions: Math.max(0, prev.mainActions - 1), log }));
+    setCombat(prev => ({ ...prev, actionUsed: true, log }));
     setCombatMode("none");
     setSelectedSpell(null);
     if (!combat.active && target) {
@@ -4170,8 +3952,8 @@ export default function App() {
   }
 
   function handleAttackMonster(monsterId: string) {
-    if (!char || !combat.active || combat.mainActions <= 0) return;
-    const weapon = char.equipment.mainHand;
+    if (!char || !combat.active || combat.actionUsed) return;
+    const weapon = char.equipment.weapon;
     if (!weapon) return;
     const monster = gs.dungeonMonsters.find(m => m.id === monsterId);
     if (!monster || monster.hp <= 0) return;
@@ -4181,7 +3963,7 @@ export default function App() {
     const total = roll + mod + char.profBonus;
 
     // Use action early to prevent spam
-    setCombat(prev => ({ ...prev, mainActions: Math.max(0, prev.mainActions - 1) }));
+    setCombat(prev => ({ ...prev, actionUsed: true }));
     setCombatMode("none");
 
     // Show attack roll dice
@@ -4361,12 +4143,6 @@ export default function App() {
     } else if (tile.type === "quest") {
       updateChar(char.id, { position: { x, y } });
       setShowQuests(true);
-    } else if (tile.type === "inn") {
-      updateChar(char.id, { position: { x, y } });
-      setShowInn(true);
-    } else if (tile.type === "statue") {
-      updateChar(char.id, { position: { x, y } });
-      setShowStatue(true);
     }
   }
 
@@ -4377,26 +4153,7 @@ export default function App() {
     updateChar(char.id, c => {
       const newInv = c.inventory.filter(i => i.id !== item.id);
       let eq = { ...c.equipment };
-      if (item.type === "weapon") {
-        if (item.handedness === "2H") {
-          if (eq.mainHand) newInv.push(eq.mainHand);
-          if (eq.offHand) newInv.push(eq.offHand);
-          eq.mainHand = item;
-          eq.offHand = null;
-        } else {
-          if (eq.mainHand?.handedness === "2H") {
-            newInv.push(eq.mainHand);
-            eq.mainHand = { ...item, handedness: "1H" };
-          } else if (!eq.mainHand) {
-            eq.mainHand = { ...item, handedness: "1H" };
-          } else if (!eq.offHand) {
-            eq.offHand = { ...item, handedness: "1H" };
-          } else {
-            newInv.push(eq.mainHand);
-            eq.mainHand = { ...item, handedness: "1H" };
-          }
-        }
-      }
+      if (item.type === "weapon") { const old = eq.weapon; eq.weapon = item; if (old) newInv.push(old); }
       else if (item.type === "armor") { const old = eq.armor; eq.armor = item; if (old) newInv.push(old); }
       else if (item.type === "accessory") {
         const idx = eq.accessories.findIndex(a => a === null);
@@ -4410,8 +4167,7 @@ export default function App() {
       updated.ac = calcAC(updated); return updated;
     });
   }
-  function handleUnequipMainHand() { if (!char?.equipment.mainHand) return; const w = char.equipment.mainHand; updateChar(char.id, c => ({ inventory: [...c.inventory, w], equipment: { ...c.equipment, mainHand: null } })); }
-  function handleUnequipOffHand() { if (!char?.equipment.offHand) return; const w = char.equipment.offHand; updateChar(char.id, c => ({ inventory: [...c.inventory, w], equipment: { ...c.equipment, offHand: null } })); }
+  function handleUnequipWeapon() { if (!char?.equipment.weapon) return; const w = char.equipment.weapon; updateChar(char.id, c => ({ inventory: [...c.inventory, w], equipment: { ...c.equipment, weapon: null } })); }
   function handleUnequipArmor() {
     if (!char?.equipment.armor) return; const a = char.equipment.armor;
     updateChar(char.id, c => { const u = { ...c, inventory: [...c.inventory, a], equipment: { ...c.equipment, armor: null } }; u.ac = calcAC(u); return u; });
@@ -4430,11 +4186,6 @@ export default function App() {
       const healed = rollDice(item.healAmount);
       updateChar(char.id, c => ({ hp: Math.min(c.maxHp, c.hp + healed), inventory: c.inventory.filter(i => i.id !== item.id) }));
       notify(`🧪 ${item.name}: +${healed} HP!`);
-      addEffect({ type: "heal", gridX: char.position.x, gridY: char.position.y });
-      addEffect({ type: "number", gridX: char.position.x, gridY: char.position.y, value: `+${healed}` });
-      if (combat.active) {
-        setCombat(prev => ({ ...prev, extraActions: Math.max(0, prev.extraActions - 1), log: [...prev.log, `${char.name} uses ${item.name} (+${healed} HP)`] }));
-      }
     } else if (item.effect === "aoe_bomb") {
       // Bombs use AOE targeting — enter spell mode so the map shows the circle
       setCombatMode("spell");
@@ -4698,12 +4449,11 @@ export default function App() {
                   combatMode={combatMode} setCombatMode={setCombatMode}
                   selectedSpell={selectedSpell ?? undefined}
                   onEndTurn={endPlayerTurn} onSelectSpell={handleSpellSelect}
-                  onUseItem={handleUseItem}
                   onFlee={() => { setCombat(INIT_COMBAT); setCombatMode("none"); setSelectedSpell(null); notify("Fled from combat!"); }} />
               )}
 
-              {/* Rest buttons (out of combat) */}
-              {!combat.active && (
+              {/* Rest buttons (out of combat, has used slots) */}
+              {!combat.active && char.spellSlots && char.spellSlots.used > 0 && (
                 <div style={{ position: "absolute", top: 4, left: 4, display: "flex", gap: 6, alignItems: "center" }}>
                   <style>{`
                     @keyframes rest-pulse { 0%,100%{box-shadow:0 0 8px rgba(76,219,112,0.3)} 50%{box-shadow:0 0 16px rgba(76,219,112,0.7)} }
@@ -4711,27 +4461,28 @@ export default function App() {
                     @keyframes engage-aura { 0%,100%{box-shadow:0 0 8px #f44336,0 0 16px #c0392b40} 50%{box-shadow:0 0 14px #f44336,0 0 28px #c0392b70} }
                   `}</style>
                   <button onClick={() => {
-                    const now = Date.now();
-                    const cd = 5 * 60 * 1000; // 5 minutes
-                    if (char.lastShortRestTime && now - char.lastShortRestTime < cd) {
-                      const remain = Math.ceil((cd - (now - char.lastShortRestTime)) / 1000);
-                      notify(`Short rest is on cooldown. Wait ${remain}s.`);
-                      return;
-                    }
-                    updateChar(char.id, c => ({ 
-                      lastShortRestTime: now,
-                      spellSlots: c.spellSlots ? { ...c.spellSlots, used: Math.max(0, c.spellSlots.used - 1) } : undefined 
-                    }));
-                    notify("Short rest: 1 slot recovered & Short Rest abilities reset.");
+                    updateChar(char.id, c => ({ spellSlots: { ...c.spellSlots!, used: Math.max(0, c.spellSlots!.used - 1) } }));
+                    notify("Short rest: 1 slot recovered.");
                     setRestAnim("short"); setTimeout(() => setRestAnim(null), 600);
                   }}
                     style={{
                       ...pixelBtn("ghost", true), fontSize: 7, display: "flex", alignItems: "center", gap: 4,
                       animation: restAnim === "short" ? "rest-pulse 0.6s ease-out" : "none",
                       boxShadow: restAnim === "short" ? "0 0 12px rgba(76,219,112,0.6)" : undefined,
-                      opacity: (char.lastShortRestTime && Date.now() - char.lastShortRestTime < 5 * 60 * 1000) ? 0.5 : 1
                     }}>
                     <RotateCcw className="w-2.5 h-2.5" />SHORT
+                  </button>
+                  <button onClick={() => {
+                    updateChar(char.id, c => ({ hp: c.maxHp, spellSlots: c.spellSlots ? { ...c.spellSlots, used: 0 } : undefined }));
+                    notify("Long rest: Full recovery!");
+                    setRestAnim("long"); setTimeout(() => setRestAnim(null), 600);
+                  }}
+                    style={{
+                      ...pixelBtn("ghost", true), fontSize: 7, display: "flex", alignItems: "center", gap: 4,
+                      animation: restAnim === "long" ? "rest-pulse 0.6s ease-out" : "none",
+                      boxShadow: restAnim === "long" ? "0 0 12px rgba(76,219,112,0.6)" : undefined,
+                    }}>
+                    <BookOpen className="w-2.5 h-2.5" />LONG
                   </button>
                 </div>
               )}
@@ -4812,7 +4563,7 @@ export default function App() {
         {/* HUD */}
         <BottomHUD char={char} hudTab={hudTab} setHudTab={setHudTab} hudOpen={hudOpen} setHudOpen={setHudOpen}
           chatTab={chatTab} setChatTab={setChatTab} globalChat={gs.globalChat} partyChat={gs.partyChat}
-          onSendChat={handleSendChat} onEquipItem={handleEquipItem} onUnequipMainHand={handleUnequipMainHand} onUnequipOffHand={handleUnequipOffHand}
+          onSendChat={handleSendChat} onEquipItem={handleEquipItem} onUnequipWeapon={handleUnequipWeapon}
           onUnequipArmor={handleUnequipArmor} onUnequipAcc={handleUnequipAcc}
           onDropItem={handleDropItem} onUseItem={handleUseItem}
           party={gs.party} onCreateParty={handleCreateParty} onLeaveParty={handleLeaveParty} partyQuests={gs.partyQuests}
@@ -4822,48 +4573,6 @@ export default function App() {
         {/* Modals */}
         {showShop && <ShopModal char={char} onBuy={handleBuyItem} onClose={() => setShowShop(false)} />}
         {showQuests && <QuestModal quests={gs.availableQuests} partyQuests={gs.partyQuests} party={gs.party} onAccept={handleAcceptQuest} onClose={() => setShowQuests(false)} nextRefresh={gs.questRefreshAt} onClaim={handleQuestClaim} charInventory={char.inventory} />}
-        
-        {showInn && <InnModal char={char} 
-          onLongRest={() => {
-            updateChar(char.id, c => ({ hp: c.maxHp, spellSlots: c.spellSlots ? { ...c.spellSlots, used: 0 } : undefined }));
-            notify("Long rest: Full recovery!");
-            setRestAnim("long"); setTimeout(() => setRestAnim(null), 600);
-          }} 
-          onClose={() => setShowInn(false)} 
-        />}
-
-        {showStatue && <StatueModal char={char}
-          onLevelUp={() => {
-            if (char.level >= LEVEL_CAP) return;
-            const reqExp = EXP_TO_LEVEL[char.level];
-            if (char.exp >= reqExp) {
-              updateChar(char.id, c => {
-                const isLv4 = c.level + 1 === 4;
-                const spGain = isLv4 ? 2 : 1;
-                return {
-                  level: c.level + 1,
-                  maxHp: c.maxHp + 8,
-                  hp: c.hp + 8,
-                  statPoints: c.statPoints + spGain,
-                  exp: c.exp - reqExp // Consume EXP per standard rules or accumulated? Wait, user asked: "อัพเลเวลตัวละครได้โดยใช้expหากถึงกำหนด". I'll consume it for now.
-                };
-              });
-              notify(`Level Up! Reached Level ${char.level + 1}!`);
-            }
-          }}
-          onAddStat={(stat) => {
-            if (char.statPoints > 0) {
-              updateChar(char.id, c => ({
-                statPoints: c.statPoints - 1,
-                stats: { ...c.stats, [stat]: c.stats[stat] + 1 },
-                maxHp: stat === "con" && (c.stats.con + 1) % 2 === 0 ? c.maxHp + c.level : c.maxHp, // Retroactive HP for CON not fully correct but this handles the basic
-                hp: stat === "con" && (c.stats.con + 1) % 2 === 0 ? c.hp + c.level : c.hp,
-              }));
-              notify(`${stat.toUpperCase()} increased!`);
-            }
-          }}
-          onClose={() => setShowStatue(false)}
-        />}
 
         {/* ★ Centered special tile dialog (blocks movement while open) */}
         {specialDialog && (
