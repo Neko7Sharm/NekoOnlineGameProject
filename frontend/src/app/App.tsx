@@ -15,6 +15,7 @@ import { DiceRollOverlay } from "../components/game/DiceRollOverlay";
 import { ShopModal } from "../components/modals/ShopModal";
 import { QuestModal } from "../components/modals/QuestModal";
 import { BottomHUD } from "../components/hud/BottomHUD";
+import { TownInteractionModal } from "../components/modals/TownInteractionModal";
 
 export default function App() {
   const eng = useGameEngine();
@@ -224,7 +225,54 @@ export default function App() {
         {/* Modals */}
         {showShop && <ShopModal char={char} onBuy={eng.handleBuyItem} onClose={() => eng.setShowShop(false)} />}
         {showQuests && <QuestModal quests={gs.availableQuests} partyQuests={gs.partyQuests} party={gs.party} onAccept={eng.handleAcceptQuest} onClose={() => eng.setShowQuests(false)} nextRefresh={gs.questRefreshAt} onClaim={eng.handleQuestClaim} charInventory={char.inventory} />}
+        {specialDialog?.tile.type === 'shop' && char && (
+  <ShopModal 
+    char={char} 
+    onBuy={eng.handleBuyItem} 
+    onClose={() => setSpecialDialog(null)} 
+  />
+)}
 
+{/* --- 🏨⛪📋 Town Interaction Modal (ของใหม่ เพิ่มเข้ามา) --- */}
+{specialDialog && !specialDialog.confirmed && (
+  <div style={{
+    position: "fixed", inset: 0, zIndex: 8000,
+    display: "flex", alignItems: "center", justifyContent: "center",
+    background: "rgba(0,0,0,0.7)"
+  }}>
+    <div style={{
+      background: "#2d1f1a", border: "3px solid #c45000",
+      padding: 32, borderRadius: 8, textAlign: "center",
+      fontFamily: "PixelFont, monospace", color: "#fff"
+    }}>
+      <p style={{ fontSize: 14, marginBottom: 24, color: "#f4d4a8" }}>
+        {specialDialog.tile.prompt}
+      </p>
+      <div style={{ display: "flex", gap: 16, justifyContent: "center" }}>
+        <button
+          onClick={() => setSpecialDialog({ ...specialDialog, confirmed: true })}
+          style={{
+            padding: "8px 24px", background: "#4a7c23", color: "#fff",
+            border: "2px solid #2d5a1a", cursor: "pointer",
+            fontFamily: "PixelFont, monospace", fontSize: 12
+          }}
+        >
+          YES
+        </button>
+        <button
+          onClick={() => setSpecialDialog(null)}
+          style={{
+            padding: "8px 24px", background: "#7c2323", color: "#fff",
+            border: "2px solid #5a1a1a", cursor: "pointer",
+            fontFamily: "PixelFont, monospace", fontSize: 12
+          }}
+        >
+          NO
+        </button>
+      </div>
+    </div>
+  </div>
+)}
         {/* Special tile dialog */}
         {specialDialog && (
           <AnimeDialog

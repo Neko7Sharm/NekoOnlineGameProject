@@ -27,9 +27,23 @@ export const TOWN_SPECIAL: Record<string, { label: string; type: string; icon: s
   "13,3": { label: "Quest Board", type: "quest", icon: "📋", prompt: "Check the Quest Board?", color: "#1e4aaa" },
   "14,3": { label: "Quest Board", type: "quest", icon: "📋", prompt: "Check the Quest Board?", color: "#1e4aaa" },
   "15,3": { label: "Quest Board", type: "quest", icon: "📋", prompt: "Check the Quest Board?", color: "#1e4aaa" },
-  "9,13": { label: "Town Gate", type: "exit", icon: "🗺️", prompt: "Leave Millhaven and return to the World Map?", color: "#1a5a1a" },
-  "10,13": { label: "Town Gate", type: "exit", icon: "🗺️", prompt: "Leave Millhaven and return to the World Map?", color: "#1a5a1a" },
-  "11,13": { label: "Town Gate", type: "exit", icon: "🗺️", prompt: "Leave Millhaven and return to the World Map?", color: "#1a5a1a" },
+
+  // --- 🏨 Hearthstone Inn ---
+  "2,8": { label: "Hearthstone Inn", type: "inn", icon: "🏨", prompt: "Enter the Hearthstone Inn?", color: "#8B5A2B" },
+  "3,8": { label: "Hearthstone Inn", type: "inn", icon: "🏨", prompt: "Enter the Hearthstone Inn?", color: "#8B5A2B" },
+  "2,9": { label: "Hearthstone Inn", type: "inn", icon: "🏨", prompt: "Enter the Hearthstone Inn?", color: "#8B5A2B" },
+  "3,9": { label: "Hearthstone Inn", type: "inn", icon: "🏨", prompt: "Enter the Hearthstone Inn?", color: "#8B5A2B" },
+
+  // --- ⛪ Sacred Shrine ---
+  "16,8": { label: "Sacred Shrine", type: "shrine", icon: "⛪", prompt: "Enter the Sacred Shrine?", color: "#D4AF37" },
+  "17,8": { label: "Sacred Shrine", type: "shrine", icon: "⛪", prompt: "Enter the Sacred Shrine?", color: "#D4AF37" },
+  "16,9": { label: "Sacred Shrine", type: "shrine", icon: "⛪", prompt: "Enter the Sacred Shrine?", color: "#D4AF37" },
+  "17,9": { label: "Sacred Shrine", type: "shrine", icon: "⛪", prompt: "Enter the Sacred Shrine?", color: "#D4AF37" },
+
+  // --- 🗺️ Town Gate (Exit) ---
+  "9,13": { label: "Town Gate", type: "exit", icon: "🗺️", prompt: "Leave Millhaven?", color: "#1a5a1a" },
+  "10,13": { label: "Town Gate", type: "exit", icon: "🗺️", prompt: "Leave Millhaven?", color: "#1a5a1a" },
+  "11,13": { label: "Town Gate", type: "exit", icon: "🗺️", prompt: "Leave Millhaven?", color: "#1a5a1a" },
 };
 
 // ─────────────────────────────────────────────────
