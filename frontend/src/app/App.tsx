@@ -13,16 +13,15 @@ import { MapGrid } from "../components/game/MapGrid";
 import { CombatPanel } from "../components/game/CombatPanel";
 import { DiceRollOverlay } from "../components/game/DiceRollOverlay";
 import { ShopModal } from "../components/modals/ShopModal";
-import { QuestModal } from "../components/modals/QuestModal";
+import { TownInteractionModal } from "../components/modals/TownInteractionModal"; // ✅ Import แล้ว
 import { BottomHUD } from "../components/hud/BottomHUD";
-import { TownInteractionModal } from "../components/modals/TownInteractionModal";
 
 export default function App() {
   const eng = useGameEngine();
   const {
     gs, session, screen, creatingChar, combat, fogRevealed, combatMode,
     effects, dyingMonsters, hitTokenIds, selectedSpell, diceRolls, battleStart,
-    hudTab, hudOpen, chatTab, specialDialog, showShop, showQuests, notification,
+    hudTab, hudOpen, chatTab, specialDialog, notification,
     actionText, restAnim, zoom, shopPurchaseAnim, char,
     setHudTab, setHudOpen, setChatTab, setZoom, setCombatMode,
   } = eng;
@@ -123,93 +122,64 @@ export default function App() {
              );
           })()}
 
-              {/* Combat panel */}
-              {combat.active && (
-                <CombatPanel combat={combat} char={char} monsters={gs.dungeonMonsters}
-                  combatMode={combatMode} setCombatMode={setCombatMode}
-                  selectedSpell={selectedSpell ?? undefined}
-                  onEndTurn={eng.endPlayerTurn} onSelectSpell={eng.handleSpellSelect}
-                  onFlee={() => { eng.setCombat(eng.INIT_COMBAT); setCombatMode("none"); eng.setSelectedSpell(null); eng.notify("Fled from combat!"); }} />
-              )}
+          {/* Combat panel */}
+          {combat.active && (
+            <CombatPanel combat={combat} char={char} monsters={gs.dungeonMonsters}
+              combatMode={combatMode} setCombatMode={setCombatMode}
+              selectedSpell={selectedSpell ?? undefined}
+              onEndTurn={eng.endPlayerTurn} onSelectSpell={eng.handleSpellSelect}
+              onFlee={() => { eng.setCombat(eng.INIT_COMBAT); setCombatMode("none"); eng.setSelectedSpell(null); eng.notify("Fled from combat!"); }} />
+          )}
 
-              {/* Rest buttons */}
-              {!combat.active && char.spellSlots && char.spellSlots.used > 0 && (
-                <div style={{ position: "absolute", top: 4, left: 4, display: "flex", gap: 6, alignItems: "center" }}>
-                  <style>{`@keyframes rest-pulse { 0%,100%{box-shadow:0 0 8px rgba(76,219,112,0.3)} 50%{box-shadow:0 0 16px rgba(76,219,112,0.7)} }`}</style>
-                  <button onClick={() => {
-                    eng.updateChar(char.id, c => ({ spellSlots: { ...c.spellSlots!, used: Math.max(0, c.spellSlots!.used - 1) } }));
-                    eng.notify("Short rest: 1 slot recovered.");
-                    eng.setRestAnim("short");
-                  }}
-                    style={{
-                      ...pixelBtn("ghost", true), fontSize: 7, display: "flex", alignItems: "center", gap: 4,
-                      animation: restAnim === "short" ? "rest-pulse 0.6s ease-out" : "none",
-                      boxShadow: restAnim === "short" ? "0 0 12px rgba(76,219,112,0.6)" : undefined,
-                    }}>
-                    <RotateCcw className="w-2.5 h-2.5" />SHORT
-                  </button>
-                  <button onClick={() => {
-                    eng.updateChar(char.id, c => ({ hp: c.maxHp, spellSlots: c.spellSlots ? { ...c.spellSlots, used: 0 } : undefined }));
-                    eng.notify("Long rest: Full recovery!");
-                    eng.setRestAnim("long");
-                  }}
-                    style={{
-                      ...pixelBtn("ghost", true), fontSize: 7, display: "flex", alignItems: "center", gap: 4,
-                      animation: restAnim === "long" ? "rest-pulse 0.6s ease-out" : "none",
-                      boxShadow: restAnim === "long" ? "0 0 12px rgba(76,219,112,0.6)" : undefined,
-                    }}>
-                    <BookOpen className="w-2.5 h-2.5" />LONG
-                  </button>
-                </div>
-              )}
+          {/* ✅ ลบปุ่ม Rest เก่าออกแล้ว (ตามแผน v0.4.0 ให้ไปใช้ที่ Inn แทน) */}
 
-              {/* Engage First button */}
-              {screen === "dungeon" && !combat.active && (() => {
-                const nearbyM = gs.dungeonMonsters.filter(m => m.hp > 0 && Math.abs(char.position.x - m.position.x) + Math.abs(char.position.y - m.position.y) <= m.sightRange + 2);
-                if (nearbyM.length === 0) return null;
-                return (
-                  <div style={{ position: "absolute", top: 16, left: "50%", transform: "translateX(-50%)", zIndex: 100 }}>
-                    <style>{`
-                      @keyframes engage-persona-in { 0%{transform:translateX(-120px) skewX(-12deg) scaleX(0.3);opacity:0} 50%{transform:translateX(8px) skewX(-4deg) scaleX(1.05);opacity:1} 70%{transform:translateX(-2px) skewX(-2deg) scaleX(1)} 100%{transform:translateX(0) skewX(0deg) scaleX(1);opacity:1} }
-                      @keyframes engage-persona-pulse { 0%,100%{box-shadow:0 0 20px rgba(220,30,30,0.7),0 0 50px rgba(220,30,30,0.3)} 50%{box-shadow:0 0 35px rgba(255,60,60,0.9),0 0 80px rgba(220,30,30,0.5),inset 0 0 20px rgba(255,100,100,0.15)} }
-                    `}</style>
-                    <button onClick={() => eng.startCombat(nearbyM.map(m => m.id))}
-                      style={{
-                        background: "linear-gradient(105deg, #cc0000, #880000)",
-                        border: "none", color: "#fff", fontFamily: PX, fontSize: 18,
-                        padding: "12px 32px", letterSpacing: 4,
-                        clipPath: "polygon(0 0, calc(100% - 16px) 0, 100% 100%, 16px 100%)",
-                        cursor: "pointer",
-                        animation: "engage-persona-in 0.5s cubic-bezier(0.2,0,0,1) forwards, engage-persona-pulse 1.5s 0.5s ease-in-out infinite",
-                        textShadow: "2px 2px 0 rgba(0,0,0,0.5)", display: "flex", alignItems: "center", gap: 10,
-                      }}>
-                      <span style={{ fontSize: 22 }}>⚔</span>ENGAGE!
-                    </button>
-                  </div>
-                );
-              })()}
+          {/* Engage First button */}
+          {screen === "dungeon" && !combat.active && (() => {
+            const nearbyM = gs.dungeonMonsters.filter(m => m.hp > 0 && Math.abs(char.position.x - m.position.x) + Math.abs(char.position.y - m.position.y) <= m.sightRange + 2);
+            if (nearbyM.length === 0) return null;
+            return (
+              <div style={{ position: "absolute", top: 16, left: "50%", transform: "translateX(-50%)", zIndex: 100 }}>
+                <style>{`
+                  @keyframes engage-persona-in { 0%{transform:translateX(-120px) skewX(-12deg) scaleX(0.3);opacity:0} 50%{transform:translateX(8px) skewX(-4deg) scaleX(1.05);opacity:1} 70%{transform:translateX(-2px) skewX(-2deg) scaleX(1)} 100%{transform:translateX(0) skewX(0deg) scaleX(1);opacity:1} }
+                  @keyframes engage-persona-pulse { 0%,100%{box-shadow:0 0 20px rgba(220,30,30,0.7),0 0 50px rgba(220,30,30,0.3)} 50%{box-shadow:0 0 35px rgba(255,60,60,0.9),0 0 80px rgba(220,30,30,0.5),inset 0 0 20px rgba(255,100,100,0.15)} }
+                `}</style>
+                <button onClick={() => eng.startCombat(nearbyM.map(m => m.id))}
+                  style={{
+                    background: "linear-gradient(105deg, #cc0000, #880000)",
+                    border: "none", color: "#fff", fontFamily: PX, fontSize: 18,
+                    padding: "12px 32px", letterSpacing: 4,
+                    clipPath: "polygon(0 0, calc(100% - 16px) 0, 100% 100%, 16px 100%)",
+                    cursor: "pointer",
+                    animation: "engage-persona-in 0.5s cubic-bezier(0.2,0,0,1) forwards, engage-persona-pulse 1.5s 0.5s ease-in-out infinite",
+                    textShadow: "2px 2px 0 rgba(0,0,0,0.5)", display: "flex", alignItems: "center", gap: 10,
+                  }}>
+                  <span style={{ fontSize: 22 }}>⚔</span>ENGAGE!
+                </button>
+              </div>
+            );
+          })()}
 
-              {/* Cancel targeting mode */}
-              {combatMode !== "none" && !combat.active && (
-                <div style={{ position: "absolute", top: 4, right: 4, zIndex: 25, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
-                  <div style={{ fontFamily: PX, fontSize: 7, color: C.blue, padding: "4px 8px", background: C.card + "ee", border: `1px solid ${C.blue}60`, boxShadow: `0 0 8px ${C.blue}40` }}>
-                    {selectedSpell === "Small Bomb" ? "💣 SELECT BOMB TARGET" : "✨ SELECT SPELL TARGET"}
-                  </div>
-                  <button onClick={() => { setCombatMode("none"); eng.setSelectedSpell(null); eng.setPendingBombItemId(null); }} style={{ ...pixelBtn("ghost", true), fontSize: 7 }}>✕ CANCEL</button>
-                </div>
-              )}
+          {/* Cancel targeting mode */}
+          {combatMode !== "none" && !combat.active && (
+            <div style={{ position: "absolute", top: 4, right: 4, zIndex: 25, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+              <div style={{ fontFamily: PX, fontSize: 7, color: C.blue, padding: "4px 8px", background: C.card + "ee", border: `1px solid ${C.blue}60`, boxShadow: `0 0 8px ${C.blue}40` }}>
+                {selectedSpell === "Small Bomb" ? "💣 SELECT BOMB TARGET" : "✨ SELECT SPELL TARGET"}
+              </div>
+              <button onClick={() => { setCombatMode("none"); eng.setSelectedSpell(null); eng.setPendingBombItemId(null); }} style={{ ...pixelBtn("ghost", true), fontSize: 7 }}>✕ CANCEL</button>
+            </div>
+          )}
 
-              {/* Tips */}
-              {screen === "town" && !combat.active && (
-                <div style={{ position: "absolute", bottom: 4, left: 4, background: C.card + "cc", border: `1px solid ${C.border}`, padding: "4px 8px", fontFamily: NU, fontSize: 10, color: C.muted }}>
-                  Click to move · 🏪 Shop · 📋 Quests · 🗺️ Exit
-                </div>
-              )}
-              {screen === "dungeon" && !combat.active && (
-                <div style={{ position: "absolute", bottom: 4, left: 4, background: C.card + "cc", border: `1px solid ${C.border}`, padding: "4px 8px", fontFamily: NU, fontSize: 10, color: C.muted }}>
-                  🚪 Reach north exit · Avoid monsters or fight!
-                </div>
-              )}
+          {/* Tips */}
+          {screen === "town" && !combat.active && (
+            <div style={{ position: "absolute", bottom: 4, left: 4, background: C.card + "cc", border: `1px solid ${C.border}`, padding: "4px 8px", fontFamily: NU, fontSize: 10, color: C.muted }}>
+              Click to move · 🏪 Shop · 🏨 Inn · ⛪ Shrine · 📋 Quests · 🗺️ Exit
+            </div>
+          )}
+          {screen === "dungeon" && !combat.active && (
+            <div style={{ position: "absolute", bottom: 4, left: 4, background: C.card + "cc", border: `1px solid ${C.border}`, padding: "4px 8px", fontFamily: NU, fontSize: 10, color: C.muted }}>
+              🚪 Reach north exit · Avoid monsters or fight!
+            </div>
+          )}
         </div>
 
         {/* HUD */}
@@ -222,65 +192,72 @@ export default function App() {
           onUseSkill={eng.handleUseSkillFromHUD}
           inCombat={combat.active} />
 
-        {/* Modals */}
-        {showShop && <ShopModal char={char} onBuy={eng.handleBuyItem} onClose={() => eng.setShowShop(false)} />}
-        {showQuests && <QuestModal quests={gs.availableQuests} partyQuests={gs.partyQuests} party={gs.party} onAccept={eng.handleAcceptQuest} onClose={() => eng.setShowQuests(false)} nextRefresh={gs.questRefreshAt} onClaim={eng.handleQuestClaim} charInventory={char.inventory} />}
-        {specialDialog?.tile.type === 'shop' && char && (
-  <ShopModal 
-    char={char} 
-    onBuy={eng.handleBuyItem} 
-    onClose={() => setSpecialDialog(null)} 
-  />
-)}
-
-{/* --- 🏨⛪📋 Town Interaction Modal (ของใหม่ เพิ่มเข้ามา) --- */}
-{specialDialog && !specialDialog.confirmed && (
-  <div style={{
-    position: "fixed", inset: 0, zIndex: 8000,
-    display: "flex", alignItems: "center", justifyContent: "center",
-    background: "rgba(0,0,0,0.7)"
-  }}>
-    <div style={{
-      background: "#2d1f1a", border: "3px solid #c45000",
-      padding: 32, borderRadius: 8, textAlign: "center",
-      fontFamily: "PixelFont, monospace", color: "#fff"
-    }}>
-      <p style={{ fontSize: 14, marginBottom: 24, color: "#f4d4a8" }}>
-        {specialDialog.tile.prompt}
-      </p>
-      <div style={{ display: "flex", gap: 16, justifyContent: "center" }}>
-        <button
-          onClick={() => setSpecialDialog({ ...specialDialog, confirmed: true })}
-          style={{
-            padding: "8px 24px", background: "#4a7c23", color: "#fff",
-            border: "2px solid #2d5a1a", cursor: "pointer",
-            fontFamily: "PixelFont, monospace", fontSize: 12
-          }}
-        >
-          YES
-        </button>
-        <button
-          onClick={() => setSpecialDialog(null)}
-          style={{
-            padding: "8px 24px", background: "#7c2323", color: "#fff",
-            border: "2px solid #5a1a1a", cursor: "pointer",
-            fontFamily: "PixelFont, monospace", fontSize: 12
-          }}
-        >
-          NO
-        </button>
-      </div>
-    </div>
-  </div>
-)}
-        {/* Special tile dialog */}
-        {specialDialog && (
+        {/* ========================================== */}
+        {/* ✅ MODALS SECTION (แก้ไขใหม่ทั้งหมด) */}
+        {/* ========================================== */}
+        
+        {/* 1. Prompt Yes/No (ใช้ AnimeDialog แบบเดียวกับ Shop) */}
+        {specialDialog && !specialDialog.confirmed && (
           <AnimeDialog
             icon={specialDialog.tile.icon}
             title={specialDialog.tile.label.toUpperCase()}
             message={specialDialog.tile.prompt}
-            onYes={eng.handleSpecialYes}
+            onYes={() => eng.setSpecialDialog({ ...specialDialog, confirmed: true })}
             onNo={() => eng.setSpecialDialog(null)}
+          />
+        )}
+
+        {/* 2. Shop Modal (แสดงเมื่อ confirmed แล้ว) */}
+        {specialDialog?.confirmed && specialDialog?.tile.type === 'shop' && char && (
+          <ShopModal 
+            char={char} 
+            onBuy={eng.handleBuyItem} 
+            onClose={() => eng.setSpecialDialog(null)} 
+          />
+        )}
+
+        {/* 3. Town Interaction Modal (Inn, Shrine, Quest) */}
+        {specialDialog?.confirmed && (specialDialog.tile.type === 'inn' || specialDialog.tile.type === 'shrine' || specialDialog.tile.type === 'quest') && char && (
+          <TownInteractionModal
+            type={specialDialog.tile.type as "inn" | "shrine" | "quest"}
+            character={char}
+            onClose={() => eng.setSpecialDialog(null)}
+            onAction={(action, data) => {
+              if (action === "longRest") {
+                if (char.gold >= 100) {
+                  eng.updateChar(char.id, (c: any) => ({ gold: c.gold - 100, hp: c.maxHp, mp: c.maxMp || c.maxHp }));
+                  eng.notify("You feel fully restored after a good night's sleep!");
+                } else {
+                  eng.notify("Not enough gold for a Long Rest. You need 100g.");
+                }
+              }
+              if (action === "levelUp") {
+                const thresholds: Record<number, number> = { 1: 500, 2: 1000, 3: 2000, 4: 4000, 5: 8000, 6: 16000, 7: 32000, 8: 64000, 9: 128000, 10: Infinity };
+                if (char.exp >= thresholds[char.level] && char.level < 10) {
+                  eng.updateChar(char.id, (c: any) => ({ level: c.level + 1, statusPoints: (c.statusPoints || 0) + 5, maxHp: c.maxHp + 10, hp: c.maxHp + 10 }));
+                  eng.notify("Level Up! You feel stronger!");
+                } else {
+                  eng.notify("Not enough EXP to level up yet.");
+                }
+              }
+              if (action === "saveStats") {
+                eng.updateChar(char.id, (c: any) => ({ stats: data }));
+                eng.notify("Stats consecrated successfully!");
+              }
+              if (action === "acceptQuest" && data) {
+                eng.notify("Quest accepted! Check your journal.");
+              }
+              if (action === "cancelQuest" && data) {
+                if (char.gold >= 50) {
+                  eng.updateChar(char.id, (c: any) => ({ gold: c.gold - 50 }));
+                  eng.notify("Quest canceled. 50g fee deducted.");
+                } else {
+                  eng.notify("Not enough gold to cancel the quest. Fee is 50g.");
+                }
+              }
+              // ปิด Modal หลังจาก Action เสร็จสิ้น (delay เล็กน้อยเพื่อให้เห็น animation)
+              setTimeout(() => eng.setSpecialDialog(null), 1500);
+            }}
           />
         )}
 
