@@ -108,7 +108,7 @@ export function useGameEngine() {
     setBattleStart(true);
     setTimeout(() => setBattleStart(false), 1800);
     const playerInit = 20 + getMod(char.stats.dex);
-    const order = [{ id: char.id, type: "player" as const, name: char.name, initiative: playerInit }];
+    const order: CombatState["turnOrder"] = [{ id: char.id, type: "player" as const, name: char.name, initiative: playerInit }];
     const engaged = gs.dungeonMonsters.filter(m => monsterIds.includes(m.id) && m.hp > 0);
     engaged.forEach(m => {
       const init = Math.min(19, d20());
@@ -983,6 +983,39 @@ export function useGameEngine() {
     notify("Entered Darkroot Depths. Monsters lurk in the dark...");
   }
 
+  const handleLongRest = useCallback(() => {
+    if (!char) return;
+    if (char.gold < 100) {
+      notify("Not enough gold for a Long Rest. You need 100g.");
+      return;
+    }
+    updateChar(char.id, c => ({
+      gold: c.gold - 100,
+      hp: c.maxHp,
+    }));
+    notify("You feel fully restored after a good night's sleep!");
+  }, [char, notify, updateChar]);
+
+  const handleCancelQuest = useCallback((questId: string) => {
+    if (!char) return;
+    const cancelFee = 50;
+    if (char.gold < cancelFee) {
+      notify("Not enough gold to cancel the quest. Fee is 50g.");
+      return;
+    }
+
+    const quest = gs.partyQuests.find(q => q.id === questId);
+    if (!quest) return;
+
+    updateChar(char.id, c => ({ gold: c.gold - cancelFee }));
+    setGs(prev => ({
+      ...prev,
+      partyQuests: prev.partyQuests.filter(q => q.id !== questId),
+      availableQuests: [...prev.availableQuests, quest],
+    }));
+    notify(`Quest canceled. ${cancelFee}g fee deducted.`);
+  }, [char, gs.partyQuests, notify, updateChar]);
+
   return {
     // state
     gs, session, activeCharId, screen, creatingChar, combat, fogRevealed, combatMode,
@@ -992,7 +1025,7 @@ export function useGameEngine() {
     char,
     // setters
     setHudTab, setHudOpen, setChatTab, setZoom, setCombatMode, setCreatingChar, setScreen,
-    setActiveCharId,
+    setActiveCharId, setSelectedSpell, setPendingBombItemId, setShowShop, setShowQuests, setSpecialDialog, setCombat,
     // combat
     startCombat, endCombat, endPlayerTurn, handleSpellSelect, handleCastSpellAtTile,
     handleCastSpell, handleHealSelf, handleMonsterClick, handleAttackMonster,
@@ -1011,6 +1044,8 @@ export function useGameEngine() {
     // ui helpers
     notify,
     setRestAnim,
+    handleLongRest,
+    handleCancelQuest,
     INIT_COMBAT,
   };
 }
