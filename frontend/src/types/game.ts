@@ -43,6 +43,8 @@ export interface Character {
   customSkills?: string[];
   inventory: Item[]; equipment: Equipment;
   position: { x: number; y: number }; currentMap: "town" | "dungeon";
+  statusPoints: number;
+  lastShortRestTime?: number;
 }
 
 export interface Monster {

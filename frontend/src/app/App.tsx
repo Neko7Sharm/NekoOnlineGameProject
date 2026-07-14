@@ -13,7 +13,9 @@ import { MapGrid } from "../components/game/MapGrid";
 import { CombatPanel } from "../components/game/CombatPanel";
 import { DiceRollOverlay } from "../components/game/DiceRollOverlay";
 import { ShopModal } from "../components/modals/ShopModal";
-import { TownInteractionModal } from "../components/modals/TownInteractionModal"; // ✅ Import แล้ว
+import { InnModal } from "../components/modals/InnModal";
+import { StatueModal } from "../components/modals/StatueModal";
+import { QuestModal } from "../components/modals/QuestModal";
 import { BottomHUD } from "../components/hud/BottomHUD";
 
 export default function App() {
@@ -202,7 +204,13 @@ export default function App() {
             icon={specialDialog.tile.icon}
             title={specialDialog.tile.label.toUpperCase()}
             message={specialDialog.tile.prompt}
-            onYes={() => eng.setSpecialDialog({ ...specialDialog, confirmed: true })}
+            onYes={() => {
+              if (specialDialog.tile.type === "exit") {
+                eng.handleSpecialYes();
+              } else {
+                eng.setSpecialDialog({ ...specialDialog, confirmed: true });
+              }
+            }}
             onNo={() => eng.setSpecialDialog(null)}
           />
         )}
@@ -216,48 +224,87 @@ export default function App() {
           />
         )}
 
-        {/* 3. Town Interaction Modal (Inn, Shrine, Quest) */}
-        {specialDialog?.confirmed && (specialDialog.tile.type === 'inn' || specialDialog.tile.type === 'shrine' || specialDialog.tile.type === 'quest') && char && (
-          <TownInteractionModal
-            type={specialDialog.tile.type as "inn" | "shrine" | "quest"}
-            character={char}
-            onClose={() => eng.setSpecialDialog(null)}
-            onAction={(action, data) => {
-              if (action === "longRest") {
-                if (char.gold >= 100) {
-                  eng.updateChar(char.id, (c: any) => ({ gold: c.gold - 100, hp: c.maxHp, mp: c.maxMp || c.maxHp }));
-                  eng.notify("You feel fully restored after a good night's sleep!");
-                } else {
-                  eng.notify("Not enough gold for a Long Rest. You need 100g.");
-                }
+        {/* 3. Inn Modal */}
+        {specialDialog?.confirmed && specialDialog?.tile.type === 'inn' && char && (
+          <InnModal
+            char={char}
+            onLongRest={(healedChar) => {
+              if (char.gold >= 50) {
+                eng.updateChar(char.id, (c: any) => ({ 
+                  gold: c.gold - 50, 
+                  hp: c.maxHp 
+                }));
+                eng.notify("You rest well at the inn and feel fully restored!");
+              } else {
+                eng.notify("Not enough gold for a Long Rest (50g required).");
               }
-              if (action === "levelUp") {
-                const thresholds: Record<number, number> = { 1: 500, 2: 1000, 3: 2000, 4: 4000, 5: 8000, 6: 16000, 7: 32000, 8: 64000, 9: 128000, 10: Infinity };
-                if (char.exp >= thresholds[char.level] && char.level < 10) {
-                  eng.updateChar(char.id, (c: any) => ({ level: c.level + 1, statusPoints: (c.statusPoints || 0) + 5, maxHp: c.maxHp + 10, hp: c.maxHp + 10 }));
-                  eng.notify("Level Up! You feel stronger!");
-                } else {
-                  eng.notify("Not enough EXP to level up yet.");
-                }
-              }
-              if (action === "saveStats") {
-                eng.updateChar(char.id, (c: any) => ({ stats: data }));
-                eng.notify("Stats consecrated successfully!");
-              }
-              if (action === "acceptQuest" && data) {
-                eng.notify("Quest accepted! Check your journal.");
-              }
-              if (action === "cancelQuest" && data) {
-                if (char.gold >= 50) {
-                  eng.updateChar(char.id, (c: any) => ({ gold: c.gold - 50 }));
-                  eng.notify("Quest canceled. 50g fee deducted.");
-                } else {
-                  eng.notify("Not enough gold to cancel the quest. Fee is 50g.");
-                }
-              }
-              // ปิด Modal หลังจาก Action เสร็จสิ้น (delay เล็กน้อยเพื่อให้เห็น animation)
-              setTimeout(() => eng.setSpecialDialog(null), 1500);
+              setTimeout(() => eng.setSpecialDialog(null), 800);
             }}
+            onClose={() => eng.setSpecialDialog(null)}
+          />
+        )}
+
+        {/* 4. Statue Modal (Level Up + Stat Adjustment) */}
+        {specialDialog?.confirmed && specialDialog?.tile.type === 'shrine' && char && (
+          <StatueModal
+            char={char}
+            onLevelUp={(leveledChar) => {
+              const EXP_REQ: Record<number, number> = { 
+                1: 500, 2: 1000, 3: 2000, 4: 4000, 5: 8000,
+                6: 16000, 7: 32000, 8: 64000, 9: 128000, 10: Infinity 
+              };
+              if (char.exp >= EXP_REQ[char.level] && char.level < 10) {
+                eng.updateChar(char.id, (c: any) => ({ 
+                  level: c.level + 1, 
+                  statusPoints: (c.statusPoints || 0) + 1,
+                  maxHp: c.maxHp + 10,
+                  hp: c.maxHp + 10
+                }));
+                eng.notify("🎉 Level Up! You feel stronger!");
+              } else {
+                eng.notify("Not enough EXP to level up yet.");
+              }
+              setTimeout(() => eng.setSpecialDialog(null), 800);
+            }}
+            onUpdateStats={(updatedChar) => {
+              eng.updateChar(char.id, (c: any) => ({ 
+                stats: updatedChar.stats,
+                statusPoints: updatedChar.statusPoints
+              }));
+              eng.notify("✨ Status Points allocated!");
+              setTimeout(() => eng.setSpecialDialog(null), 800);
+            }}
+            onClose={() => eng.setSpecialDialog(null)}
+          />
+        )}
+
+        {/* 5. Quest Modal */}
+        {specialDialog?.confirmed && specialDialog?.tile.type === 'quest' && char && (
+          <QuestModal
+            char={char}
+            quests={gs.availableQuests}
+            partyQuests={gs.partyQuests}
+            party={gs.party}
+            nextRefresh={gs.questRefreshAt}
+            onAccept={(questId) => {
+              eng.handleAcceptQuest(questId);
+              eng.notify("Quest accepted!");
+            }}
+            onClaim={(questId) => {
+              eng.handleQuestClaim(questId);
+              eng.notify("Quest completed!");
+            }}
+            onCancel={(questId) => {
+              if (char.gold >= 10) {
+                eng.updateChar(char.id, (c: any) => ({ gold: c.gold - 10 }));
+                eng.handleCancelQuest(questId);
+                eng.notify("Quest canceled (10g fee)");
+              } else {
+                eng.notify("Not enough gold to cancel (10g required).");
+              }
+            }}
+            charInventory={char.inventory}
+            onClose={() => eng.setSpecialDialog(null)}
           />
         )}
 

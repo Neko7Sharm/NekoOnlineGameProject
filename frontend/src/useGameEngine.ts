@@ -36,7 +36,7 @@ export function useGameEngine() {
   const [hudTab, setHudTab] = useState<"char" | "inv" | "equip" | "acc" | "chat" | "party" | "skills">("char");
   const [hudOpen, setHudOpen] = useState(true);
   const [chatTab, setChatTab] = useState<"global" | "party">("global");
-  const [specialDialog, setSpecialDialog] = useState<{ x: number; y: number; tile: { label: string; type: string; icon: string; prompt: string; color: string } } | null>(null);
+  const [specialDialog, setSpecialDialog] = useState<{ x: number; y: number; tile: { label: string; type: string; icon: string; prompt: string; color: string }; confirmed?: boolean } | null>(null);
   const [showShop, setShowShop] = useState(false);
   const [showQuests, setShowQuests] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
@@ -101,6 +101,19 @@ export function useGameEngine() {
     });
   }, []);
 
+  const isQuestReadyToTurnIn = useCallback((quest: Quest | undefined, inventory: Item[] = char?.inventory ?? []) => {
+    if (!quest) return false;
+    if (quest.readyToTurnIn || quest.completed) return true;
+    if (quest.gatherTarget) {
+      const count = inventory.filter(i => i.name === quest.gatherTarget!.itemName).length;
+      return count >= quest.gatherTarget.count;
+    }
+    if (quest.killTarget) {
+      return (quest.killTarget.current ?? 0) >= quest.killTarget.count;
+    }
+    return false;
+  }, [char?.inventory]);
+
   // ── COMBAT ──
 
   const startCombat = useCallback((monsterIds: string[]) => {
@@ -137,11 +150,14 @@ export function useGameEngine() {
       if (Math.random() < 0.6) updateChar(char.id, ch => ({ gold: ch.gold + 2 + Math.floor(Math.random() * 5) }));
     });
     let updatedPQ = gs.partyQuests.map(q => {
-      if (q.killTarget?.monster === "Wooden Dummy") return { ...q, killTarget: { ...q.killTarget, current: Math.min(q.killTarget.current + dead.length, q.killTarget.count) } };
+      if (q.killTarget?.monster === "Wooden Dummy") {
+        const nextCurrent = Math.min((q.killTarget.current ?? 0) + dead.length, q.killTarget.count);
+        return { ...q, killTarget: { ...q.killTarget, current: nextCurrent } };
+      }
       return q;
     });
     updatedPQ = updatedPQ.map(q => {
-      if (q.killTarget && q.killTarget.current >= q.killTarget.count && !q.readyToTurnIn && !q.completed) {
+      if (isQuestReadyToTurnIn(q, char.inventory) && !q.readyToTurnIn && !q.completed) {
         notify(`📋 Quest complete: ${q.title}! Return to the Quest Board to claim your reward.`);
         return { ...q, readyToTurnIn: true };
       }
@@ -151,7 +167,7 @@ export function useGameEngine() {
     setGs(prev => ({ ...prev, partyQuests: updatedPQ }));
     notify(`⚔️ Victory! +${totalExp} EXP${drops.length > 0 ? `, ${drops.length} item(s)` : ""}`);
     setCombat(INIT_COMBAT); setCombatMode("none");
-  }, [char, gs.dungeonMonsters, gs.partyQuests, notify, updateChar]);
+  }, [char, gs.dungeonMonsters, gs.partyQuests, notify, updateChar, isQuestReadyToTurnIn]);
 
   // Win condition
   useEffect(() => {
@@ -851,16 +867,32 @@ export function useGameEngine() {
     setTimeout(() => setShopPurchaseAnim(null), 1200);
   }
   function handleAcceptQuest(qid: string) {
-    if (!gs.party) { notify("Join or create a party first!"); return; }
-    if (gs.party.questIds.length >= 2) { notify("Party already has 2 active quests."); return; }
+    if (!char) return;
+    const currentParty = gs.party ?? { name: `${char.name}'s Party`, leaderId: char.id, memberIds: [char.id], questIds: [] as string[] };
+    if (currentParty.questIds.length >= 2) { notify("Party already has 2 active quests."); return; }
     const q = gs.availableQuests.find(q => q.id === qid); if (!q) return;
-    setGs(prev => ({ ...prev, availableQuests: prev.availableQuests.filter(q => q.id !== qid), partyQuests: [...prev.partyQuests, q], party: prev.party ? { ...prev.party, questIds: [...prev.party.questIds, qid] } : null }));
+    setGs(prev => {
+      const nextParty = prev.party
+        ? { ...prev.party, questIds: [...prev.party.questIds, qid] }
+        : { name: `${char.name}'s Party`, leaderId: char.id, memberIds: [char.id], questIds: [qid] };
+      return {
+        ...prev,
+        availableQuests: prev.availableQuests.filter(q => q.id !== qid),
+        partyQuests: [...prev.partyQuests, q],
+        party: nextParty,
+      };
+    });
     notify(`Quest accepted: ${q.title}`);
   }
   function handleQuestClaim(questId: string) {
     if (!char) return;
     const q = gs.partyQuests.find(pq => pq.id === questId);
     if (!q) return;
+
+    if (!isQuestReadyToTurnIn(q, char.inventory)) {
+      notify("Quest is not complete yet.");
+      return;
+    }
 
     if (q.gatherTarget) {
       const { itemName, count } = q.gatherTarget;
@@ -888,7 +920,6 @@ export function useGameEngine() {
       return;
     }
 
-    if (!q.readyToTurnIn && !q.completed) return;
     updateChar(char.id, ch => ({ exp: ch.exp + q.reward.exp, gold: ch.gold + q.reward.gold }));
     setGs(prev => ({
       ...prev,
@@ -1026,6 +1057,7 @@ export function useGameEngine() {
     // setters
     setHudTab, setHudOpen, setChatTab, setZoom, setCombatMode, setCreatingChar, setScreen,
     setActiveCharId, setSelectedSpell, setPendingBombItemId, setShowShop, setShowQuests, setSpecialDialog, setCombat,
+    updateChar,
     // combat
     startCombat, endCombat, endPlayerTurn, handleSpellSelect, handleCastSpellAtTile,
     handleCastSpell, handleHealSelf, handleMonsterClick, handleAttackMonster,
