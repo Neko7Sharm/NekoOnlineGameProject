@@ -12,8 +12,8 @@ export function WorldMapScreen({ char, onEnterTown, onEnterDungeon, onLogout, on
   const cfg = CLASS_CFG[char.class];
   return (
     <div style={{ minHeight: "100vh", background: C.bg, display: "flex", flexDirection: "column", position: "relative", overflow: "hidden" }}>
-      <div style={{ position: "absolute", inset: 0, opacity: 0.03, backgroundImage: `repeating-linear-gradient(0deg,transparent,transparent 37px,${C.blue} 38px),repeating-linear-gradient(90deg,transparent,transparent 37px,${C.blue} 38px)` }} />
-      <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse at 50% 50%, rgba(94,184,255,0.04) 0%, transparent 70%)` }} />
+      <div style={{ position: "absolute", inset: 0, opacity: 0.04, backgroundImage: `repeating-linear-gradient(0deg,transparent,transparent 37px,${C.blue} 38px),repeating-linear-gradient(90deg,transparent,transparent 37px,${C.blue} 38px)` }} />
+      <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse at 50% 50%, rgba(180,138,255,0.06) 0%, transparent 70%)` }} />
 
       <div style={{ position: "relative", zIndex: 10, borderBottom: `2px solid ${C.border}`, background: C.card, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ fontFamily: PX, fontSize: 12, color: C.blue, letterSpacing: 1 }}>🗺️ WORLD MAP</div>

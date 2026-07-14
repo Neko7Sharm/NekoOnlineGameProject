@@ -51,14 +51,26 @@ export const TOWN_SPECIAL: Record<string, { label: string; type: string; icon: s
 // ─────────────────────────────────────────────────
 
 export function getTownTile(x: number, y: number): { bg: string; isWall: boolean } {
-  if (x === 0 || y === 0 || x === COLS - 1 || y === ROWS - 1) return { bg: "#080c10", isWall: true };
-  if (x >= 3 && x <= 7 && y >= 1 && y <= 4) return { bg: "#2d1a08", isWall: false };
-  if (x >= 12 && x <= 16 && y >= 1 && y <= 4) return { bg: "#081428", isWall: false };
-  if (x >= 9 && x <= 11 && y >= 6 && y <= 8) return { bg: "#081c30", isWall: false };
-  if (y === 7 || y === 8 || x === 10 || x === 11) return { bg: "#4a3a28", isWall: false };
-  if (y >= 12 && x >= 8 && x <= 12) return { bg: "#0a2010", isWall: false };
-  const h = (x * 3 + y * 7) % 3;
-  return { bg: h === 0 ? "#1a3a12" : h === 1 ? "#1e4216" : "#1c3e14", isWall: false };
+  // Edge of map is always a wall
+  if (x === 0 || y === 0 || x === COLS - 1 || y === ROWS - 1) return { bg: "transparent", isWall: true };
+  
+  // Define building obstacles (walls) - leave the TOWN_SPECIAL interaction tiles walkable
+  // Shop is around [4-6, 2-3], block the back of it
+  if (x >= 4 && x <= 6 && y === 1) return { bg: "transparent", isWall: true };
+  
+  // Quest Board is around [13-15, 2-3]
+  if (x >= 13 && x <= 15 && y === 1) return { bg: "transparent", isWall: true };
+  
+  // Inn is around [2-3, 8-9]
+  if (x >= 1 && x <= 4 && y >= 5 && y <= 7) return { bg: "transparent", isWall: true };
+  
+  // Shrine is around [16-17, 8-9]
+  if (x >= 15 && x <= 18 && y >= 5 && y <= 7) return { bg: "transparent", isWall: true };
+  
+  // Decorative trees/borders
+  if ((x < 3 || x > 16) && y > 11) return { bg: "transparent", isWall: true };
+
+  return { bg: "transparent", isWall: false };
 }
 
 export function getDungeonTile(x: number, y: number): { bg: string; isWall: boolean } {

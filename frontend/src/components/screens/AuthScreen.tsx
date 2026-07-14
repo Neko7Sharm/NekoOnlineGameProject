@@ -42,7 +42,7 @@ export function AuthScreen({ onLogin }: { onLogin: (u: string, ids: string[], gs
   return (
     <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>
       <div style={{ position: "absolute", inset: 0, opacity: 0.04, backgroundImage: `repeating-linear-gradient(0deg,transparent,transparent 37px,${C.blue} 38px),repeating-linear-gradient(90deg,transparent,transparent 37px,${C.blue} 38px)` }} />
-      <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse at 50% 20%, rgba(255,213,79,0.14) 0%, rgba(94,184,255,0.04) 45%, transparent 75%)` }} />
+      <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse at 50% 20%, rgba(245,216,122,0.12) 0%, rgba(180,138,255,0.06) 45%, transparent 75%)` }} />
 
       <div style={{ position: "relative", zIndex: 10, width: "100%", maxWidth: 390, padding: "0 20px" }}>
         <div style={{ textAlign: "center", marginBottom: 24 }}>

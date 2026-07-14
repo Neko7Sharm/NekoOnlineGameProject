@@ -283,14 +283,14 @@ export function useGameEngine() {
             setTimeout(() => {
               if (!combat.active) return;
               const dmg = rollDice(monster.damage);
-              let newHp = 0;
-              let cMaxHp = 0;
+              // Compute newHp directly from current char.hp (synchronous read)
+              const newHp = Math.max(0, char.hp - dmg);
+              const cMaxHp = char.maxHp;
 
+              // Update HP in state
               setGs(prevGs => {
                 const c = prevGs.characters[char.id];
                 if (!c) return prevGs;
-                newHp = Math.max(0, c.hp - dmg);
-                cMaxHp = c.maxHp;
                 return { ...prevGs, characters: { ...prevGs.characters, [char.id]: { ...c, hp: newHp } } };
               });
 

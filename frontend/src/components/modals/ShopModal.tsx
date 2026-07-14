@@ -9,19 +9,19 @@ import npcShopImg2 from "../../assets/npc/npc_02.png";
 import npcShopImg3 from "../../assets/npc/npc_03.png";
 
 const BUY_QUOTES = [
-  "Oh, that one? Excellent taste, I must say!",
+  "You have a great eye for quality!",
   "Thank you so much for your purchase~!",
-  "That'll definitely come in handy, adventurer!",
-  "A fine choice! You won't regret it!",
-  "My best item! You have a good eye!"
+  "Have a safe journey out there!",
+  "Come back and visit me again soon!",
+  "I get new items all the time, so keep checking back!"
 ];
 
 const IDLE_QUOTES = [
   "Hesitating? Don't worry, everything here is of the finest quality!",
   "Do you need any help finding something?",
-  "Take your time! Good equipment is an adventurer's best friend.",
-  "Just browsing? Let me know if something catches your eye.",
-  "My prices are fair, I promise!"
+  "These weapons were just polished today!",
+  "Let me know if you need any assistance!",
+  "Welcome in! Take your time looking around."
 ];
 
 export function ShopModal({ char, onBuy, onClose }: { char: Character; onBuy: (item: Item) => void; onClose: () => void }) {
@@ -54,8 +54,8 @@ export function ShopModal({ char, onBuy, onClose }: { char: Character; onBuy: (i
       setBubbleText("Welcome, adventurer! Looking for something special today?");
       setBubbleShow(true);
     });
-    after(4200, () => setBubbleShow(false));
-    after(4700, () => { setNpcFace("idle"); setBubbleText(""); });
+    after(6200, () => setBubbleShow(false));
+    after(6700, () => { setNpcFace("idle"); setBubbleText(""); });
     return () => { timersRef.current.forEach(clearTimeout); };
   }, []);
 
@@ -66,7 +66,7 @@ export function ShopModal({ char, onBuy, onClose }: { char: Character; onBuy: (i
         setNpcFace("talk");
         setBubbleText(IDLE_QUOTES[Math.floor(Math.random() * IDLE_QUOTES.length)]);
         setBubbleShow(true);
-        after(5000, () => setBubbleShow(false));
+        after(7000, () => setBubbleShow(false));
         after(5500, () => { setNpcFace("idle"); setBubbleText(""); });
       }, waitTime);
       timersRef.current.push(t);
@@ -93,8 +93,8 @@ export function ShopModal({ char, onBuy, onClose }: { char: Character; onBuy: (i
       setBubbleShow(true);
     });
     after(700, () => setNpcBounce(false));
-    after(4700, () => setBubbleShow(false));
-    after(5200, () => { setNpcFace("idle"); setBubbleText(""); });
+    after(6700, () => setBubbleShow(false));
+    after(7200, () => { setNpcFace("idle"); setBubbleText(""); });
   }
 
   function handleClose() {

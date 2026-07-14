@@ -8,6 +8,7 @@ import {
 } from "../../constants/map";
 import { dist } from "../../utils/dice";
 import type { MapGridProps } from "../../types/game";
+import townBg from "../../assets/town_map_bg.png";
 
 // Compute which grid tiles fall inside a cone pointing from player toward mouse
 function getConeTiles(playerPos: { x: number; y: number }, mouseX: number, mouseY: number, length: number): Set<string> {
@@ -133,7 +134,11 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
           const r = gridRef.current.getBoundingClientRect();
           setMouseGrid({ x: e.clientX - r.left, y: e.clientY - r.top });
         }}
-        style={{ position: "relative", width: COLS * CELL, height: ROWS * CELL, imageRendering: "pixelated" }}>
+        style={{ 
+          position: "relative", width: COLS * CELL, height: ROWS * CELL, imageRendering: "pixelated",
+          backgroundImage: mode === "town" ? `url(${townBg})` : "none",
+          backgroundSize: "cover"
+        }}>
         {/* Tiles */}
         {Array.from({ length: ROWS }, (_, y) =>
           Array.from({ length: COLS }, (_, x) => {
@@ -172,9 +177,9 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
                   outlineOffset: "-2px",
                   boxShadow: isReachable ? `inset 0 0 8px ${C.gold}20` : "none",
                 }}>
-                <div style={{ position: "absolute", inset: 0, border: "1px solid rgba(0,0,0,0.25)" }} />
+                <div style={{ position: "absolute", inset: 0, border: mode === "town" ? "none" : "1px solid rgba(0,0,0,0.25)" }} />
 
-                {special && !isFogged && ["4,2", "13,2", "9,13"].includes(key) && (
+                {special && !isFogged && ["4,2", "13,2", "9,13", "2,8", "16,8"].includes(key) && (
                   <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, opacity: 0.8 }}>
                     {special.icon}
                   </div>

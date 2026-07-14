@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { PX, NU, MO, pixelBtn } from "../../constants/theme";
 import type { Character, Item, Party, Quest } from "../../types/game";
@@ -10,35 +10,36 @@ import npcQuestImg3 from "../../assets/npc/npc_b03.png";
 import npcQuestImg4 from "../../assets/npc/npc_b04.png";
 
 const QUEST_WELCOME_QUOTES = [
-  "Ah, another brave soul seeking adventure! What brings you here?",
-  "Welcome to the Quest Guild! Looking for work?",
-  "I have some interesting contracts for you...",
-  "Fresh adventurers! Just what we need!",
-  "Come, come! Let's find you a quest!",
+  "Welcome! We have new quests today... Eek! I almost spilled the ink!",
+  "Ah! Where did that document go... Oh, found it! Which quest interests you?",
+  "Heave-ho! I must work hard today! Would you like a quest?",
+  "We have plenty of new requests! Please help me sort them out.",
 ];
 
 const QUEST_ACCEPT_QUOTES = [
-  "Excellent! I know you'll handle this perfectly.",
-  "Great choice! I have faith in you.",
-  "You're just the one for this job!",
-  "Off you go, then! Good luck out there!",
-  "This should suit you well!",
+  "This quest? You got it! Stamping it now... All set!",
+  "Excellent choice! Good luck... Watch your step on the way out!",
+  "If it's you, Brave One, I'm sure you can handle it!",
 ];
 
 const QUEST_COMPLETE_QUOTES = [
-  "Outstanding work, adventurer! You're a natural!",
-  "Fantastic! You've done us a great service!",
-  "Brilliant! The Guild is proud of you!",
-  "Well done! You're getting stronger!",
-  "Impressive! You're becoming legendary!",
+  "Wow! You actually did it! You're amazing!",
+  "Incredible! Here's your reward... Ah! The coins almost dropped!",
+  "Thank you for your hard work! The Guild is very proud of you.",
 ];
 
 const QUEST_CANCEL_QUOTES = [
-  "Ah... I see. These things happen sometimes.",
-  "No worries, take your time planning.",
-  "The Guild understands. Perhaps another time.",
-  "It's wise to know your limits.",
-  "Don't worry, there are always more quests.",
+  "Canceling? What a shame... That's okay, maybe next time!",
+  "Hmm... I suppose this quest might be too difficult. You can pick another!",
+  "Oh... It's fine! May I have the paper back... Ah, it tore...",
+];
+
+const QUEST_IDLE_QUOTES = [
+  "If you have any questions, just ask... Ah! Please don't pull that paper!",
+  "Today's quests... Wait, is this information written incorrectly?",
+  "Hmm... there's so much paperwork... I wish I could go adventuring too.",
+  "Ouch! Paper cut... It just stings a little, I'm fine!",
+  "Please give me a moment to organize these documents...",
 ];
 
 export function QuestModal({
@@ -91,8 +92,8 @@ export function QuestModal({
       setBubbleText(QUEST_WELCOME_QUOTES[Math.floor(Math.random() * QUEST_WELCOME_QUOTES.length)]);
       setBubbleShow(true);
     });
-    after(4200, () => setBubbleShow(false));
-    after(4700, () => {
+    after(6200, () => setBubbleShow(false));
+    after(6700, () => {
       setNpcFace("idle");
       setBubbleText("");
     });
@@ -100,6 +101,21 @@ export function QuestModal({
       timersRef.current.forEach(clearTimeout);
     };
   }, []);
+
+  useEffect(() => {
+    if (npcFace === "idle") {
+      const waitTime = 6000 + Math.random() * 8000;
+      const t = setTimeout(() => {
+        setNpcFace("talk");
+        setBubbleText(QUEST_IDLE_QUOTES[Math.floor(Math.random() * QUEST_IDLE_QUOTES.length)]);
+        setBubbleShow(true);
+        after(7000, () => setBubbleShow(false));
+        after(5500, () => { setNpcFace("idle"); setBubbleText(""); });
+      }, waitTime);
+      timersRef.current.push(t);
+      return () => clearTimeout(t);
+    }
+  }, [npcFace]);
 
   const handleAccept = (id: string) => {
     timersRef.current.forEach(clearTimeout);
@@ -114,8 +130,8 @@ export function QuestModal({
     });
 
     after(300, () => onAccept(id));
-    after(3500, () => setBubbleShow(false));
-    after(4000, () => {
+    after(5500, () => setBubbleShow(false));
+    after(6000, () => {
       setNpcFace("idle");
       setBubbleText("");
     });
@@ -136,8 +152,8 @@ export function QuestModal({
     });
 
     after(300, () => onCancel(id));
-    after(3500, () => setBubbleShow(false));
-    after(4000, () => {
+    after(5500, () => setBubbleShow(false));
+    after(6000, () => {
       setNpcFace("idle");
       setBubbleText("");
     });
@@ -157,8 +173,8 @@ export function QuestModal({
     });
     after(700, () => setNpcBounce(false));
     after(300, () => onClaim?.(id));
-    after(3500, () => setBubbleShow(false));
-    after(4000, () => {
+    after(5500, () => setBubbleShow(false));
+    after(6000, () => {
       setNpcFace("idle");
       setBubbleText("");
     });

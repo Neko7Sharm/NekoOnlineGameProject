@@ -8,40 +8,41 @@ import {
   getExpToNextLevel,
 } from "../../constants/levels";
 
-import npcStatueImg from "../../assets/npc/npc_01.png";
-import npcStatueImg2 from "../../assets/npc/npc_02.png";
-import npcStatueImg3 from "../../assets/npc/npc_03.png";
+import npcStatueImg from "../../assets/npc/npc_d01.png";
+import npcStatueImg2 from "../../assets/npc/npc_d02.png";
+import npcStatueImg3 from "../../assets/npc/npc_d03.png";
 
 const STATUE_WELCOME_QUOTES = [
-  "Ah, another soul seeking strength! Welcome! ✨",
-  "The sacred light shines upon you, adventurer.",
-  "I sense your potential growing. How may I help?",
-  "The divine energy flows through you.",
-  "Your determination pleases the spirits!",
+  "O Brave One... please receive this blessing... Wait, what was the next line?",
+  "Such tranquility... Ah! Since when were you standing there?!",
+  "The light of Selenia has guided you here, hasn't it?",
+  "This place is very sacred... but please don't run around, I can't clean up fast enough!",
 ];
 
 const STATUE_LEVELUP_QUOTES = [
-  "Congratulations! Your power grows! ✨",
-  "The spirits bless your advancement!",
-  "You've grown stronger than before!",
-  "The blessing descends upon you!",
-  "Such progress! The gods are pleased!",
+  "You look much stronger now... I think?",
+  "The sacred power is with you! Yay!",
+  "Ah! Your power has increased. Congratulations!",
 ];
 
 const STATUE_STATUS_QUOTES = [
-  "Adjusting your attributes... there we go.",
-  "Your natural talents are being enhanced.",
-  "The statue glows as your stats shift.",
-  "Feel the power coursing through you!",
-  "Your essence transforms!",
+  "Let me draw out your hidden potential... Wait, is this the right thread?",
+  "Allow the Goddess to refine your strength.",
+  "Just pray... and your power will increase naturally.",
 ];
 
 const STATUE_FAREWELL_QUOTES = [
-  "May the spirits guide your path. Farewell!",
-  "Go forth with renewed strength!",
-  "The sacred light goes with you.",
-  "Return whenever you need strength!",
-  "Your journey is blessed by the gods.",
+  "The blessings of the gods will protect you... probably...",
+  "Safe travels! I'll pray for your safety.",
+  "Don't forget to come back and rest here again.",
+];
+
+const STATUE_IDLE_QUOTES = [
+  "Um... Goddess Selenia... Did I read the prayer wrong?",
+  "Why are you staring at me, Brave One? Is there something on my face?",
+  "Ah... I wasn't sleeping! I was just closing my eyes to meditate!",
+  "It's so quiet and peaceful here... It's making me sleepy...",
+  "Wait... Did I forget to sweep the floor over there?",
 ];
 
 export function StatueModal({
@@ -99,8 +100,8 @@ export function StatueModal({
       );
       setBubbleShow(true);
     });
-    after(4200, () => setBubbleShow(false));
-    after(4700, () => {
+    after(6200, () => setBubbleShow(false));
+    after(6700, () => {
       setNpcFace("idle");
       setBubbleText("");
     });
@@ -108,6 +109,21 @@ export function StatueModal({
       timersRef.current.forEach(clearTimeout);
     };
   }, []);
+
+  useEffect(() => {
+    if (npcFace === "idle") {
+      const waitTime = 6000 + Math.random() * 8000;
+      const t = setTimeout(() => {
+        setNpcFace("talk");
+        setBubbleText(STATUE_IDLE_QUOTES[Math.floor(Math.random() * STATUE_IDLE_QUOTES.length)]);
+        setBubbleShow(true);
+        after(7000, () => setBubbleShow(false));
+        after(5500, () => { setNpcFace("idle"); setBubbleText(""); });
+      }, waitTime);
+      timersRef.current.push(t);
+      return () => clearTimeout(t);
+    }
+  }, [npcFace]);
 
   function handleLevelUp() {
     if (!canLevelUp) return;
@@ -138,8 +154,8 @@ export function StatueModal({
       onLevelUp(leveledChar);
     });
 
-    after(3500, () => setBubbleShow(false));
-    after(4000, () => {
+    after(5500, () => setBubbleShow(false));
+    after(6000, () => {
       setNpcFace("idle");
       setBubbleText("");
       setMode("menu");
@@ -181,8 +197,8 @@ export function StatueModal({
       onUpdateStats(updatedChar);
     });
 
-    after(3500, () => setBubbleShow(false));
-    after(4000, () => {
+    after(5500, () => setBubbleShow(false));
+    after(6000, () => {
       setNpcFace("idle");
       setBubbleText("");
       setMode("menu");

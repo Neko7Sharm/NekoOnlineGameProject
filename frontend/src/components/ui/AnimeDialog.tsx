@@ -16,7 +16,7 @@ export function AnimeDialog({ icon, title, message, onYes, onNo, yesLabel = "YES
         position: "relative",
         background: C.card,
         border: `3px solid ${C.blue}`,
-        boxShadow: `0 0 0 1px ${C.bg}, ${C.glowStrong}, inset 0 0 40px rgba(94,184,255,0.04)`,
+        boxShadow: `0 0 0 1px ${C.bg}, ${C.glowStrong}, inset 0 0 40px rgba(180,138,255,0.06)`,
         width: 340,
         padding: "28px 28px 24px",
         imageRendering: "pixelated",

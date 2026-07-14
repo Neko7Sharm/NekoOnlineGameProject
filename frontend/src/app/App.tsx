@@ -130,7 +130,24 @@ export default function App() {
               combatMode={combatMode} setCombatMode={setCombatMode}
               selectedSpell={selectedSpell ?? undefined}
               onEndTurn={eng.endPlayerTurn} onSelectSpell={eng.handleSpellSelect}
-              onFlee={() => { eng.setCombat(eng.INIT_COMBAT); setCombatMode("none"); eng.setSelectedSpell(null); eng.notify("Fled from combat!"); }} />
+              onFlee={() => {
+                // Check if any alive monster can still see the player (within sightRange)
+                const aliveEngaged = gs.dungeonMonsters.filter(m =>
+                  m.hp > 0 && combat.engagedMonsterIds.includes(m.id)
+                );
+                const stillSeen = aliveEngaged.some(m =>
+                  Math.abs(char.position.x - m.position.x) + Math.abs(char.position.y - m.position.y) <= m.sightRange
+                );
+                if (stillSeen) {
+                  eng.notify("⚠️ Enemy can still see you! Move further away first!");
+                } else {
+                  eng.setCombat(eng.INIT_COMBAT);
+                  setCombatMode("none");
+                  eng.setSelectedSpell(null);
+                  eng.notify("🏃 Fled from combat!");
+                }
+              }}
+            />
           )}
 
           {/* ✅ ลบปุ่ม Rest เก่าออกแล้ว (ตามแผน v0.4.0 ให้ไปใช้ที่ Inn แทน) */}

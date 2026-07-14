@@ -203,7 +203,6 @@ export function CombatPanel({ combat, char, monsters, combatMode, setCombatMode,
                 <span style={{ fontFamily: MO, fontSize: 9, color: C.red + "99" }}>{char.equipment.weapon.damage}</span>
                 ⚔ {char.equipment.weapon.name.slice(0, 14)}
               </button>
-              <div style={{ fontFamily: MO, fontSize: 9, color: "rgba(255,255,255,0.35)", marginTop: 4, textAlign: "right" }}>Click target on map</div>
             </div>
           )}
 

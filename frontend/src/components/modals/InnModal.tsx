@@ -4,32 +4,34 @@ import { C, PX, NU, MO, pixelBtn } from "../../constants/theme";
 import type { Character } from "../../types/game";
 import { LONG_REST_COST } from "../../constants/levels";
 
-import npcInnImg from "../../assets/npc/npc_01.png";
-import npcInnImg2 from "../../assets/npc/npc_02.png";
-import npcInnImg3 from "../../assets/npc/npc_03.png";
+import npcInnImg from "../../assets/npc/npc_c01.png";
+import npcInnImg3 from "../../assets/npc/npc_c03.png";
 
 const INN_WELCOME_QUOTES = [
-  "Welcome, traveler! Looking for a place to rest?",
-  "Come in, come in! You look tired from your journey.",
-  "Our rooms are the best in town, promise!",
-  "Rest well, and you'll be back on your feet in no time.",
-  "A warm bed is just what you need right now.",
+  "You look exhausted from your travels. Come rest a while.",
+  "We always have warm tea and soft beds waiting for you.",
+  "Let your big sister take care of you. Don't be shy!",
+  "You're always welcome here. Come sit down.",
 ];
 
 const INN_REST_QUOTES = [
-  "Sleep well, dear. You deserve it! 💤",
-  "Sweet dreams, adventurer. Wake up refreshed!",
-  "I'll make sure you're not disturbed. Rest easy.",
-  "The softest pillows in all the land await you~",
-  "Take all the time you need. Your room is ready.",
+  "I hope you have the sweetest dreams.",
+  "Rest easy now. I'll make sure you're safe.",
+  "Sleep well. We can face tomorrow together.",
 ];
 
 const INN_FAREWELL_QUOTES = [
-  "Thank you for staying with us! Come back soon.",
-  "May your journey be safe. Rest whenever you need to!",
-  "Safe travels, adventurer. The inn is always open for you.",
-  "You're welcome anytime. Good luck out there!",
-  "Take care! We'll be here if you need us again.",
+  "May the Goddess watch over you.",
+  "Travel safely, dear. Come back whenever you need rest.",
+  "I'm cheering for you! Do your best!",
+];
+
+const INN_IDLE_QUOTES = [
+  "If something's troubling you, I'm always here to listen.",
+  "Our rooms are cleaned every day. They smell like sunshine!",
+  "Are you hungry? I saved some warm soup for you.",
+  "You look a bit tired. You should rest more often.",
+  "The breeze is so nice... It makes me want to take a nap too.",
 ];
 
 export function InnModal({
@@ -67,8 +69,8 @@ export function InnModal({
       );
       setBubbleShow(true);
     });
-    after(4200, () => setBubbleShow(false));
-    after(4700, () => {
+    after(6200, () => setBubbleShow(false));
+    after(6700, () => {
       setNpcFace("idle");
       setBubbleText("");
     });
@@ -76,6 +78,21 @@ export function InnModal({
       timersRef.current.forEach(clearTimeout);
     };
   }, []);
+
+  useEffect(() => {
+    if (npcFace === "idle") {
+      const waitTime = 6000 + Math.random() * 8000;
+      const t = setTimeout(() => {
+        setNpcFace("talk");
+        setBubbleText(INN_IDLE_QUOTES[Math.floor(Math.random() * INN_IDLE_QUOTES.length)]);
+        setBubbleShow(true);
+        after(7000, () => setBubbleShow(false));
+        after(5500, () => { setNpcFace("idle"); setBubbleText(""); });
+      }, waitTime);
+      timersRef.current.push(t);
+      return () => clearTimeout(t);
+    }
+  }, [npcFace]);
 
   function handleLongRest() {
     if (char.gold < LONG_REST_COST) return;
@@ -102,8 +119,8 @@ export function InnModal({
       onLongRest(healedChar);
     });
 
-    after(3500, () => setBubbleShow(false));
-    after(4000, () => {
+    after(5500, () => setBubbleShow(false));
+    after(6000, () => {
       setNpcFace("idle");
       setBubbleText("");
     });
@@ -124,7 +141,7 @@ export function InnModal({
   }
 
   const npcSrc =
-    npcFace === "talk" ? npcInnImg : npcFace === "happy" ? npcInnImg2 : npcInnImg3;
+    npcFace === "talk" ? npcInnImg : npcFace === "happy" ? npcInnImg : npcInnImg3;
 
   const warm1 = "#8b6f47",
     warm2 = "#a0845c",
