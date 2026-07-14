@@ -57,12 +57,15 @@ export function CharCreateScreen({ onCreated, onBack }: { onCreated: (c: Charact
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, overflowY: "auto" }}>
-      <div style={{ width: "100%", maxWidth: 580 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-          <button onClick={onBack} style={{ ...pixelBtn("ghost", true) }}>← BACK</button>
-          <div style={{ fontFamily: PX, fontSize: 10, color: C.blue, letterSpacing: 1 }}>
-            {step === "basic" ? "NAME YOUR HERO" : step === "class" ? "CHOOSE CLASS" : step === "stats" ? "BUILD YOUR HERO" : "REVIEW"}
+      <div style={{ width: "100%", maxWidth: 620 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 18 }}>
+          <div>
+            <div style={{ fontFamily: PX, fontSize: 11, color: C.gold, letterSpacing: 1, marginBottom: 4 }}>SELestia HORIZON</div>
+            <div style={{ fontFamily: PX, fontSize: 9, color: C.blue, letterSpacing: 1 }}>
+              {step === "basic" ? "NAME YOUR HERO" : step === "class" ? "CHOOSE CLASS" : step === "stats" ? "BUILD YOUR HERO" : "REVIEW"}
+            </div>
           </div>
+          <button onClick={onBack} style={{ ...pixelBtn("ghost", true), borderRadius: 10 }}>← BACK</button>
         </div>
 
         <div style={{ display: "flex", gap: 4, marginBottom: 20 }}>
@@ -77,8 +80,8 @@ export function CharCreateScreen({ onCreated, onBack }: { onCreated: (c: Charact
         </div>
 
         {step === "basic" && (
-          <div style={{ ...panel, padding: 24, position: "relative" }}>
-            <PixelCorners />
+          <div style={{ ...panel, padding: 24, position: "relative", borderRadius: 16, background: `linear-gradient(180deg, ${C.card} 0%, ${C.card2} 100%)` }}>
+            <PixelCorners color={C.gold} />
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <div>
                 <div style={{ fontFamily: PX, fontSize: 7, color: C.muted, marginBottom: 8, letterSpacing: 1 }}>CHARACTER NAME</div>
@@ -132,7 +135,8 @@ export function CharCreateScreen({ onCreated, onBack }: { onCreated: (c: Charact
                     display: "flex", alignItems: "flex-start", gap: 14,
                     border: `2px solid ${selected ? cfg.color : C.border}`,
                     boxShadow: selected ? `0 0 16px ${cfg.color}40` : C.glow,
-                    width: "100%", textAlign: "left",
+                    width: "100%", textAlign: "left", borderRadius: 12,
+                    background: selected ? `${cfg.color}10` : `linear-gradient(180deg, ${C.card} 0%, ${C.card2} 100%)`,
                   }}>
                   <div style={{ fontSize: 28, lineHeight: 1, paddingTop: 2 }}>{cfg.icon}</div>
                   <div style={{ flex: 1 }}>
@@ -264,7 +268,7 @@ export function CharCreateScreen({ onCreated, onBack }: { onCreated: (c: Charact
         )}
 
         {step === "review" && cls && preview && (
-          <div style={{ ...panel, padding: 24, position: "relative" }}>
+          <div style={{ ...panel, padding: 24, position: "relative", borderRadius: 16, background: `linear-gradient(180deg, ${C.card} 0%, ${C.card2} 100%)` }}>
             <PixelCorners color={CLASS_CFG[cls].color} />
             <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 16 }}>
               <div style={{ width: 64, height: 64, overflow: "hidden", border: `3px solid ${CLASS_CFG[cls].color}`, flexShrink: 0 }}>

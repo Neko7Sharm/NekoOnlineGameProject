@@ -16,16 +16,18 @@ export function CharSelectScreen({ session, characters, onSelect, onCreateNew, o
   return (
     <div style={{ minHeight: "100vh", background: C.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, position: "relative", overflow: "hidden" }}>
       <div style={{ position: "absolute", inset: 0, opacity: 0.03, backgroundImage: `repeating-linear-gradient(0deg,transparent,transparent 37px,${C.blue} 38px),repeating-linear-gradient(90deg,transparent,transparent 37px,${C.blue} 38px)` }} />
+      <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse at 50% 10%, rgba(255,213,79,0.12) 0%, transparent 70%)` }} />
 
-      <div style={{ position: "relative", zIndex: 10, width: "100%", maxWidth: 560 }}>
+      <div style={{ position: "relative", zIndex: 10, width: "100%", maxWidth: 620 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <div>
-            <div style={{ fontFamily: PX, fontSize: 12, color: C.blue, letterSpacing: 1, marginBottom: 6 }}>CHOOSE HERO</div>
+            <div style={{ fontFamily: PX, fontSize: 11, color: C.gold, letterSpacing: 1, marginBottom: 6 }}>SELestia HORIZON</div>
+            <div style={{ fontFamily: PX, fontSize: 9, color: C.blue, letterSpacing: 1, marginBottom: 4 }}>CHOOSE HERO</div>
             <div style={{ fontFamily: NU, fontSize: 13, color: C.muted }}>
               Welcome, <span style={{ color: C.text }}>{session.username}</span> · {chars.length}/5 characters
             </div>
           </div>
-          <button onClick={onLogout} style={{ ...pixelBtn("ghost", true), display: "flex", alignItems: "center", gap: 6, color: C.red }}>
+          <button onClick={onLogout} style={{ ...pixelBtn("ghost", true), display: "flex", alignItems: "center", gap: 6, color: C.red, borderRadius: 10 }}>
             <LogOut className="w-3 h-3" />LOGOUT
           </button>
         </div>
@@ -39,7 +41,8 @@ export function CharSelectScreen({ session, characters, onSelect, onCreateNew, o
                   style={{
                     ...panel, padding: "14px 16px", cursor: "pointer",
                     display: "flex", alignItems: "center", gap: 14,
-                    flex: 1, textAlign: "left",
+                    flex: 1, textAlign: "left", borderRadius: 14,
+                    background: `linear-gradient(180deg, ${C.card} 0%, ${C.card2} 100%)`,
                     transition: "box-shadow 0.2s, border-color 0.2s",
                   }}
                   onMouseEnter={e => {
@@ -100,8 +103,8 @@ export function CharSelectScreen({ session, characters, onSelect, onCreateNew, o
           <button onClick={onCreateNew}
             style={{
               width: "100%", padding: "14px", cursor: "pointer",
-              background: "transparent", border: `2px dashed ${C.border}`,
-              color: C.muted, fontFamily: PX, fontSize: 8, letterSpacing: 1,
+              background: `linear-gradient(180deg, ${C.card} 0%, ${C.card2} 100%)`, border: `2px dashed ${C.border}`,
+              color: C.muted, fontFamily: PX, fontSize: 8, letterSpacing: 1, borderRadius: 12,
               display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
               transition: "border-color 0.2s, color 0.2s",
             }}
