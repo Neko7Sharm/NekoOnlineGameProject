@@ -9,6 +9,13 @@ import {
 import { dist } from "../../utils/dice";
 import type { MapGridProps } from "../../types/game";
 import townBg from "../../assets/town_map_bg.png";
+import tileGrass from "../../assets/tile_grass.png";
+import tilePath from "../../assets/tile_path.png";
+import tileTree from "../../assets/tile_tree.png";
+import bShop from "../../assets/b_shop.png";
+import bQuest from "../../assets/b_quest.png";
+import bInn from "../../assets/b_inn.png";
+import bStatue from "../../assets/b_statue.png";
 
 // Compute which grid tiles fall inside a cone pointing from player toward mouse
 function getConeTiles(playerPos: { x: number; y: number }, mouseX: number, mouseY: number, length: number): Set<string> {
@@ -128,17 +135,15 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
         @keyframes dnd-dissolve { 0%{opacity:1;filter:none;transform:scale(1)} 30%{opacity:0.8;filter:blur(0px) brightness(2);transform:scale(1.1)} 60%{opacity:0.4;filter:blur(2px) brightness(3);transform:scale(1.3)} 100%{opacity:0;filter:blur(6px) brightness(0);transform:scale(0.2)} }
         @keyframes dnd-aoe-pulse { 0%{opacity:0.3} 100%{opacity:0.7} }
       `}</style>
-      <div ref={gridRef}
-        onMouseMove={e => {
-          if (!gridRef.current) return;
-          const r = gridRef.current.getBoundingClientRect();
-          setMouseGrid({ x: e.clientX - r.left, y: e.clientY - r.top });
-        }}
-        style={{ 
-          position: "relative", width: COLS * CELL, height: ROWS * CELL, imageRendering: "pixelated",
-          backgroundImage: mode === "town" ? `url(${townBg})` : "none",
-          backgroundSize: "cover"
-        }}>
+        <div ref={gridRef}
+          onMouseMove={e => {
+            if (!gridRef.current) return;
+            const r = gridRef.current.getBoundingClientRect();
+            setMouseGrid({ x: e.clientX - r.left, y: e.clientY - r.top });
+          }}
+          style={{ 
+            position: "relative", width: COLS * CELL, height: ROWS * CELL, imageRendering: "pixelated",
+          }}>
         {/* Tiles */}
         {Array.from({ length: ROWS }, (_, y) =>
           Array.from({ length: COLS }, (_, x) => {
@@ -152,7 +157,16 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
             const isReachable = reachable.has(key);
             const isPlayer = x === pos.x && y === pos.y;
 
-            const bg = special?.color ? special.color + "50" : td.bg;
+            let cellBg = special?.color ? special.color + "50" : td.bg;
+            let tileImg = "none";
+            const type = mode === "town" ? (td as any).type : undefined;
+            if (mode === "town") {
+              if (type === "grass") {
+                tileImg = `radial-gradient(circle at 30% 30%, rgba(150, 200, 255, 0.6) 1px, transparent 4px), radial-gradient(circle at 70% 80%, rgba(200, 150, 255, 0.5) 1.5px, transparent 5px), #3a5c4a`;
+              }
+              else if (type === "path") tileImg = `url(${tilePath})`;
+              else if (type === "fence") tileImg = `repeating-linear-gradient(90deg, #3e261a 0px, #3e261a 4px, transparent 4px, transparent 8px), linear-gradient(0deg, transparent 40%, #2a1610 40%, #2a1610 60%, transparent 60%), #4a332a`;
+            }
 
             const inCone = aoeTiles.has(key);
             const isAoeCursor = inCone && isAoeSpell && combatMode === "spell";
@@ -170,7 +184,10 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
                 }}
                 style={{
                   position: "absolute", left: x * CELL, top: y * CELL, width: CELL, height: CELL,
-                  background: isFogged ? "#000" : bg,
+                  background: isFogged ? "#000" : (mode === "town" && tileImg.includes("gradient") ? tileImg : cellBg),
+                  backgroundImage: !isFogged && tileImg !== "none" && !tileImg.includes("gradient") ? tileImg : "none",
+                  backgroundSize: type === "fence" ? "19px 19px" : "380px 380px",
+                  backgroundPosition: `-${x * CELL}px -${y * CELL}px`,
                   opacity: isDimmed ? 0.4 : 1,
                   cursor: td.isWall || isFogged ? "default" : isAoeCursor ? "crosshair" : "pointer",
                   outline: isReachable ? `2px solid ${C.gold}` : "none",
@@ -179,11 +196,11 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
                 }}>
                 <div style={{ position: "absolute", inset: 0, border: mode === "town" ? "none" : "1px solid rgba(0,0,0,0.25)" }} />
 
-                {special && !isFogged && ["6,7", "23,7", "6,13", "23,13", "14,19", "15,19", "16,19"].includes(key) && (
+                {special && !isFogged && ["8,6", "9,6", "20,6", "21,6", "14,14", "15,14", "4,11", "22,19", "23,19", "24,19"].includes(key) && (
                   <div style={{ 
                     position: "absolute", inset: 2, display: "flex", alignItems: "center", justifyContent: "center", 
                     fontSize: 20, background: "rgba(0,0,0,0.5)", border: `2px solid ${special.color}`, 
-                    borderRadius: 6, opacity: 0.9, boxShadow: `0 0 8px ${special.color}`
+                    borderRadius: 6, opacity: 0.9, boxShadow: `0 0 8px ${special.color}`, zIndex: 6
                   }}>
                     {special.icon}
                   </div>
@@ -206,6 +223,24 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
               </div>
             );
           })
+        )}
+
+        {/* Building Overlays */}
+        {mode === "town" && (
+          <>
+            <img src={bInn} style={{ position: "absolute", left: 2 * CELL, top: 1 * CELL, width: 11 * CELL, height: 5 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "cover", borderRadius: "12px" }} alt="Inn" />
+            <img src={bShop} style={{ position: "absolute", left: 2 * CELL, top: 15 * CELL, width: 17 * CELL, height: 5 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "cover", borderRadius: "12px" }} alt="Shop" />
+            <img src={bQuest} style={{ position: "absolute", left: 18 * CELL, top: 1 * CELL, width: 11 * CELL, height: 5 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "cover", borderRadius: "12px" }} alt="Quest Guild" />
+            
+            {/* Statue with decorative bushes and lights */}
+            <div style={{ position: "absolute", left: 1 * CELL, top: 10 * CELL, width: 3 * CELL, height: 3 * CELL, pointerEvents: "none", zIndex: 5, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <div style={{ position: "absolute", inset: "-8px", borderRadius: "50%", background: "radial-gradient(circle, #2a472a 50%, #1a331a 100%)", border: "2px solid #112211" }} />
+              {/* Torches */}
+              <div style={{ position: "absolute", top: "10%", left: "50%", transform: "translate(-50%, -50%)", width: 12, height: 12, borderRadius: "50%", background: "#ffaa00", boxShadow: "0 0 15px 5px #ffaa00aa" }} />
+              <div style={{ position: "absolute", bottom: "10%", left: "50%", transform: "translate(-50%, 50%)", width: 12, height: 12, borderRadius: "50%", background: "#ffaa00", boxShadow: "0 0 15px 5px #ffaa00aa" }} />
+              <img src={bStatue} style={{ width: "100%", height: "100%", objectFit: "contain", transform: "rotate(270deg)", position: "relative" }} alt="Statue" />
+            </div>
+          </>
         )}
 
         {/* Monster tokens */}

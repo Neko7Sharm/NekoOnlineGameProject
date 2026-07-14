@@ -1,6 +1,7 @@
 import { Heart, Shield, Zap, RotateCcw, BookOpen } from "lucide-react";
 import { C, PX, NU, MO, pixelBtn } from "../constants/theme";
 import { CLASS_CFG } from "../constants/classes";
+import { COLS, ROWS } from "../constants/map";
 import { useGameEngine } from "../useGameEngine";
 import { HpBar } from "../components/ui/HpBar";
 import { GoldBadge } from "../components/ui/GoldBadge";
@@ -99,8 +100,8 @@ export default function App() {
              const mapScale = zoom;
              const charX = char.position.x * 38 + 19;
              const charY = char.position.y * 38 + 19;
-             const centerX = (20 * 38) / 2;
-             const centerY = (15 * 38) / 2;
+             const centerX = (COLS * 38) / 2;
+             const centerY = (ROWS * 38) / 2;
              const offsetX = centerX - charX;
              const offsetY = centerY - charY;
              return (

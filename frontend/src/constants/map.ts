@@ -9,53 +9,68 @@ export const MOVE_SQUARES = 4;
 export const SIGHT = 6;
 
 // Entry / exit positions
-export const TOWN_ENTER = { x: 15, y: 10 }; // Start in the middle
-export const DUNGEON_ENTER = { x: 15, y: 19 };
-export const DUNGEON_EXIT = { x: 14, y: 0 };
+export const TOWN_ENTER = { x: 15, y: 10 }; // Start in the middle of the central path
+export const DUNGEON_ENTER = { x: 22, y: 19 }; // Bottom exit
+export const DUNGEON_EXIT = { x: 22, y: 0 };
 
-// Town special tiles
+// Town special tiles (Interactive zones moved 1 tile into the path)
 export const TOWN_SPECIAL: Record<string, { label: string; type: string; icon: string; prompt: string; color: string }> = {
-  // --- 🏪 General Store (Top-Left) ---
-  "6,7": { label: "General Store", type: "shop", icon: "🏪", prompt: "Enter the General Store?", color: "#c45000" },
+  // --- 🏨 Hearthstone Inn ---
+  "8,6": { label: "Hearthstone Inn", type: "inn", icon: "🏨", prompt: "Enter the Hearthstone Inn?", color: "#8B5A2B" },
+  "9,6": { label: "Hearthstone Inn", type: "inn", icon: "🏨", prompt: "Enter the Hearthstone Inn?", color: "#8B5A2B" },
 
-  // --- 📋 Quest Board (Top-Right) ---
-  "23,7": { label: "Quest Board", type: "quest", icon: "📋", prompt: "Check the Quest Board?", color: "#1e4aaa" },
+  // --- 📋 Quest Board ---
+  "20,6": { label: "Quest Board", type: "quest", icon: "📋", prompt: "Check the Quest Board?", color: "#1e4aaa" },
+  "21,6": { label: "Quest Board", type: "quest", icon: "📋", prompt: "Check the Quest Board?", color: "#1e4aaa" },
 
-  // --- 🏨 Hearthstone Inn (Bottom-Left) ---
-  "6,13": { label: "Hearthstone Inn", type: "inn", icon: "🏨", prompt: "Enter the Hearthstone Inn?", color: "#8B5A2B" },
+  // --- 🏪 General Store ---
+  "14,14": { label: "General Store", type: "shop", icon: "🏪", prompt: "Enter the General Store?", color: "#c45000" },
+  "15,14": { label: "General Store", type: "shop", icon: "🏪", prompt: "Enter the General Store?", color: "#c45000" },
 
-  // --- ⛪ Sacred Shrine (Bottom-Right) ---
-  "23,13": { label: "Sacred Shrine", type: "shrine", icon: "⛪", prompt: "Enter the Sacred Shrine?", color: "#D4AF37" },
+  // --- ⛪ Selenia Statue ---
+  "4,11": { label: "Sacred Shrine", type: "shrine", icon: "⛪", prompt: "Pray at the Statue?", color: "#FFD700" },
 
-  // --- 🗺️ Town Gate (Exit) ---
-  "14,19": { label: "Town Gate", type: "exit", icon: "🗺️", prompt: "Leave Millhaven?", color: "#1a5a1a" },
-  "15,19": { label: "Town Gate", type: "exit", icon: "🗺️", prompt: "Leave Millhaven?", color: "#1a5a1a" },
-  "16,19": { label: "Town Gate", type: "exit", icon: "🗺️", prompt: "Leave Millhaven?", color: "#1a5a1a" },
+  // --- 🚪 Exit ---
+  "22,19": { label: "Town Exit", type: "exit", icon: "🚪", prompt: "Leave Town and enter the Dungeon?", color: "#4caf50" },
+  "23,19": { label: "Town Exit", type: "exit", icon: "🚪", prompt: "Leave Town and enter the Dungeon?", color: "#4caf50" },
+  "24,19": { label: "Town Exit", type: "exit", icon: "🚪", prompt: "Leave Town and enter the Dungeon?", color: "#4caf50" }
 };
 
 // ─────────────────────────────────────────────────
 // TILE GENERATORS
 // ─────────────────────────────────────────────────
 
-export function getTownTile(x: number, y: number): { bg: string; isWall: boolean } {
-  // Edge of map is always a wall, except the exit gate at bottom
-  if ((x === 0 || y === 0 || x === COLS - 1 || y === ROWS - 1) && y !== 19) return { bg: "transparent", isWall: true };
+export function getTownTile(x: number, y: number): { bg: string; isWall: boolean, type: "grass" | "path" | "fence" } {
+  // Map Boundaries
+  if (x === 0 || y === 0 || x === COLS - 1 || y === ROWS - 1) {
+    if (x >= 20 && x <= 24 && y === 19) return { bg: "transparent", isWall: false, type: "path" }; // Exit path
+    return { bg: "transparent", isWall: true, type: "fence" };
+  }
   
-  // Define building obstacles (walls) - leave the TOWN_SPECIAL interaction tiles walkable
+  // --- BUILDINGS (Walls) ---
+  // Inn (Top-Left Rectangle)
+  if (x >= 2 && x <= 12 && y >= 1 && y <= 5) return { bg: "transparent", isWall: true, type: "grass" };
+
+  // Quest (Top-Right Rectangle)
+  if (x >= 18 && x <= 28 && y >= 1 && y <= 5) return { bg: "transparent", isWall: true, type: "grass" };
+
+  // Shop (Bottom-Left Rectangle)
+  if (x >= 2 && x <= 18 && y >= 15 && y <= 19) return { bg: "transparent", isWall: true, type: "grass" };
+
+  // Statue (Middle-Left)
+  if (x >= 1 && x <= 3 && y >= 10 && y <= 12) return { bg: "transparent", isWall: true, type: "grass" };
+
+  // --- PATHS ---
+  // Main central block
+  if (x >= 6 && x <= 24 && y >= 6 && y <= 14) return { bg: "transparent", isWall: false, type: "path" };
   
-  // Shop is [2-9, 1-6]
-  if (x >= 2 && x <= 9 && y >= 1 && y <= 6) return { bg: "transparent", isWall: true };
+  // Path extending down (exit)
+  if (x >= 20 && x <= 24 && y >= 15 && y <= 19) return { bg: "transparent", isWall: false, type: "path" };
   
-  // Quest Guild is [20-27, 1-6]
-  if (x >= 20 && x <= 27 && y >= 1 && y <= 6) return { bg: "transparent", isWall: true };
-  
-  // Inn is [2-9, 14-18]
-  if (x >= 2 && x <= 9 && y >= 14 && y <= 18) return { bg: "transparent", isWall: true };
-  
-  // Shrine is [20-27, 14-18]
-  if (x >= 20 && x <= 27 && y >= 14 && y <= 18) return { bg: "transparent", isWall: true };
-  
-  return { bg: "transparent", isWall: false };
+  // Path extending left to Statue
+  if (x >= 4 && x <= 5 && y >= 10 && y <= 12) return { bg: "transparent", isWall: false, type: "path" };
+
+  return { bg: "transparent", isWall: false, type: "grass" };
 }
 
 export function getDungeonTile(x: number, y: number): { bg: string; isWall: boolean } {
