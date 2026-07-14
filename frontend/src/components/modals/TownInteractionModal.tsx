@@ -1,11 +1,18 @@
 // frontend/src/components/modals/TownInteractionModal.tsx
-import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import { useState, useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import { C, PX, NU, MO, pixelBtn } from "../../constants/theme";
-import { PixelCorners } from "../ui/PixelCorners";
 import { getRandomDialogue } from "../../constants/dialogues";
 import type { Character } from "../../types/game";
+
+// Import ภาพ NPC จาก assets (เหมือน ShopModal)
+import npc01Img from "../../assets/npc/npc_01.png";
+import npc02Img from "../../assets/npc/npc_02.png";
+import npc03Img from "../../assets/npc/npc_03.png";
+import npcB01Img from "../../assets/npc/npc_b01.png";
+import npcB02Img from "../../assets/npc/npc_b02.png";
+import npcB03Img from "../../assets/npc/npc_b03.png";
+import npcB04Img from "../../assets/npc/npc_b04.png";
 
 const EXP_THRESHOLDS: Record<number, number> = {
   1: 500, 2: 1000, 3: 2000, 4: 4000, 5: 8000,
@@ -25,56 +32,129 @@ export function TownInteractionModal({
   const [animPhase, setAnimPhase] = useState<"idle" | "accepting" | "completing" | "canceling">("idle");
   const [tempStats, setTempStats] = useState(character.stats);
 
-  // สุ่มบทพูดเมื่อเปิด Modal
+  // Animation states (เหมือน ShopModal)
+  const [npcEntered, setNpcEntered] = useState(false);
+  const [npcExiting, setNpcExiting] = useState(false);
+  const [npcBounce, setNpcBounce] = useState(false);
+  const [panelVisible, setPanelVisible] = useState(false);
+  const [panelExiting, setPanelExiting] = useState(false);
+  const [bubbleShow, setBubbleShow] = useState(false);
+
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  function after(ms: number, fn: () => void) {
+    const t = setTimeout(fn, ms);
+    timersRef.current.push(t);
+    return t;
+  }
+
+  // Initial animation (เหมือน ShopModal)
   useEffect(() => {
-    setDialogue(getRandomDialogue(type, "greetings"));
-    setNpcMood("talking");
-    const timer = setTimeout(() => setNpcMood("idle"), 3000);
-    return () => clearTimeout(timer);
+    after(60, () => setNpcEntered(true));
+    after(480, () => setPanelVisible(true));
+    after(800, () => {
+      setNpcMood("talking");
+      setDialogue(getRandomDialogue(type, "greetings"));
+      setBubbleShow(true);
+    });
+    after(4200, () => setBubbleShow(false));
+    after(4700, () => { setNpcMood("idle"); setDialogue(""); });
+    return () => { timersRef.current.forEach(clearTimeout); };
   }, [type]);
 
-  // เลือกภาพ NPC (แก้ไขให้ปลอดภัย ไม่เรียกภาพผิดประเภท)
+  // Idle dialogue loop (เหมือน ShopModal)
+  useEffect(() => {
+    if (npcMood === "idle") {
+      const waitTime = 6000 + Math.random() * 8000;
+      const t = setTimeout(() => {
+        setNpcMood("talking");
+        setDialogue(getRandomDialogue(type, "greetings"));
+        setBubbleShow(true);
+        after(5000, () => setBubbleShow(false));
+        after(5500, () => { setNpcMood("idle"); setDialogue(""); });
+      }, waitTime);
+      timersRef.current.push(t);
+      return () => clearTimeout(t);
+    }
+  }, [npcMood, type]);
+
+  // เลือกภาพ NPC
   const getNpcImage = () => {
-    const prefix = type === "quest" ? "npc_b" : "npc_0";
-    if (npcMood === "happy") return `/${prefix}2.png`;
-    if (npcMood === "reluctant") return type === "quest" ? "/npc_b04.png" : `/${prefix}3.png`;
-    if (npcMood === "talking") return `/${prefix}1.png`;
-    return `/${prefix}3.png`;
+    if (type === "quest") {
+      if (npcMood === "happy") return npcB02Img;
+      if (npcMood === "reluctant") return npcB04Img;
+      if (npcMood === "talking") return npcB01Img;
+      return npcB03Img;
+    } else {
+      if (npcMood === "happy") return npc02Img;
+      if (npcMood === "talking") return npc01Img;
+      return npc03Img;
+    }
   };
 
   // ธีมสี
   const theme = type === "shrine" 
-    ? { bg: "#F5F5FA", border: "#D4AF37", accent: "#D4AF37" }
-    : { bg: "#FFF8E7", border: "#8B5A2B", accent: "#8B5A2B" };
+    ? { 
+        bg: "#F5F5FA", 
+        border: "#D4AF37", 
+        accent: "#D4AF37",
+        wood1: "#8B7355",
+        wood2: "#A08060",
+        wood3: "#D4AF37",
+        cream: "#FAFAFA"
+      }
+    : { 
+        bg: "#FFF8E7", 
+        border: "#8B5A2B", 
+        accent: "#8B5A2B",
+        wood1: "#3d2006",
+        wood2: "#6b3a1f",
+        wood3: "#a0622a",
+        cream: "#fdf4e7"
+      };
 
-  // ปรับ Stat พร้อมตรวจสอบ Status Points
   const handleStatChange = (stat: keyof typeof character.stats, delta: number) => {
     const currentVal = tempStats[stat];
     const baseVal = character.stats[stat];
-
-    // ป้องกันการลดต่ำกว่า base - 8
     if (delta < 0 && currentVal + delta < baseVal - 8) return;
-
-    // ป้องกันการเพิ่มถ้าไม่มี Status Points เหลือ
     if (delta > 0 && (character.statusPoints || 0) <= 0) return;
-
     setTempStats(prev => ({ ...prev, [stat]: prev[stat] + delta }));
   };
 
   const triggerAction = (action: string, data?: any, successMood: typeof npcMood = "happy", dialogueKey?: string) => {
-    if (successMood) setNpcMood(successMood);
-    if (dialogueKey) setDialogue(getRandomDialogue(type, dialogueKey));
+    timersRef.current.forEach(clearTimeout);
+    timersRef.current = [];
     
-    // หน่วงเวลาเล็กน้อยให้ Animation เริ่มก่อน แล้วค่อยส่ง Action ไปที่ App.tsx
+    if (successMood) setNpcMood(successMood);
+    if (dialogueKey) {
+      setBubbleShow(false);
+      after(100, () => {
+        setNpcBounce(true);
+        setDialogue(getRandomDialogue(type, dialogueKey));
+        setBubbleShow(true);
+      });
+      after(700, () => setNpcBounce(false));
+      after(4700, () => setBubbleShow(false));
+      after(5200, () => { setNpcMood("idle"); setDialogue(""); });
+    }
+    
     setTimeout(() => {
       onAction(action, data);
-      setTimeout(() => {
-        setAnimPhase("idle");
-        setNpcMood("idle");
-        setDialogue(getRandomDialogue(type, "greetings"));
-      }, 2000);
     }, 400);
   };
+
+  function handleClose() {
+    timersRef.current.forEach(clearTimeout);
+    timersRef.current = [];
+    setNpcMood("talking");
+    setDialogue("Come back soon, adventurer!");
+    setBubbleShow(true);
+    after(200, () => setPanelExiting(true));
+    after(1100, () => setBubbleShow(false));
+    after(1400, () => setNpcExiting(true));
+    after(2100, () => onClose());
+  }
+
+  const npcSrc = getNpcImage();
 
   const renderContent = () => {
     if (type === "inn") {
@@ -86,12 +166,12 @@ export function TownInteractionModal({
               padding: 20, 
               textAlign: "center", 
               cursor: "pointer", 
-              background: theme.bg, 
+              background: theme.cream, 
               border: `2px solid ${theme.border}` 
             }}
             onClick={() => triggerAction("longRest", null, "happy", "restSuccess")}
           >
-            <div style={{ fontFamily: PX, fontSize: 12, marginBottom: 6, letterSpacing: 1 }}>🛏️ LONG REST</div>
+            <div style={{ fontFamily: PX, fontSize: 12, marginBottom: 6, letterSpacing: 1 }}>️ LONG REST</div>
             <div style={{ fontFamily: MO, fontSize: 10, color: "#B8860B" }}>Cost: 100 Gold</div>
             <div style={{ fontFamily: NU, fontSize: 9, color: "#6B4423", marginTop: 8 }}>Restores 100% HP & MP</div>
           </div>
@@ -172,43 +252,6 @@ export function TownInteractionModal({
                 CANCEL
               </button>
             </div>
-            
-            {/* Animation: Quest Paper Flying Out */}
-            <AnimatePresence>
-              {animPhase === "accepting" && (
-                <motion.div
-                  initial={{ opacity: 1, y: 0, scale: 1, rotate: 0 }}
-                  animate={{ opacity: 0, y: -150, scale: 0.4, rotate: 25 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.8, ease: "easeInOut" }}
-                  style={{
-                    position: "absolute", inset: 0, background: "#FDF5E6", border: `2px solid ${theme.border}`,
-                    display: "flex", alignItems: "center", justifyContent: "center", fontFamily: PX, fontSize: 10, color: "#5C4033", zIndex: 10
-                  }}
-                >
-                  📜 QUEST SCROLL
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Animation: Stamp Slamming Down */}
-            <AnimatePresence>
-              {animPhase === "completing" && (
-                <motion.div
-                  initial={{ scale: 3, opacity: 0, rotate: -30 }}
-                  animate={{ scale: 1, opacity: 1, rotate: -15 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ type: "spring", stiffness: 300, damping: 15 }}
-                  style={{
-                    position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
-                    border: "4px solid #DC143C", color: "#DC143C", fontFamily: PX, fontSize: 20, padding: "6px 16px",
-                    borderRadius: 6, zIndex: 20, background: "rgba(255,255,255,0.9)", boxShadow: "0 4px 10px rgba(0,0,0,0.2)"
-                  }}
-                >
-                  COMPLETE
-                </motion.div>
-              )}
-            </AnimatePresence>
           </div>
         </div>
       );
@@ -216,67 +259,121 @@ export function TownInteractionModal({
   };
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 9000, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.75)" }}>
-      <motion.div 
-        initial={{ scale: 0.95, opacity: 0 }} 
-        animate={{ scale: 1, opacity: 1 }}
-        style={{ 
-          display: "flex", width: 680, maxHeight: "85vh", background: theme.bg, 
-          border: `3px solid ${theme.border}`, boxShadow: type === "shrine" ? "0 0 30px rgba(212, 175, 55, 0.3)" : "0 0 20px rgba(0,0,0,0.5)", 
-          position: "relative", overflow: "hidden" 
-        }}
-      >
-        <PixelCorners color={theme.border} size={6} />
-        
-        {/* LEFT: NPC + Speech Bubble */}
-        <div style={{ 
-          width: "45%", padding: 32, display: "flex", flexDirection: "column", alignItems: "center", 
-          borderRight: `2px solid ${theme.border}`, background: "rgba(0,0,0,0.05)",
-          backgroundImage: type === "shrine" ? "linear-gradient(to bottom, rgba(212,175,55,0.1), transparent)" : "none"
-        }}>
-          <motion.div
-            animate={
-              npcMood === "happy" ? { y: [0, -15, 0] } : 
-              npcMood === "reluctant" ? { x: [-5, 5, -5, 5, 0], scale: 0.95 } : 
-              npcMood === "talking" ? { y: [0, -3, 0] } : {}
-            }
-            transition={{ duration: npcMood === "happy" ? 0.4 : 0.3 }}
-            style={{ 
-              width: 110, height: 110, marginBottom: 20, 
-              backgroundImage: `url(${getNpcImage()})`, 
-              backgroundSize: "contain", backgroundRepeat: "no-repeat", backgroundPosition: "center" 
-            }}
-          />
-          
-          <div style={{ 
-            background: "#FFFFFF", padding: 20, borderRadius: 8, border: `2px solid ${theme.border}`,
-            fontFamily: NU, fontSize: 12, color: "#333", textAlign: "center", lineHeight: 1.6, minHeight: 100,
-            display: "flex", alignItems: "center", justifyContent: "center", position: "relative",
-            boxShadow: "0 4px 6px rgba(0,0,0,0.05)"
-          }}>
-            {/* ลูกศรชี้ไปทาง NPC (ด้านซ้าย) */}
-            <div style={{ position: "absolute", left: -10, top: "50%", transform: "translateY(-50%)", width: 0, height: 0, borderTop: "10px solid transparent", borderBottom: "10px solid transparent", borderRight: `10px solid ${theme.border}` }} />
-            <div style={{ position: "absolute", left: -7, top: "50%", transform: "translateY(-50%)", width: 0, height: 0, borderTop: "8px solid transparent", borderBottom: "8px solid transparent", borderRight: "8px solid #FFFFFF" }} />
-            
-            <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} key={dialogue}>
-              "{dialogue}"
-            </motion.span>
-            </div>
-        </div>
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 9000,
+      display: "flex", alignItems: "stretch",
+      background: "rgba(20, 10, 4, 0.78)",
+      backdropFilter: "blur(3px)",
+    }}>
+      <style>{`
+        @keyframes town-npc-in { 0%{transform:translateX(-115%)} 72%{transform:translateX(6px)} 100%{transform:translateX(0)} }
+        @keyframes town-npc-out { 0%{transform:translateX(0)} 100%{transform:translateX(-115%)} }
+        @keyframes town-panel-in { 0%{transform:translateX(70px);opacity:0} 70%{transform:translateX(-4px);opacity:1} 100%{transform:translateX(0);opacity:1} }
+        @keyframes town-panel-out { 0%{transform:translateX(0);opacity:1} 100%{transform:translateX(80px);opacity:0} }
+        @keyframes npc-breathe { 0%,100%{transform:translateX(-50%) translateY(0px)} 50%{transform:translateX(-50%) translateY(-7px)} }
+        @keyframes npc-bounce-once { 0%{transform:translateX(-50%) translateY(0px) scale(1)} 25%{transform:translateX(-50%) translateY(-22px) scale(1.04)} 55%{transform:translateX(-50%) translateY(6px) scale(0.97)} 75%{transform:translateX(-50%) translateY(-8px) scale(1.01)} 100%{transform:translateX(-50%) translateY(0px) scale(1)} }
+        @keyframes bubble-pop-in { 0%{transform:scale(0.5) translateY(8px);opacity:0} 70%{transform:scale(1.04) translateY(-2px);opacity:1} 100%{transform:scale(1) translateY(0);opacity:1} }
+        @keyframes bubble-fade-out { 0%{opacity:1;transform:scale(1)} 100%{opacity:0;transform:scale(0.85) translateY(-4px)} }
+      `}</style>
 
-        {/* RIGHT: UI Content */}
-        <div style={{ width: "55%", display: "flex", flexDirection: "column" }}>
-          <div style={{ padding: 16, borderBottom: `2px solid ${theme.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(0,0,0,0.03)" }}>
-            <span style={{ fontFamily: PX, fontSize: 11, color: theme.accent, letterSpacing: 1 }}>
-              {type === "inn" ? "🏨 HEARTHSTONE INN" : type === "shrine" ? "⛪ SACRED SHRINE" : "📋 QUEST BOARD"}
-            </span>
-            <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#888" }}>
-              <X className="w-6 h-6" />
+      {/* LEFT PANEL: NPC */}
+      <div style={{
+        width: "25%", flexShrink: 0, position: "relative",
+        background: type === "shrine" 
+          ? `linear-gradient(180deg, #2a2040 0%, #3d3060 50%, #4d4080 100%)`
+          : `linear-gradient(180deg, #1a0c04 0%, #2d1606 50%, #3d2008 100%)`,
+        borderRight: `4px solid ${theme.wood2}`,
+        overflow: "hidden",
+        animation: npcExiting ? "town-npc-out 0.7s cubic-bezier(0.4, 0, 0.8, 0.4) forwards"
+          : npcEntered ? "town-npc-in 0.75s cubic-bezier(0.34, 1.4, 0.64, 1) forwards" : "none",
+        transform: "translateX(-115%)",
+      }}>
+        <img src={npcSrc} alt="NPC"
+          style={{
+            position: "absolute", bottom: 0, left: "50%",
+            transform: "translateX(-50%)", width: "100%", height: "auto",
+            imageRendering: "pixelated", display: "block",
+            animation: npcBounce ? "npc-bounce-once 0.6s cubic-bezier(0.34, 1.5, 0.64, 1) forwards" : "npc-breathe 3.8s ease-in-out 0.5s infinite",
+          }} />
+
+        {bubbleText && (
+          <div style={{
+            position: "absolute", top: "6%", left: 10, width: "calc(100% - 20px)", zIndex: 6,
+            animation: bubbleShow ? "bubble-pop-in 0.4s cubic-bezier(0.34,1.5,0.64,1) forwards" : "bubble-fade-out 0.5s ease forwards",
+            pointerEvents: "none",
+          }}>
+            <div style={{
+              background: theme.cream, border: `3px solid ${theme.wood3}`, borderRadius: 12,
+              padding: "10px 12px", fontFamily: NU, fontSize: 12, color: theme.wood1, lineHeight: 1.5,
+              boxShadow: `0 4px 16px rgba(100,50,0,0.35)`, position: "relative",
+            }}>
+              {dialogue}
+              <div style={{ position: "absolute", bottom: -10, left: "50%", marginLeft: -7, width: 0, height: 0, borderLeft: "7px solid transparent", borderRight: "7px solid transparent", borderTop: `10px solid ${theme.wood3}` }} />
+              <div style={{ position: "absolute", bottom: -6, left: "50%", marginLeft: -5, width: 0, height: 0, borderLeft: "5px solid transparent", borderRight: "5px solid transparent", borderTop: `8px solid ${theme.cream}` }} />
+            </div>
+          </div>
+        )}
+
+        <div style={{
+          position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 5,
+          padding: "10px 12px",
+          background: `linear-gradient(180deg, ${theme.wood2}ee 0%, ${theme.wood1}f8 100%)`,
+          borderTop: `3px solid ${theme.wood3}`,
+          boxShadow: `0 -4px 16px rgba(0,0,0,0.6)`, textAlign: "center",
+        }}>
+          <div style={{ fontFamily: PX, fontSize: 9, color: theme.cream, letterSpacing: 2, textShadow: `0 1px 3px ${theme.wood1}` }}>
+            {type === "inn" ? "INNKEEPER" : type === "shrine" ? "PRIESTESS" : "QUEST GIVER"}
+          </div>
+          <div style={{ fontFamily: NU, fontSize: 10, color: theme.wood3, marginTop: 2 }}>
+            {type === "inn" ? "Hearthstone Inn" : type === "shrine" ? "Sacred Shrine" : "Quest Board"}
+          </div>
+        </div>
+      </div>
+
+      {/* RIGHT PANEL: Content */}
+      <div style={{
+        flex: 1, display: "flex", flexDirection: "column",
+        background: theme.bg, position: "relative", overflow: "hidden",
+        animation: panelExiting ? "town-panel-out 0.6s cubic-bezier(0.4, 0, 0.8, 0.4) forwards"
+          : panelVisible ? "town-panel-in 0.65s cubic-bezier(0.34, 1.2, 0.64, 1) forwards" : "none",
+        opacity: panelVisible ? 1 : 0,
+        transform: panelVisible ? "translateX(0)" : "translateX(70px)",
+      }}>
+        <div style={{
+          position: "relative", zIndex: 1,
+          background: `linear-gradient(180deg, ${theme.wood2} 0%, ${theme.wood1} 100%)`,
+          borderBottom: `4px solid ${theme.wood1}`, boxShadow: `0 4px 12px rgba(0,0,0,0.4)`,
+        }}>
+          <div style={{ height: 8, background: `repeating-linear-gradient(90deg, ${theme.wood3} 0px, ${theme.wood3} 12px, ${theme.wood2} 12px, ${theme.wood2} 24px)` }} />
+          <div style={{ padding: "12px 20px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div>
+              <div style={{ fontFamily: PX, fontSize: 12, color: theme.cream, letterSpacing: 2, textShadow: `0 2px 4px ${theme.wood1}` }}>
+                {type === "inn" ? "🏨 HEARTHSTONE INN" : type === "shrine" ? "⛪ SACRED SHRINE" : " QUEST BOARD"}
+              </div>
+              <div style={{ fontFamily: NU, fontSize: 11, color: theme.wood3, marginTop: 3 }}>
+                {type === "inn" ? "Rest and recover" : type === "shrine" ? "Divine blessings await" : "Adventures await"}
+              </div>
+            </div>
+            <button onClick={handleClose} style={{
+              background: `linear-gradient(180deg, ${theme.wood3} 0%, ${theme.wood2} 100%)`,
+              border: `2px solid ${theme.wood1}`, cursor: "pointer", color: theme.cream, width: 32, height: 32,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              boxShadow: `inset 0 1px 0 ${theme.wood2}60, 0 2px 4px rgba(0,0,0,0.4)`, transition: "transform 0.1s",
+            }}
+              onMouseEnter={e => e.currentTarget.style.transform = "scale(0.95)"}
+              onMouseLeave={e => e.currentTarget.style.transform = ""}>
+              <X className="w-4 h-4" />
             </button>
           </div>
+        </div>
+
+        <div style={{
+          flex: 1, overflowY: "auto", padding: "16px 20px",
+          position: "relative", zIndex: 1,
+        }}>
           {renderContent()}
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 }
