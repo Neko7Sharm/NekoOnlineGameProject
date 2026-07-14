@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type {
-  GameState, Character, Item, CombatState, CombatModeT, VisualEffect, DiceRollDisplay, Screen, Stats,
+  GameState, Character, Item, CombatState, CombatModeT, VisualEffect, DiceRollDisplay, Screen, Stats, Quest
 } from "./types/game";
 import { C } from "./constants/theme";
 import { CLASS_CFG, CLASS_SPELLS, WIZARD_SPELL_CHOICES } from "./constants/classes";
 import { SHOP_ITEMS, BRANCH_ITEM } from "./constants/items";
 import { NPC_CHAT } from "./constants/quests";
-import { COLS, ROWS, MOVE_SQUARES, SIGHT, TOWN_ENTER, DUNGEON_ENTER, DUNGEON_EXIT, TOWN_SPECIAL } from "./constants/map";
+import {
+  COLS, ROWS, MOVE_SQUARES, SIGHT, TOWN_ENTER, DUNGEON_ENTER, DUNGEON_EXIT, TOWN_SPECIAL, isWalkable
+} from "./constants/map";
 import { gid, d20, getMod, dist, tnow, rollDice, getSpellcastingMod, calcAC } from "./utils/dice";
 import { loadState, persist } from "./storage";
 import { genMonsters, genQuests } from "./game/character";
@@ -30,6 +32,7 @@ export function useGameEngine() {
   const [dyingMonsters, setDyingMonsters] = useState<Set<string>>(new Set());
   const [hitTokenIds, setHitTokenIds] = useState<Set<string>>(new Set());
   const [selectedSpell, setSelectedSpell] = useState<string | null>(null);
+  const [movingPath, setMovingPath] = useState<{x:number, y:number}[]>([]);
   const [pendingBombItemId, setPendingBombItemId] = useState<string | null>(null);
   const [diceRolls, setDiceRolls] = useState<DiceRollDisplay[]>([]);
   const [battleStart, setBattleStart] = useState(false);
@@ -739,26 +742,74 @@ export function useGameEngine() {
       return;
     }
     if (combat.active) return;
-
+    
     const key = `${x},${y}`;
-    if (screen === "town") {
-      const special = TOWN_SPECIAL[key];
-      if (special) { setSpecialDialog({ x, y, tile: special }); return; }
-    }
-    if (screen === "dungeon") {
-      if (x === DUNGEON_ENTER.x && y === DUNGEON_ENTER.y) {
-        setSpecialDialog({ x, y, tile: { label: "Exit Dungeon", type: "exit", icon: "⬆️", prompt: "Leave the dungeon via the entrance?", color: "#1a5a1a" } });
-        return;
-      }
-      if (x === DUNGEON_EXIT.x && y === DUNGEON_EXIT.y) {
-        setSpecialDialog({ x, y, tile: { label: "Dungeon Exit", type: "exit", icon: "🚪", prompt: "Leave the dungeon and return to the World Map?", color: "#1a5a1a" } });
-        return;
-      }
-      revealFog({ x, y });
-    }
 
-    updateChar(char.id, { position: { x, y } });
+    // Click pathfinding
+    const start = char.position;
+    const end = { x, y };
+    const queue = [[start]];
+    const visited = new Set([`${start.x},${start.y}`]);
+    const dirs = [[0,1], [0,-1], [1,0], [-1,0]];
+    let foundPath: {x:number, y:number}[] = [];
+    
+    while (queue.length > 0) {
+      const path = queue.shift()!;
+      const curr = path[path.length - 1];
+      if (curr.x === end.x && curr.y === end.y) {
+        foundPath = path.slice(1);
+        break;
+      }
+      for (const [dx, dy] of dirs) {
+        const nx = curr.x + dx;
+        const ny = curr.y + dy;
+        const nKey = `${nx},${ny}`;
+        if (!visited.has(nKey) && isWalkable(screen as "town" | "dungeon", nx, ny)) {
+          visited.add(nKey);
+          queue.push([...path, {x: nx, y: ny}]);
+        }
+      }
+    }
+    
+    if (foundPath.length > 0) {
+      setMovingPath(foundPath);
+    }
   }
+
+  // Path execution
+  useEffect(() => {
+    if (movingPath.length > 0 && !combat.active && char) {
+      const timer = setTimeout(() => {
+        const nextPos = movingPath[0];
+        
+        // Check triggers
+        if (screen === "town") {
+          const special = TOWN_SPECIAL[`${nextPos.x},${nextPos.y}`];
+          if (special) {
+            setSpecialDialog({ x: nextPos.x, y: nextPos.y, tile: special });
+            setMovingPath([]);
+            return;
+          }
+        } else if (screen === "dungeon") {
+          if (nextPos.x === DUNGEON_ENTER.x && nextPos.y === DUNGEON_ENTER.y) {
+            setSpecialDialog({ x: nextPos.x, y: nextPos.y, tile: { label: "Exit Dungeon", type: "exit", icon: "⬆️", prompt: "Leave the dungeon via the entrance?", color: "#1a5a1a" } });
+            setMovingPath([]);
+            return;
+          }
+          if (nextPos.x === DUNGEON_EXIT.x && nextPos.y === DUNGEON_EXIT.y) {
+            setSpecialDialog({ x: nextPos.x, y: nextPos.y, tile: { label: "Dungeon Exit", type: "exit", icon: "🚪", prompt: "Leave the dungeon and return to the World Map?", color: "#1a5a1a" } });
+            setMovingPath([]);
+            return;
+          }
+        }
+
+        updateChar(char.id, { position: nextPos });
+        if (screen === "dungeon") revealFog(nextPos);
+        setMovingPath(prev => prev.slice(1));
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [movingPath, combat.active, screen, char?.id]);
 
   // Keyboard movement
   useEffect(() => {
@@ -785,7 +836,30 @@ export function useGameEngine() {
       const newY = Math.max(0, Math.min(ROWS - 1, char.position.y + dy));
 
       if (newX === char.position.x && newY === char.position.y) return;
-      handleTileClick(newX, newY);
+      if (!isWalkable(screen as "town" | "dungeon", newX, newY)) return; // WASD collision check
+
+      setMovingPath([]); // Cancel click path if WASD used
+
+      // Check special triggers
+      if (screen === "town") {
+        const special = TOWN_SPECIAL[`${newX},${newY}`];
+        if (special) {
+          setSpecialDialog({ x: newX, y: newY, tile: special });
+          return;
+        }
+      } else if (screen === "dungeon") {
+        if (newX === DUNGEON_ENTER.x && newY === DUNGEON_ENTER.y) {
+          setSpecialDialog({ x: newX, y: newY, tile: { label: "Exit Dungeon", type: "exit", icon: "⬆️", prompt: "Leave the dungeon via the entrance?", color: "#1a5a1a" } });
+          return;
+        }
+        if (newX === DUNGEON_EXIT.x && newY === DUNGEON_EXIT.y) {
+          setSpecialDialog({ x: newX, y: newY, tile: { label: "Dungeon Exit", type: "exit", icon: "🚪", prompt: "Leave the dungeon and return to the World Map?", color: "#1a5a1a" } });
+          return;
+        }
+      }
+
+      updateChar(char.id, { position: { x: newX, y: newY } });
+      if (screen === "dungeon") revealFog({ x: newX, y: newY });
     }
 
     window.addEventListener("keydown", handleKeyDown);

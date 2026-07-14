@@ -179,8 +179,12 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
                 }}>
                 <div style={{ position: "absolute", inset: 0, border: mode === "town" ? "none" : "1px solid rgba(0,0,0,0.25)" }} />
 
-                {special && !isFogged && ["4,2", "13,2", "9,13", "2,8", "16,8"].includes(key) && (
-                  <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, opacity: 0.8 }}>
+                {special && !isFogged && ["6,7", "23,7", "6,13", "23,13", "14,19", "15,19", "16,19"].includes(key) && (
+                  <div style={{ 
+                    position: "absolute", inset: 2, display: "flex", alignItems: "center", justifyContent: "center", 
+                    fontSize: 20, background: "rgba(0,0,0,0.5)", border: `2px solid ${special.color}`, 
+                    borderRadius: 6, opacity: 0.9, boxShadow: `0 0 8px ${special.color}`
+                  }}>
                     {special.icon}
                   </div>
                 )}
