@@ -12,6 +12,7 @@ import townBg from "../../assets/town_map_bg.png";
 import tileGrass from "../../assets/tile_grass.png";
 import tilePath from "../../assets/tile_path.png";
 import tileTree from "../../assets/tile_tree.png";
+import tileFence from "../../assets/tile_fence.png";
 import bShop from "../../assets/b_shop.png";
 import bQuest from "../../assets/b_quest.png";
 import bInn from "../../assets/b_inn.png";
@@ -161,11 +162,9 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
             let tileImg = "none";
             const type = mode === "town" ? (td as any).type : undefined;
             if (mode === "town") {
-              if (type === "grass") {
-                tileImg = `radial-gradient(circle at 30% 30%, rgba(150, 200, 255, 0.6) 1px, transparent 4px), radial-gradient(circle at 70% 80%, rgba(200, 150, 255, 0.5) 1.5px, transparent 5px), #3a5c4a`;
-              }
+              if (type === "grass") tileImg = `url(${tileGrass})`;
               else if (type === "path") tileImg = `url(${tilePath})`;
-              else if (type === "fence") tileImg = `repeating-linear-gradient(90deg, #3e261a 0px, #3e261a 4px, transparent 4px, transparent 8px), linear-gradient(0deg, transparent 40%, #2a1610 40%, #2a1610 60%, transparent 60%), #4a332a`;
+              else if (type === "fence") tileImg = `url(${tileFence})`;
             }
 
             const inCone = aoeTiles.has(key);
@@ -184,15 +183,16 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
                 }}
                 style={{
                   position: "absolute", left: x * CELL, top: y * CELL, width: CELL, height: CELL,
-                  background: isFogged ? "#000" : (mode === "town" && tileImg.includes("gradient") ? tileImg : cellBg),
-                  backgroundImage: !isFogged && tileImg !== "none" && !tileImg.includes("gradient") ? tileImg : "none",
-                  backgroundSize: type === "fence" ? "19px 19px" : "380px 380px",
+                  background: isFogged ? "#000" : cellBg,
+                  backgroundImage: !isFogged && tileImg !== "none" ? tileImg : "none",
+                  backgroundSize: type === "fence" ? "38px 38px" : "380px 380px",
                   backgroundPosition: `-${x * CELL}px -${y * CELL}px`,
                   opacity: isDimmed ? 0.4 : 1,
                   cursor: td.isWall || isFogged ? "default" : isAoeCursor ? "crosshair" : "pointer",
                   outline: isReachable ? `2px solid ${C.gold}` : "none",
                   outlineOffset: "-2px",
                   boxShadow: isReachable ? `inset 0 0 8px ${C.gold}20` : "none",
+                  transform: type === "fence" && (x === 0 || x === COLS - 1) ? "rotate(90deg)" : "none",
                 }}>
                 <div style={{ position: "absolute", inset: 0, border: mode === "town" ? "none" : "1px solid rgba(0,0,0,0.25)" }} />
 
@@ -231,15 +231,7 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
             <img src={bInn} style={{ position: "absolute", left: 2 * CELL, top: 1 * CELL, width: 11 * CELL, height: 5 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "cover", borderRadius: "12px" }} alt="Inn" />
             <img src={bShop} style={{ position: "absolute", left: 2 * CELL, top: 15 * CELL, width: 17 * CELL, height: 5 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "cover", borderRadius: "12px" }} alt="Shop" />
             <img src={bQuest} style={{ position: "absolute", left: 18 * CELL, top: 1 * CELL, width: 11 * CELL, height: 5 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "cover", borderRadius: "12px" }} alt="Quest Guild" />
-            
-            {/* Statue with decorative bushes and lights */}
-            <div style={{ position: "absolute", left: 1 * CELL, top: 10 * CELL, width: 3 * CELL, height: 3 * CELL, pointerEvents: "none", zIndex: 5, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <div style={{ position: "absolute", inset: "-8px", borderRadius: "50%", background: "radial-gradient(circle, #2a472a 50%, #1a331a 100%)", border: "2px solid #112211" }} />
-              {/* Torches */}
-              <div style={{ position: "absolute", top: "10%", left: "50%", transform: "translate(-50%, -50%)", width: 12, height: 12, borderRadius: "50%", background: "#ffaa00", boxShadow: "0 0 15px 5px #ffaa00aa" }} />
-              <div style={{ position: "absolute", bottom: "10%", left: "50%", transform: "translate(-50%, 50%)", width: 12, height: 12, borderRadius: "50%", background: "#ffaa00", boxShadow: "0 0 15px 5px #ffaa00aa" }} />
-              <img src={bStatue} style={{ width: "100%", height: "100%", objectFit: "contain", transform: "rotate(270deg)", position: "relative" }} alt="Statue" />
-            </div>
+            <img src={bStatue} style={{ position: "absolute", left: 1 * CELL, top: 10 * CELL, width: 3 * CELL, height: 3 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain", transform: "rotate(180deg)" }} alt="Statue" />
           </>
         )}
 
