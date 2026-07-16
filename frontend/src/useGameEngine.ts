@@ -7,7 +7,8 @@ import { CLASS_CFG, CLASS_SPELLS, WIZARD_SPELL_CHOICES } from "./constants/class
 import { SHOP_ITEMS, BRANCH_ITEM } from "./constants/items";
 import { NPC_CHAT } from "./constants/quests";
 import {
-  COLS, ROWS, MOVE_SQUARES, SIGHT, TOWN_ENTER, DUNGEON_ENTER, DUNGEON_EXIT, TOWN_SPECIAL, isWalkable
+  COLS, ROWS, MOVE_SQUARES, SIGHT, DUNGEON_ENTER, DUNGEON_EXIT, TOWN_ENTER,
+  TOWN_SPECIAL, SANCTUARY_SPECIAL, isWalkable
 } from "./constants/map";
 import { gid, d20, getMod, dist, tnow, rollDice, getSpellcastingMod, calcAC } from "./utils/dice";
 import { loadState, persist } from "./storage";
@@ -22,6 +23,16 @@ const INIT_COMBAT: CombatState = {
 export function useGameEngine() {
   const [gs, setGs] = useState<GameState>(loadState);
   const [session, setSession] = useState<{ username: string; charIds: string[] } | null>(null);
+  const [hoveredMonsterId, setHoveredMonsterId] = useState<string | null>(null);
+  const [seleniaDialogTree, setSeleniaDialogTree] = useState<Record<string, import("./types/game").DialogNode> | null>(null);
+  const [seleniaPopup, setSeleniaPopup] = useState<{ emotion: string; text: string } | null>(null);
+  const [seleniaTalkCount, setSeleniaTalkCount] = useState(0);
+
+  const showSeleniaPopup = useCallback((emotion: string, texts: string[]) => {
+    const text = texts[Math.floor(Math.random() * texts.length)];
+    setSeleniaPopup({ emotion, text });
+    setTimeout(() => setSeleniaPopup(null), 5000); // Increased to 5s
+  }, []);
   const [activeCharId, setActiveCharId] = useState<string | null>(null);
   const [screen, setScreen] = useState<Screen>("auth");
   const [creatingChar, setCreatingChar] = useState(false);
@@ -144,10 +155,10 @@ export function useGameEngine() {
   const endCombat = useCallback((c: CombatState) => {
     if (!char) return;
     const dead = gs.dungeonMonsters.filter(m => c.engagedMonsterIds.includes(m.id) && m.hp <= 0);
-    let totalExp = 0;
+    let baseExp = 0;
     const drops: Item[] = [];
     dead.forEach(m => {
-      totalExp += m.xp;
+      baseExp += m.xp;
       if (Math.random() < 0.4) drops.push({ id: gid(), name: "Healing Potion", type: "consumable", healAmount: "2d4+2", effect: "heal", value: 50, description: "Restores 2d4+2 HP." });
       if (Math.random() < 0.5) drops.push({ id: gid(), ...BRANCH_ITEM });
       if (Math.random() < 0.6) updateChar(char.id, ch => ({ gold: ch.gold + 2 + Math.floor(Math.random() * 5) }));
@@ -166,9 +177,85 @@ export function useGameEngine() {
       }
       return q;
     });
-    updateChar(char.id, ch => ({ exp: ch.exp + totalExp, inventory: [...ch.inventory, ...drops] }));
-    setGs(prev => ({ ...prev, partyQuests: updatedPQ }));
-    notify(`⚔️ Victory! +${totalExp} EXP${drops.length > 0 ? `, ${drops.length} item(s)` : ""}`);
+    let isTutorialClear = false;
+    dead.forEach(m => {
+      if (m.name === "Training Dummy") isTutorialClear = true;
+    });
+    
+    const totalExp = char.tutorialCompleted ? Math.floor(baseExp * 1.02) : baseExp;
+
+    if (isTutorialClear) {
+      const alreadyCompleted = char.tutorialCompleted;
+
+      if (!alreadyCompleted) {
+        updateChar(char.id, ch => ({
+          ...ch,
+          exp: ch.exp + totalExp,
+          inventory: [...ch.inventory, ...drops],
+          tutorialCompleted: true,
+          maxHp: ch.maxHp + 5,
+          hp: ch.hp + 5,
+          position: { x: 15, y: 15 },
+          currentMap: "sanctuary"
+        }));
+      } else {
+        updateChar(char.id, ch => ({
+          ...ch,
+          exp: ch.exp + totalExp,
+          inventory: [...ch.inventory, ...drops],
+          position: { x: 15, y: 15 },
+          currentMap: "sanctuary"
+        }));
+      }
+      setScreen("sanctuary");
+      
+      // Start Tutorial Clear Dialog
+      setTimeout(() => {
+        if (!alreadyCompleted) {
+          setSeleniaDialogTree({
+            start: {
+              emotion: "gentle",
+              text: "From now on, the path ahead is yours to walk...",
+              next: "farewell"
+            },
+            farewell: {
+              emotion: "gentle",
+              text: "May the stars guide you through your darkest nights, and may your heart remain steadfast. I will always be watching over you, Traveler.\n(Received Blessing of Selenia)",
+              next: () => {
+                setSeleniaDialogTree(null);
+                updateChar(char.id, { position: TOWN_ENTER, currentMap: "town" });
+                setScreen("town");
+              }
+            }
+          });
+        } else {
+          setSeleniaDialogTree({
+            start: {
+              emotion: "playful",
+              text: "Fufu, as skilled as ever.",
+              next: "farewell"
+            },
+            farewell: {
+              emotion: "gentle",
+              text: "No matter how far you wander, remember that this Sanctuary will always be a place of rest for you. Have a safe journey.",
+              next: () => {
+                setSeleniaDialogTree(null);
+                updateChar(char.id, { position: TOWN_ENTER, currentMap: "town" });
+                setScreen("town");
+              }
+            }
+          });
+        }
+      }, 500);
+
+    } else {
+      updateChar(char.id, ch => ({ exp: ch.exp + totalExp, inventory: [...ch.inventory, ...drops] }));
+      if (char.tutorialCompleted && baseExp > 0 && totalExp > baseExp) {
+        notify(`✨ Blessing of Selenia active!`);
+      }
+      notify(`⚔️ Victory! +${totalExp} EXP${drops.length > 0 ? `, ${drops.length} item(s)` : ""}`);
+    }
+
     setCombat(INIT_COMBAT); setCombatMode("none");
   }, [char, gs.dungeonMonsters, gs.partyQuests, notify, updateChar, isQuestReadyToTurnIn]);
 
@@ -286,15 +373,22 @@ export function useGameEngine() {
             setTimeout(() => {
               if (!combat.active) return;
               const dmg = rollDice(monster.damage);
-              // Compute newHp directly from current char.hp (synchronous read)
-              const newHp = Math.max(0, char.hp - dmg);
+              let actualNewHp = Math.max(0, char.hp - dmg);
               const cMaxHp = char.maxHp;
+              let isTutorialDeath = false;
+              let currentTutorialDeaths = char.tutorialDeaths ?? 0;
+
+              if (char.currentMap === "tutorial" && actualNewHp <= 0) {
+                isTutorialDeath = true;
+                actualNewHp = cMaxHp;
+                currentTutorialDeaths += 1;
+              }
 
               // Update HP in state
               setGs(prevGs => {
                 const c = prevGs.characters[char.id];
                 if (!c) return prevGs;
-                return { ...prevGs, characters: { ...prevGs.characters, [char.id]: { ...c, hp: newHp } } };
+                return { ...prevGs, characters: { ...prevGs.characters, [char.id]: { ...c, hp: actualNewHp, tutorialDeaths: currentTutorialDeaths } } };
               });
 
               addDiceRoll({ type: "damage", value: dmg, total: dmg, mod: 0, max: dmg, label: monster.damage });
@@ -304,14 +398,47 @@ export function useGameEngine() {
 
               setCombat(prevC => ({
                 ...prevC,
-                log: [...newLog, logEntry, `  Hit! ${char.name} takes ${dmg} dmg. (${newHp}/${cMaxHp})`]
+                log: [...newLog, logEntry, `  Hit! ${char.name} takes ${dmg} dmg. (${actualNewHp}/${cMaxHp})`]
               }));
 
-              if (newHp <= 0) {
+              if (isTutorialDeath) {
+                if (currentTutorialDeaths === 1) {
+                  setSeleniaDialogTree({
+                    start: { emotion: "shocked", text: "Are you okay?! Good thing we are here in the Sanctuary's projection... I've fully healed you. Try again!", next: () => setSeleniaDialogTree(null) }
+                  });
+                } else if (currentTutorialDeaths === 2) {
+                  setSeleniaDialogTree({
+                    start: { emotion: "gentle", text: "Traveler, you must be careful... Let me heal you again. You can do this!", next: () => setSeleniaDialogTree(null) }
+                  });
+                } else {
+                  setSeleniaDialogTree({
+                    start: {
+                      emotion: "wondering",
+                      text: "You keep falling to the Training Dummy... Are you doing this on purpose?",
+                      choices: [
+                        { label: "I'm fighting with all my might! Let me try again.", next: "try_hard" },
+                        { label: "Yes, I just wanted to spend more time with you.", next: "longer" }
+                      ]
+                    },
+                    try_hard: { emotion: "gentle", text: "I know you are... Just focus and strike true! I believe in you.", next: () => setSeleniaDialogTree(null) },
+                    longer: { emotion: "blushing", text: "O-oh... that's... sweet of you. But really, you can always visit me in the Sanctuary anyway...", next: () => setSeleniaDialogTree(null) }
+                  });
+                }
+                doNextTurn();
+              } else if (actualNewHp <= 0) {
                 notify("💀 Defeated!");
                 setCombat(INIT_COMBAT);
                 setCombatMode("none");
               } else {
+                if (char.currentMap === "tutorial") {
+                  setTimeout(() => {
+                    showSeleniaPopup("shocked", [
+                      "Does it hurt? Let's try again.",
+                      "Are you okay? Maybe we should give it another go.",
+                      "Ouch! Let's try that one more time."
+                    ]);
+                  }, 800);
+                }
                 doNextTurn();
               }
             }, 500);
@@ -320,7 +447,12 @@ export function useGameEngine() {
             setTimeout(() => setActionText(null), 1000);
             addEffect({ type: "miss", gridX: char.position.x, gridY: char.position.y, value: "MISS" });
             setCombat(prevC => ({ ...prevC, log: [...newLog, logEntry, `  Miss!`] }));
-            setTimeout(() => doNextTurn(), 400);
+            if (char.currentMap === "tutorial") {
+              setTimeout(() => {
+                showSeleniaPopup("happy", ["Ah, you're better at dodging than I thought!", "Nice footwork! Keep it up.", "That was close! Good job evading."]);
+              }, 800);
+            }
+            setTimeout(() => { doNextTurn(); }, 500);
           }
         }, 600);
       } else {
@@ -570,6 +702,14 @@ export function useGameEngine() {
                 setTimeout(() => setDyingMonsters(prev => { const s = new Set(prev); s.delete(target.id); return s; }), 1000);
               }
 
+              if (char.currentMap === "tutorial") {
+                setTimeout(() => {
+                  showSeleniaPopup("happy", [
+                    "Oh, a direct hit!", "Nice strike! Keep it up.", "Right on target!", "That was a solid blow!"
+                  ]);
+                }, 800);
+              }
+
               if (!combat.active) setTimeout(() => startCombat([target.id]), 600);
             }, 500);
           }
@@ -597,6 +737,14 @@ export function useGameEngine() {
           if (newHp <= 0) {
             setDyingMonsters(prev => new Set([...prev, target.id]));
             setTimeout(() => setDyingMonsters(prev => { const s = new Set(prev); s.delete(target.id); return s; }), 1000);
+          }
+
+          if (char.currentMap === "tutorial") {
+            setTimeout(() => {
+              showSeleniaPopup("happy", [
+                "Oh, a direct hit!", "Nice strike! Keep it up.", "Right on target!", "That was a solid blow!"
+              ]);
+            }, 800);
           }
 
           if (!combat.active) setTimeout(() => startCombat([target.id]), 600);
@@ -702,6 +850,14 @@ export function useGameEngine() {
             setTimeout(() => setDyingMonsters(prev => { const s = new Set(prev); s.delete(monsterId); return s; }), 1000);
           }
 
+          if (char.currentMap === "tutorial") {
+            setTimeout(() => {
+              showSeleniaPopup("happy", [
+                "Oh, a direct hit!", "Nice strike! Keep it up.", "Right on target!", "That was a solid blow!"
+              ]);
+            }, 800);
+          }
+
         }, 500);
       } else {
         setActionText({ text: "MISS!", color: C.muted });
@@ -709,7 +865,19 @@ export function useGameEngine() {
 
         addEffect({ type: "miss", gridX: monster.position.x, gridY: monster.position.y, value: "MISS" });
         setCombat(prevC => ({ ...prevC, log: [...prevC.log, logEntry, `  Miss!`] }));
+        
+        let newHp = 0; // need to declare so it doesn't break scope from above if removed
         setGs(prevGs => ({ ...prevGs, dungeonMonsters: prevGs.dungeonMonsters.map(mm => mm.id === monsterId ? { ...mm, alerted: true } : mm) }));
+
+        if (char.currentMap === "tutorial") {
+          setTimeout(() => {
+            showSeleniaPopup("wondering", [
+              "Oh no, you missed! Don't worry, try again.",
+              "Almost! Keep your focus.",
+              "It dodged! Try another angle!"
+            ]);
+          }, 800);
+        }
       }
     }, 600);
   }
@@ -734,7 +902,7 @@ export function useGameEngine() {
     if (combat.active && combatMode === "move") {
       const d = dist(char.position, { x, y });
       const rem = MOVE_SQUARES - combat.movedSquares;
-      if (d > rem) { notify(`Can only move ${rem * 5}ft more this turn.`); return; }
+      if (d > rem) { notify(`Can only move ${rem} tiles more this turn.`); return; }
       updateChar(char.id, { position: { x, y } });
       if (screen === "dungeon") revealFog({ x, y });
       setCombat(prev => ({ ...prev, movedSquares: prev.movedSquares + d }));
@@ -764,7 +932,7 @@ export function useGameEngine() {
         const nx = curr.x + dx;
         const ny = curr.y + dy;
         const nKey = `${nx},${ny}`;
-        if (!visited.has(nKey) && isWalkable(screen as "town" | "dungeon", nx, ny)) {
+        if (!visited.has(nKey) && isWalkable(screen as any, nx, ny)) {
           visited.add(nKey);
           queue.push([...path, {x: nx, y: ny}]);
         }
@@ -790,7 +958,13 @@ export function useGameEngine() {
             setMovingPath([]);
             return;
           }
-        } else if (screen === "dungeon") {
+        } else if (screen === "sanctuary") {
+          const special = SANCTUARY_SPECIAL[`${nextPos.x},${nextPos.y}`];
+          if (special) {
+            setSpecialDialog({ x: nextPos.x, y: nextPos.y, tile: special });
+            setMovingPath([]);
+            return;
+          }
           if (nextPos.x === DUNGEON_ENTER.x && nextPos.y === DUNGEON_ENTER.y) {
             setSpecialDialog({ x: nextPos.x, y: nextPos.y, tile: { label: "Exit Dungeon", type: "exit", icon: "⬆️", prompt: "Leave the dungeon via the entrance?", color: "#1a5a1a" } });
             setMovingPath([]);
@@ -814,7 +988,7 @@ export function useGameEngine() {
   // Keyboard movement
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if ((screen !== "town" && screen !== "dungeon") || !char || specialDialog) return;
+      if ((screen !== "town" && screen !== "dungeon" && screen !== "sanctuary" && screen !== "tutorial") || !char || specialDialog) return;
 
       let dx = 0, dy = 0;
       if (e.key === "w" || e.key === "W" || e.key === "ArrowUp") dy = -1;
@@ -836,13 +1010,19 @@ export function useGameEngine() {
       const newY = Math.max(0, Math.min(ROWS - 1, char.position.y + dy));
 
       if (newX === char.position.x && newY === char.position.y) return;
-      if (!isWalkable(screen as "town" | "dungeon", newX, newY)) return; // WASD collision check
+      if (!isWalkable(screen as any, newX, newY)) return; // WASD collision check
 
       setMovingPath([]); // Cancel click path if WASD used
 
       // Check special triggers
       if (screen === "town") {
         const special = TOWN_SPECIAL[`${newX},${newY}`];
+        if (special) {
+          setSpecialDialog({ x: newX, y: newY, tile: special });
+          return;
+        }
+      } else if (screen === "sanctuary") {
+        const special = SANCTUARY_SPECIAL[`${newX},${newY}`];
         if (special) {
           setSpecialDialog({ x: newX, y: newY, tile: special });
           return;
@@ -977,12 +1157,13 @@ export function useGameEngine() {
         return;
       }
       let removed = 0;
+      const finalExp = char.tutorialCompleted ? Math.floor(q.reward.exp * 1.02) : q.reward.exp;
       updateChar(char.id, c => ({
         inventory: c.inventory.filter(i => {
           if (i.name === itemName && removed < count) { removed++; return false; }
           return true;
         }),
-        exp: c.exp + q.reward.exp,
+        exp: c.exp + finalExp,
         gold: c.gold + q.reward.gold,
       }));
       setGs(prev => ({
@@ -990,17 +1171,20 @@ export function useGameEngine() {
         partyQuests: prev.partyQuests.filter(pq => pq.id !== questId),
         party: prev.party ? { ...prev.party, questIds: prev.party.questIds.filter(id => id !== questId) } : null,
       }));
-      notify(`✅ Quest Complete! +${q.reward.exp} EXP, +${q.reward.gold} gold`);
+      if (char.tutorialCompleted && finalExp > q.reward.exp) notify(`✨ Blessing of Selenia: Bonus EXP!`);
+      notify(`✅ Quest Complete! +${finalExp} EXP, +${q.reward.gold} gold`);
       return;
     }
 
-    updateChar(char.id, ch => ({ exp: ch.exp + q.reward.exp, gold: ch.gold + q.reward.gold }));
+    const finalExp = char.tutorialCompleted ? Math.floor(q.reward.exp * 1.02) : q.reward.exp;
+    updateChar(char.id, ch => ({ exp: ch.exp + finalExp, gold: ch.gold + q.reward.gold }));
     setGs(prev => ({
       ...prev,
       partyQuests: prev.partyQuests.filter(pq => pq.id !== questId),
       party: prev.party ? { ...prev.party, questIds: prev.party.questIds.filter(id => id !== questId) } : null,
     }));
-    notify(`✅ Reward claimed: +${q.reward.exp} EXP, +${q.reward.gold} gold!`);
+    if (char.tutorialCompleted && finalExp > q.reward.exp) notify(`✨ Blessing of Selenia: Bonus EXP!`);
+    notify(`✅ Reward claimed: +${finalExp} EXP, +${q.reward.gold} gold!`);
   }
   function handleSendChat(text: string, ch: "global" | "party") {
     if (!char) return;
@@ -1066,7 +1250,52 @@ export function useGameEngine() {
       return { ...prev, characters: newChars, accounts: newAccs };
     });
     setSession(prev => prev ? { ...prev, charIds: [...prev.charIds, c.id] } : null);
-    setCreatingChar(false); setActiveCharId(c.id); setScreen("worldMap");
+    setCreatingChar(false); 
+    setActiveCharId(c.id);
+    
+    // Initial Spawn: Sanctuary, facing Selenia
+    c.position = { x: 15, y: 16 };
+    c.currentMap = "sanctuary";
+    setScreen("sanctuary");
+
+    // Start New Character Dialog
+    setTimeout(() => {
+      setSeleniaDialogTree({
+        start: {
+          emotion: "gentle",
+          text: "I'm so glad we finally meet, Traveler.",
+          next: "intro1"
+        },
+        intro1: {
+          emotion: "normal",
+          text: "I am Selenia, the watcher of stars... and everyone's journey.",
+          next: "intro2"
+        },
+        intro2: {
+          emotion: "gentle",
+          text: "Before I let you go, would you like me to guide you a bit about this world?",
+          choices: [
+            { label: "Learn the basics (Tutorial)", next: () => {
+                setSeleniaDialogTree(null);
+                enterTutorial(c);
+              }
+            },
+            { label: "I'm ready to depart (Skip)", next: "skip_intro" }
+          ]
+        },
+        skip_intro: {
+          emotion: "playful",
+          text: "In a hurry, aren't we? I understand. But whenever you're in doubt... just pray at my statue. I'll always be waiting.",
+          next: () => {
+            setSeleniaDialogTree(null);
+            const char = c;
+            if (!char) return;
+            updateChar(char.id, { position: TOWN_ENTER, currentMap: "town" });
+            setScreen("town");
+          }
+        }
+      });
+    }, 500);
   }
   function handleLogout() { setSession(null); setActiveCharId(null); setScreen("auth"); setCombat(INIT_COMBAT); }
   function handleDeleteChar(id: string) {
@@ -1079,13 +1308,181 @@ export function useGameEngine() {
     });
     setSession(prev => prev ? { ...prev, charIds: prev.charIds.filter(cid => cid !== id) } : null);
   }
-  function enterTown() { if (!char) return; updateChar(char.id, { position: TOWN_ENTER, currentMap: "town" }); setScreen("town"); setCombat(INIT_COMBAT); }
-  function enterDungeon() {
-    if (!char) return;
-    updateChar(char.id, { position: DUNGEON_ENTER, currentMap: "dungeon" }); setScreen("dungeon"); setCombat(INIT_COMBAT);
+  function enterTown() { if (!char) return; updateChar(char.id, { position: TOWN_ENTER, currentMap: "town" }); setScreen("town"); setCombat(INIT_COMBAT); setSeleniaTalkCount(0); }
+  function enterDungeon() { 
+    if (!char) return; 
+    setSeleniaTalkCount(0);updateChar(char.id, { position: DUNGEON_ENTER, currentMap: "dungeon" }); setScreen("dungeon"); setCombat(INIT_COMBAT);
     setFogRevealed(new Set([`${DUNGEON_ENTER.x},${DUNGEON_ENTER.y}`, `${DUNGEON_ENTER.x},${DUNGEON_ENTER.y - 1}`, `${DUNGEON_ENTER.x - 1},${DUNGEON_ENTER.y}`]));
     setGs(prev => ({ ...prev, dungeonMonsters: genMonsters() }));
-    notify("Entered Darkroot Depths. Monsters lurk in the dark...");
+    notify("Entered Darkroot Depths. Monsters lurk in the dark...", 3000);
+  }
+  function enterSanctuary() { if (!char) return; updateChar(char.id, { position: { x: 15, y: 16 }, currentMap: "sanctuary" }); setScreen("sanctuary"); setCombat(INIT_COMBAT); }
+  
+  function handleSpeakWithSelenia() {
+    if (!char) return;
+    const CURRENT_VERSION = "0.5.0"; 
+    
+    let greetingText = "Welcome back, Traveler.";
+    let greetingEmotion: import("./types/game").Emotion = "gentle";
+
+    if (char.lastSeenVersion !== CURRENT_VERSION) {
+      greetingText = "Oh! The world has changed a little since you last visited... I hope you like the new updates!";
+      greetingEmotion = "shocked";
+      updateChar(char.id, { lastSeenVersion: CURRENT_VERSION });
+    } else if (char.lastLoginTime && (Date.now() - char.lastLoginTime > 1000 * 60 * 60 * 24 * 7)) { // 7 days
+      greetingText = "It has been so long... I was starting to worry. I'm glad you're safe.";
+      greetingEmotion = "blushing";
+      updateChar(char.id, { lastLoginTime: Date.now() });
+    } else {
+      if (seleniaTalkCount === 1) {
+        greetingText = "Are you really this free, Traveler? ...Or should I post more quests?";
+        greetingEmotion = "wondering";
+      } else if (seleniaTalkCount === 2) {
+        greetingText = "You caught me! I actually change my greetings slightly when you visit often.";
+        greetingEmotion = "shocked";
+      } else if (seleniaTalkCount >= 3) {
+        greetingText = "...I don't even know what to say anymore. But... I'm really happy to see you.";
+        greetingEmotion = "blushing";
+      }
+    }
+    setSeleniaTalkCount(prev => prev + 1);
+
+    setSeleniaDialogTree({
+      start: {
+        emotion: greetingEmotion,
+        text: greetingText,
+        next: "options"
+      },
+      options: {
+        emotion: "normal",
+        text: "Is there something you'd like to talk about?",
+        choices: [
+          { label: "Learn the basics again", next: "tutorial_ask" },
+          { label: "Send a message to the Creator", next: "feedback_ask" },
+          { label: "I want another blessing", next: "more_blessing" },
+          { label: "I just missed you", next: "miss_you" },
+          { label: "Just passing by", next: "accidental" },
+          { label: "I should get going", next: () => setSeleniaDialogTree(null) }
+        ]
+      },
+      tutorial_ask: {
+        emotion: "wondering",
+        text: "Hm? Why do you want to learn it again?",
+        choices: [
+          { label: "I forgot everything", next: "forgot_all" },
+          { label: "I just wanted to see you", next: "want_to_see" },
+          { label: "Teach me one more time", next: "tutorial_teach" }
+        ]
+      },
+      forgot_all: {
+        emotion: "gentle",
+        text: "I understand. There's a lot to take in! Let's start over.",
+        next: () => {
+          setSeleniaDialogTree(null);
+          enterTutorial();
+        }
+      },
+      want_to_see: {
+        emotion: "blushing",
+        text: "...I don't even know what to say to that. But... I'm happy.",
+        next: "options"
+      },
+      tutorial_teach: {
+        emotion: "happy",
+        text: "Of course! I'll try to explain it a bit more detailed this time.",
+        next: () => {
+          setSeleniaDialogTree(null);
+          enterTutorial();
+        }
+      },
+      accidental: {
+        emotion: "playful",
+        text: "Fufu, I'll just take that as a warm greeting then.",
+        next: "options"
+      },
+      more_blessing: {
+        emotion: "playful",
+        text: "A little greedy, aren't we? But... I can only give you this blessing once.",
+        next: "options"
+      },
+      miss_you: {
+        emotion: "gentle",
+        text: "...Thank you. Hearing that makes a Goddess like me very happy too.",
+        next: "options"
+      },
+      feedback_ask: {
+        emotion: "gentle",
+        text: "Is there anything you'd like to tell the Creator of this world? I'll deliver your message.",
+        choices: [
+          { label: "Send message", next: () => {
+              const msg = window.prompt("Tell Selenia your thoughts:");
+              if (msg) {
+                setSeleniaDialogTree({
+                  feedback_done: {
+                    emotion: "gentle",
+                    text: "Done! I hope the Creator gets to read your message very soon.",
+                    next: "feedback_extra"
+                  },
+                  feedback_extra: {
+                    emotion: "happy",
+                    text: "...If it's a compliment, I bet they'll be smiling all day long.",
+                    next: "options"
+                  }
+                });
+              } else {
+                setSeleniaDialogTree(prev => prev ? { ...prev, start: prev.options } : null);
+              }
+            }
+          },
+          { label: "Nevermind", next: "options" }
+        ]
+      }
+    });
+  }
+
+  function enterTutorial(targetChar?: Character) { 
+    const c = targetChar || char;
+    if (!c) return; 
+    setSeleniaTalkCount(0);
+    updateChar(c.id, { position: { x: 15, y: 15 }, currentMap: "tutorial" }); 
+    setScreen("tutorial"); 
+    
+    const dummyId = gid();
+    setGs(prev => ({
+      ...prev,
+      dungeonMonsters: [{
+        id: dummyId,
+        name: "Training Dummy",
+        hp: 30,
+        maxHp: 30,
+        ac: 8,
+        xp: 10,
+        attackMod: 2,
+        damage: "1d4",
+        range: 5,
+        sightRange: 10,
+        position: { x: 15, y: 11 },
+        alerted: true
+      }]
+    }));
+
+    const playerInit = 20; // Player always first in tutorial
+    const order: CombatState["turnOrder"] = [
+      { id: c.id, type: "player" as const, name: c.name, initiative: playerInit },
+      { id: dummyId, type: "monster" as const, name: "Training Dummy", initiative: 10 }
+    ];
+    
+    setCombat({ 
+      active: true, round: 1, turnOrder: order, currentIndex: 0, 
+      actionUsed: false, bonusActionUsed: false, movedSquares: 0, 
+      log: ["⚔ Tutorial Combat Started!"], engagedMonsterIds: [dummyId] 
+    });
+    setCombatMode("none");
+
+    setTimeout(() => showSeleniaPopup("gentle", ["Try walking around using WASD or the arrow keys.", "Take a few steps! The world is yours to explore.", "Don't be shy, take a walk!", "Movement is the first step of any grand adventure."]), 1000);
+    setTimeout(() => showSeleniaPopup("happy", ["See? It's not that hard.", "You're getting the hang of it!", "That's it! Just take it one step at a time.", "Perfect! You move quite gracefully."]), 7000);
+    setTimeout(() => showSeleniaPopup("gentle", ["Now, try attacking that dummy over there.", "Ready for some action? Hit that training dummy!", "Let's see your combat skills! Attack the dummy.", "Show me what you've got! Strike the dummy."]), 13000);
+    setTimeout(() => showSeleniaPopup("wondering", ["The menu is very important... Many adventurers forget how to open it on their first day.", "Don't forget to check your menu! It's easy to get lost without it.", "Your equipment and stats are all in the menu. Don't forget about them!", "Some heroes wander for days without ever opening their inventory... don't be one of them."]), 20000);
   }
 
   const handleLongRest = useCallback(() => {
@@ -1100,6 +1497,24 @@ export function useGameEngine() {
     }));
     notify("You feel fully restored after a good night's sleep!");
   }, [char, notify, updateChar]);
+
+  const handleShortRest = useCallback(() => {
+    if (!char || combat.active) return;
+    const now = Date.now();
+    if (char.lastShortRestTime && now - (char.lastShortRestTime ?? 0) < 5 * 60 * 1000) {
+      const wait = Math.ceil((5 * 60 * 1000 - (now - (char.lastShortRestTime ?? 0))) / 60000);
+      notify(`You must wait ${wait} minutes before taking another short rest.`);
+      return;
+    }
+    const heal = Math.floor(char.maxHp / 2);
+    updateChar(char.id, c => ({
+      hp: Math.min(c.maxHp, c.hp + heal),
+      lastShortRestTime: now
+    }));
+    setRestAnim("short");
+    notify(`You took a short rest and recovered ${heal} HP.`);
+    setTimeout(() => setRestAnim(null), 2000);
+  }, [char, combat.active, updateChar, notify]);
 
   const handleCancelQuest = useCallback((questId: string) => {
     if (!char) return;
@@ -1142,15 +1557,17 @@ export function useGameEngine() {
     handleEquipItem, handleUnequipWeapon, handleUnequipArmor, handleUnequipAcc,
     handleDropItem, handleUseItem, handleBuyItem,
     // quests/party/chat
-    handleAcceptQuest, handleQuestClaim, handleCreateParty, handleLeaveParty,
+    handleAcceptQuest, handleQuestClaim,
+    seleniaDialogTree, setSeleniaDialogTree, seleniaPopup,
     handleSendChat, handleUseSkillFromHUD,
     // navigation
     handleLogin, handleSelectChar, handleCreateChar, handleLogout, handleDeleteChar,
-    enterTown, enterDungeon, handleSpecialYes,
+    enterTown, enterDungeon, enterSanctuary, enterTutorial, handleSpecialYes, handleSpeakWithSelenia,
     // ui helpers
     notify,
     setRestAnim,
     handleLongRest,
+    handleShortRest,
     handleCancelQuest,
     INIT_COMBAT,
   };

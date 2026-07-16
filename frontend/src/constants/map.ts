@@ -36,6 +36,12 @@ export const TOWN_SPECIAL: Record<string, { label: string; type: string; icon: s
   "24,19": { label: "Town Exit", type: "exit", icon: "🚪", prompt: "Leave Town and enter the Dungeon?", color: "#4caf50" }
 };
 
+export const SANCTUARY_SPECIAL: Record<string, { label: string; type: string; icon: string; prompt: string; color: string }> = {
+  "15,8": { label: "Selenia", type: "selenia", icon: "✨", prompt: "Speak with Selenia?", color: "#c492d6" },
+  "14,8": { label: "Selenia", type: "selenia", icon: "✨", prompt: "Speak with Selenia?", color: "#c492d6" },
+  "16,8": { label: "Selenia", type: "selenia", icon: "✨", prompt: "Speak with Selenia?", color: "#c492d6" },
+};
+
 // ─────────────────────────────────────────────────
 // TILE GENERATORS
 // ─────────────────────────────────────────────────
@@ -81,9 +87,23 @@ export function getDungeonTile(x: number, y: number): { bg: string; isWall: bool
   return { bg: shade === 0 ? "#141228" : shade === 1 ? "#100e22" : "#16143a" + "aa", isWall: false };
 }
 
-export function isWalkable(mode: "town" | "dungeon", x: number, y: number): boolean {
+export function getSanctuaryTile(x: number, y: number): { bg: string; isWall: boolean } {
+  if (x === 0 || y === 0 || x === COLS - 1 || y === ROWS - 1) return { bg: "#ffffff", isWall: true }; // white wall boundaries
+  const isCenterPath = (x >= 12 && x <= 17 && y >= 5 && y <= 15);
+  return { bg: isCenterPath ? "#f2e6ff" : "#fdfbfe", isWall: false }; // lavender center, soft white elsewhere
+}
+
+export function getTutorialTile(x: number, y: number): { bg: string; isWall: boolean } {
+  if (x === 0 || y === 0 || x === COLS - 1 || y === ROWS - 1) return { bg: "#2a2b36", isWall: true };
+  const shade = (x * 2 + y * 7) % 2;
+  return { bg: shade === 0 ? "#3b3d4f" : "#444659", isWall: false }; // basic training ground tiles
+}
+
+export function isWalkable(mode: "town" | "dungeon" | "sanctuary" | "tutorial", x: number, y: number): boolean {
   if (x < 0 || x >= COLS || y < 0 || y >= ROWS) return false;
   if (mode === "town") return !getTownTile(x, y).isWall;
   if (mode === "dungeon") return !getDungeonTile(x, y).isWall;
+  if (mode === "sanctuary") return !getSanctuaryTile(x, y).isWall;
+  if (mode === "tutorial") return !getTutorialTile(x, y).isWall;
   return true;
 }

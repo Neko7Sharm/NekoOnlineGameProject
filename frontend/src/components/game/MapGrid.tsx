@@ -4,7 +4,7 @@ import { CLASS_CFG } from "../../constants/classes";
 import { CLASS_SPELLS, WIZARD_SPELL_CHOICES } from "../../constants/classes";
 import {
   COLS, ROWS, CELL, MOVE_SQUARES, SIGHT, DUNGEON_ENTER, DUNGEON_EXIT,
-  TOWN_SPECIAL, getTownTile, getDungeonTile,
+  TOWN_SPECIAL, SANCTUARY_SPECIAL, getTownTile, getDungeonTile, getSanctuaryTile, getTutorialTile
 } from "../../constants/map";
 import { dist } from "../../utils/dice";
 import type { MapGridProps } from "../../types/game";
@@ -17,7 +17,7 @@ import bShop from "../../assets/b_shop.png";
 import bQuest from "../../assets/b_quest.png";
 import bInn from "../../assets/b_inn.png";
 import bStatue from "../../assets/b_statue.png";
-
+import npcSeleniaChibi from "../../assets/npc/npc_g01c.png";
 // Compute which grid tiles fall inside a cone pointing from player toward mouse
 function getConeTiles(playerPos: { x: number; y: number }, mouseX: number, mouseY: number, length: number): Set<string> {
   const tiles = new Set<string>();
@@ -149,8 +149,20 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
         {Array.from({ length: ROWS }, (_, y) =>
           Array.from({ length: COLS }, (_, x) => {
             const key = `${x},${y}`;
-            const td = mode === "town" ? getTownTile(x, y) : getDungeonTile(x, y);
-            const special = mode === "town" ? TOWN_SPECIAL[key] : undefined;
+            const td = mode === "town" ? getTownTile(x, y) : (mode === "sanctuary" ? getSanctuaryTile(x, y) : (mode === "tutorial" ? getTutorialTile(x, y) : getDungeonTile(x, y)));
+            let tileBg = td.bg;
+            let special = null;
+            let tileImg = "none";
+            const type = mode === "town" ? (td as any).type : undefined;
+            if (mode === "town") {
+              if (type === "grass") tileImg = `url(${tileGrass})`;
+              else if (type === "path") tileImg = `url(${tilePath})`;
+              else if (type === "fence") tileImg = `url(${tileFence})`;
+              special = TOWN_SPECIAL[key];
+            } else if (mode === "sanctuary") {
+              special = SANCTUARY_SPECIAL[key];
+            }
+            
             const isExit = mode === "dungeon" && x === DUNGEON_EXIT.x && y === DUNGEON_EXIT.y;
             const isEntrance = mode === "dungeon" && x === DUNGEON_ENTER.x && y === DUNGEON_ENTER.y;
             const isFogged = mode === "dungeon" && !visible.has(key) && !fogRevealed.has(key);
@@ -158,15 +170,7 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
             const isReachable = reachable.has(key);
             const isPlayer = x === pos.x && y === pos.y;
 
-            let cellBg = special?.color ? special.color + "50" : td.bg;
-            let tileImg = "none";
-            const type = mode === "town" ? (td as any).type : undefined;
-            if (mode === "town") {
-              if (type === "grass") tileImg = `url(${tileGrass})`;
-              else if (type === "path") tileImg = `url(${tilePath})`;
-              else if (type === "fence") tileImg = `url(${tileFence})`;
-            }
-
+            let cellBg = special?.color ? special.color + "50" : tileBg;
             const inCone = aoeTiles.has(key);
             const isAoeCursor = inCone && isAoeSpell && combatMode === "spell";
 
@@ -225,13 +229,35 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
           })
         )}
 
-        {/* Building Overlays */}
+        {/* Building / Character Overlays */}
         {mode === "town" && (
           <>
             <img src={bInn} style={{ position: "absolute", left: 2 * CELL, top: 1 * CELL, width: 11 * CELL, height: 5 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "cover", borderRadius: "12px" }} alt="Inn" />
             <img src={bShop} style={{ position: "absolute", left: 2 * CELL, top: 15 * CELL, width: 17 * CELL, height: 5 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "cover", borderRadius: "12px" }} alt="Shop" />
             <img src={bQuest} style={{ position: "absolute", left: 18 * CELL, top: 1 * CELL, width: 11 * CELL, height: 5 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "cover", borderRadius: "12px" }} alt="Quest Guild" />
             <img src={bStatue} style={{ position: "absolute", left: 1 * CELL, top: 10 * CELL, width: 3 * CELL, height: 3 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain", transform: "rotate(180deg)" }} alt="Statue" />
+          </>
+        )}
+        {mode === "sanctuary" && (
+          <>
+            <style>{`
+              @keyframes float-star { 0% { transform: translateY(0px) rotate(0deg); opacity: 0; } 50% { opacity: 0.6; } 100% { transform: translateY(-60px) rotate(180deg); opacity: 0; } }
+            `}</style>
+            <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 1, overflow: "hidden" }}>
+              {Array.from({ length: 15 }).map((_, i) => (
+                <div key={i} style={{
+                  position: "absolute",
+                  left: `${Math.random() * 100}%`,
+                  top: `${Math.random() * 100}%`,
+                  color: "#e6ccff",
+                  fontSize: `${Math.random() * 8 + 8}px`,
+                  opacity: 0,
+                  animation: `float-star ${Math.random() * 8 + 6}s linear infinite`,
+                  animationDelay: `${Math.random() * 5}s`
+                }}>✨</div>
+              ))}
+            </div>
+            <img src={npcSeleniaChibi} style={{ position: "absolute", left: 15 * CELL, top: 8 * CELL, width: CELL, height: CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain", transform: "scale(1.2)" }} alt="Selenia" />
           </>
         )}
 

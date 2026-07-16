@@ -153,7 +153,7 @@ export function CombatPanel({ combat, char, monsters, combatMode, setCombatMode,
               boxShadow: combatMode === "move" ? `0 0 14px ${C.blue}60` : "none",
               display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8,
             }}>
-            <span style={{ fontSize: 7, opacity: 0.65 }}>{moveLeft * 5}ft</span>
+            <span style={{ fontSize: 7, opacity: 0.65 }}>{moveLeft} tiles</span>
             MOVE ▶
           </button>
 

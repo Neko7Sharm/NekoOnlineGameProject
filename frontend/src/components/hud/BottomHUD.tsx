@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { C, PX, NU, MO, pixelBtn } from "../../constants/theme";
 import { CLASS_SPELLS, WIZARD_SPELL_CHOICES } from "../../constants/classes";
+import iconBlessing from "../../assets/icon/skill/I_01.png";
 import { getMod } from "../../utils/dice";
 import { HpBar } from "../ui/HpBar";
 import { StatBox } from "../ui/StatBox";
@@ -214,7 +215,7 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
                       {item.damage && <span style={{ fontFamily: MO, fontSize: 9, color: C.red, padding: "2px 5px", background: C.card2 }}>DMG: {item.damage}</span>}
                       {item.ac && <span style={{ fontFamily: MO, fontSize: 9, color: C.blue, padding: "2px 5px", background: C.card2 }}>AC: +{item.ac}</span>}
                       {item.healAmount && <span style={{ fontFamily: MO, fontSize: 9, color: C.green, padding: "2px 5px", background: C.card2 }}>HEAL: {item.healAmount}</span>}
-                      {item.range && <span style={{ fontFamily: MO, fontSize: 9, color: C.muted, padding: "2px 5px", background: C.card2 }}>{item.range}ft</span>}
+                      {item.range && <span style={{ fontFamily: MO, fontSize: 9, color: C.muted, padding: "2px 5px", background: C.card2 }}>{item.range / 5} tiles</span>}
                       {item.aoeRadius && <span style={{ fontFamily: MO, fontSize: 9, color: C.gold, padding: "2px 5px", background: C.card2 }}>AOE r{item.aoeRadius}</span>}
                     </div>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
@@ -334,12 +335,24 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
                       : s)
                   : baseSpells;
 
-                const extraAbilities: Array<{ name: string; desc: string; color: string; level: number; type: string }> = [];
+                const extraAbilities: Array<{ name: string; desc: string; color: string; level: number; type: string; icon?: string; isPassive?: boolean }> = [];
                 if (char.class === "Fighter") extraAbilities.push({ name: "Second Wind", desc: `Regain 1d10+${char.level} HP (1/short rest)`, color: C.red, level: 0, type: "cantrip" });
                 if (char.class === "Ranger") extraAbilities.push({ name: "Hunter's Mark", desc: "Mark a target. Deal extra 1d6 damage to it.", color: "#4cdb70", level: 0, type: "cantrip" });
+                
+                if (char.tutorialCompleted) {
+                  extraAbilities.push({ 
+                    name: "Blessing of Selenia", 
+                    desc: "Passive. Max HP +5. Permanent +2% EXP from all sources.", 
+                    color: C.gold, 
+                    level: 0, 
+                    type: "passive",
+                    icon: "I_01.png",
+                    isPassive: true
+                  });
+                }
 
                 if (spells.length === 0 && extraAbilities.length === 0) return (
-                  <div style={{ color: C.muted, fontFamily: NU, fontSize: 12, textAlign: "center", paddingTop: 30 }}>No spells available for this class.</div>
+                  <div style={{ color: C.muted, fontFamily: NU, fontSize: 12, textAlign: "center", paddingTop: 30 }}>No skills available.</div>
                 );
 
                 return (
@@ -365,8 +378,11 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
                               border: "none", borderBottom: isExpanded ? `1px solid ${spellColor}30` : "none",
                               transition: "background 0.2s",
                             }}>
+                            {spell.name === "Blessing of Selenia" && (
+                              <img src={iconBlessing} alt="Blessing" style={{ width: 14, height: 14, objectFit: "contain", marginRight: 4 }} />
+                            )}
                             <span style={{ fontFamily: PX, fontSize: 7, color: spellColor, flex: 1, textAlign: "left" }}>{spell.name}</span>
-                            <span style={{ fontFamily: MO, fontSize: 8, color: C.muted }}>{isCantrip ? "cantrip" : `lvl ${spell.level}`}</span>
+                            <span style={{ fontFamily: MO, fontSize: 8, color: C.muted }}>{(spell as any).isPassive ? "passive" : (isCantrip ? "cantrip" : `lvl ${spell.level}`)}</span>
                             <span style={{ fontFamily: MO, fontSize: 9, color: spellColor }}>{isExpanded ? "▲" : "▼"}</span>
                           </button>
 
@@ -389,7 +405,7 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
                                   <div style={{ fontFamily: MO, fontSize: 9, color: "#4cdb70", background: C.card2, padding: "3px 6px" }}>HEAL: {(spell as { heal?: string }).heal}</div>
                                 )}
                                 {(spell as { range?: number }).range !== undefined && (
-                                  <div style={{ fontFamily: MO, fontSize: 9, color: C.blue, background: C.card2, padding: "3px 6px" }}>RANGE: {(spell as { range?: number }).range}ft</div>
+                                  <div style={{ fontFamily: MO, fontSize: 9, color: C.blue, background: C.card2, padding: "3px 6px" }}>RANGE: {((spell as { range?: number }).range || 0) / 5} tiles</div>
                                 )}
                                 <div style={{ fontFamily: MO, fontSize: 9, color: C.gold, background: C.card2, padding: "3px 6px" }}>{attackType}</div>
                                 {(spell as { saveStat?: keyof Stats; saveDC?: number }).saveStat && (spell as { saveDC?: number }).saveDC && (
@@ -398,7 +414,7 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
                                   </div>
                                 )}
                               </div>
-                              {!inCombat ? (
+                              {!inCombat && !(spell as any).isPassive ? (
                                 <button onClick={() => onUseSkill(spell.name)}
                                   style={{
                                     width: "100%", padding: "6px", cursor: "pointer",

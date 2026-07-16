@@ -5,7 +5,7 @@ export const NPC_DIALOGUES = {
     greetings: [
       "Oh, you look absolutely exhausted, dear. Come, the hearth is warm!",
       "Welcome back! I've kept a soft bed and hot tea ready just for you.",
-      "Hello there, brave one. Please, leave your heavy burdens at the door and rest.",
+      "Hello there, traveler. Please, leave your heavy burdens at the door and rest.",
       "It's so good to see you safe! Let me take care of you for a while."
     ],
     restSuccess: [

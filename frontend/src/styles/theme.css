@@ -174,3 +174,5 @@
     line-height: 1.5;
   }
 }
+
+@keyframes selenia-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-15px); } }

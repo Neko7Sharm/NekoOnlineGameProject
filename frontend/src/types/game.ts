@@ -4,10 +4,18 @@ import { ReactNode } from "react";
 // SCREEN & MODE TYPES
 // ─────────────────────────────────────────────────
 
-export type Screen = "auth" | "charSelect" | "charCreate" | "worldMap" | "town" | "dungeon";
+export type Screen = "auth" | "charSelect" | "charCreate" | "worldMap" | "town" | "dungeon" | "sanctuary" | "tutorial";
 export type CharClass = "Fighter" | "Cleric" | "Paladin" | "Ranger" | "Wizard";
 export type ItemType = "weapon" | "armor" | "accessory" | "consumable";
 export type HudTab = "char" | "inv" | "equip" | "acc" | "chat" | "party" | "skills";
+
+export type Emotion = "normal" | "happy" | "gentle" | "playful" | "shocked" | "wondering" | "blushing";
+export interface DialogNode {
+  emotion: Emotion;
+  text: string;
+  choices?: { label: string; next: string | (() => void) }[];
+  next?: string | (() => void);
+}
 export type CombatModeT = "none" | "move" | "attack" | "spell";
 
 // ─────────────────────────────────────────────────
@@ -42,9 +50,13 @@ export interface Character {
   spellChoice?: string;
   customSkills?: string[];
   inventory: Item[]; equipment: Equipment;
-  position: { x: number; y: number }; currentMap: "town" | "dungeon";
+  position: { x: number; y: number }; currentMap: "town" | "dungeon" | "sanctuary" | "tutorial";
   statusPoints: number;
   lastShortRestTime?: number;
+  tutorialCompleted?: boolean;
+  tutorialDeaths?: number;
+  lastLoginTime?: number;
+  lastSeenVersion?: string;
 }
 
 export interface Monster {

@@ -17,6 +17,7 @@ import { ShopModal } from "../components/modals/ShopModal";
 import { InnModal } from "../components/modals/InnModal";
 import { StatueModal } from "../components/modals/StatueModal";
 import { QuestModal } from "../components/modals/QuestModal";
+import { SeleniaDialog, SeleniaPopup } from "../components/modals/SeleniaDialog";
 import { BottomHUD } from "../components/hud/BottomHUD";
 
 export default function App() {
@@ -36,9 +37,9 @@ export default function App() {
   }
   if (screen === "worldMap" && char) return <WorldMapScreen char={char} onEnterTown={eng.enterTown} onEnterDungeon={eng.enterDungeon} onExitToCharSelect={() => { eng.setActiveCharId(null); eng.setScreen("charSelect"); }} onLogout={eng.handleLogout} />;
 
-  if ((screen === "town" || screen === "dungeon") && char) {
+  if ((screen === "town" || screen === "dungeon" || screen === "sanctuary" || screen === "tutorial") && char) {
     const cfg = CLASS_CFG[char.class];
-    const locationLabel = screen === "town" ? "🏰 MILLHAVEN" : "💀 DARKROOT DEPTHS";
+    const locationLabel = screen === "town" ? "🏰 MILLHAVEN" : screen === "sanctuary" ? "✨ SANCTUARY" : screen === "tutorial" ? "⚔️ TRAINING GROUND" : "💀 DARKROOT DEPTHS";
 
     return (
       <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: C.bg, fontFamily: NU, overflow: "hidden" }}>
@@ -55,7 +56,7 @@ export default function App() {
               <button onClick={() => eng.setScreen("worldMap")} style={{ ...pixelBtn("ghost", true), fontSize: 7 }}>← MAP</button>
             )}
             <div style={{ fontFamily: PX, fontSize: 9, color: C.blue, letterSpacing: 1 }}>{locationLabel}</div>
-            {screen === "town" && <span style={{ fontFamily: PX, fontSize: 7, padding: "2px 8px", background: C.green + "20", color: C.green, border: `1px solid ${C.green}40` }}>✅ SAFE ZONE</span>}
+            {(screen === "town" || screen === "sanctuary") && <span style={{ fontFamily: PX, fontSize: 7, padding: "2px 8px", background: C.green + "20", color: C.green, border: `1px solid ${C.green}40` }}>✅ SAFE ZONE</span>}
             {combat.active && <span style={{ fontFamily: PX, fontSize: 7, padding: "2px 8px", background: C.red + "20", color: C.red, border: `1px solid ${C.red}40`, animation: "pulse 1s infinite" }}>⚔️ COMBAT</span>}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -95,7 +96,7 @@ export default function App() {
             if (e.deltaY < 0) setZoom(z => Math.min(2.5, z + 0.1));
             else setZoom(z => Math.max(0.6, z - 0.1));
           }}
-          style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", position: "relative", background: screen === "dungeon" ? "#040310" : "#080e04" }}>
+          style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", position: "relative", background: screen === "dungeon" ? "#040310" : screen === "sanctuary" ? "#ffffff" : "#080e04" }}>
           {(() => {
              const mapScale = zoom;
              const charX = char.position.x * 38 + 19;
@@ -151,7 +152,23 @@ export default function App() {
             />
           )}
 
-          {/* ✅ ลบปุ่ม Rest เก่าออกแล้ว (ตามแผน v0.4.0 ให้ไปใช้ที่ Inn แทน) */}
+          {/* Short Rest */}
+          {(screen === "dungeon" || screen === "town") && !combat.active && char && (
+            <button onClick={eng.handleShortRest}
+              style={{
+                position: "absolute", top: 16, right: 16, zIndex: 100,
+                background: "rgba(0,0,0,0.6)", border: `1px solid ${C.border}`,
+                color: C.muted, padding: "8px 12px", borderRadius: 8,
+                fontFamily: PX, cursor: "pointer", display: "flex", gap: 8, alignItems: "center",
+                fontSize: 12, transition: "0.2s"
+              }}
+              onMouseOver={e => e.currentTarget.style.background = "rgba(0,0,0,0.8)"}
+              onMouseOut={e => e.currentTarget.style.background = "rgba(0,0,0,0.6)"}
+            >
+              <span style={{ fontSize: 16 }}>⛺</span>
+              SHORT REST
+            </button>
+          )}
 
           {/* Engage First button */}
           {screen === "dungeon" && !combat.active && (() => {
@@ -225,6 +242,9 @@ export default function App() {
             onYes={() => {
               if (specialDialog.tile.type === "exit") {
                 eng.handleSpecialYes();
+              } else if (specialDialog.tile.type === "selenia") {
+                eng.handleSpeakWithSelenia();
+                eng.setSpecialDialog(null);
               } else {
                 eng.setSpecialDialog({ ...specialDialog, confirmed: true });
               }
@@ -291,6 +311,10 @@ export default function App() {
               }));
               eng.notify("✨ Status Points allocated!");
               setTimeout(() => eng.setSpecialDialog(null), 800);
+            }}
+            onPray={() => {
+              eng.setSpecialDialog(null);
+              eng.enterSanctuary();
             }}
             onClose={() => eng.setSpecialDialog(null)}
           />
@@ -408,6 +432,17 @@ export default function App() {
               </div>
             </div>
           </>
+        )}
+        {/* 5. Selenia Dialog */}
+        {eng.seleniaDialogTree && (
+          <SeleniaDialog
+            dialogTree={eng.seleniaDialogTree}
+            onClose={() => eng.setSeleniaDialogTree(null)}
+          />
+        )}
+        {/* 6. Selenia Popup (Combat Reactions) */}
+        {eng.seleniaPopup && (
+          <SeleniaPopup emotion={eng.seleniaPopup.emotion} text={eng.seleniaPopup.text} />
         )}
       </div>
     );

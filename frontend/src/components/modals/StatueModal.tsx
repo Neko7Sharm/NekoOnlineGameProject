@@ -13,7 +13,7 @@ import npcStatueImg2 from "../../assets/npc/npc_d02.png";
 import npcStatueImg3 from "../../assets/npc/npc_d03.png";
 
 const STATUE_WELCOME_QUOTES = [
-  "O Brave One... please receive this blessing... Wait, what was the next line?",
+  "O Traveler... please receive this blessing... Wait, what was the next line?",
   "Such tranquility... Ah! Since when were you standing there?!",
   "The light of Selenia has guided you here, hasn't it?",
   "This place is very sacred... but please don't run around, I can't clean up fast enough!",
@@ -39,7 +39,7 @@ const STATUE_FAREWELL_QUOTES = [
 
 const STATUE_IDLE_QUOTES = [
   "Um... Goddess Selenia... Did I read the prayer wrong?",
-  "Why are you staring at me, Brave One? Is there something on my face?",
+  "Why are you staring at me, Traveler? Is there something on my face?",
   "Ah... I wasn't sleeping! I was just closing my eyes to meditate!",
   "It's so quiet and peaceful here... It's making me sleepy...",
   "Wait... Did I forget to sweep the floor over there?",
@@ -50,11 +50,13 @@ export function StatueModal({
   onLevelUp,
   onUpdateStats,
   onClose,
+  onPray,
 }: {
   char: Character;
   onLevelUp: (leveledChar: Character) => void;
   onUpdateStats: (updatedChar: Character) => void;
   onClose: () => void;
+  onPray: () => void;
 }) {
   type NpcFace = "talk" | "happy" | "idle" | "exiting";
   const [npcFace, setNpcFace] = useState<NpcFace>("talk");
@@ -410,10 +412,10 @@ export function StatueModal({
               textShadow: `0 1px 3px ${sacred1}`,
             }}
           >
-            STATUE
+            MARI
           </div>
           <div style={{ fontFamily: NU, fontSize: 10, color: sacred5, marginTop: 2 }}>
-            Ancient Guardian ✨
+            Acolyte ✨
           </div>
         </div>
       </div>
@@ -627,6 +629,36 @@ export function StatueModal({
                 onMouseLeave={(e) => (e.currentTarget.style.transform = "")}
               >
                 ⚙️ ADJUST STATS
+              </button>
+
+              <button
+                onClick={() => {
+                  timersRef.current.forEach(clearTimeout);
+                  timersRef.current = [];
+                  setNpcFace("happy");
+                  setBubbleText("Oh, visiting Goddess Selenia? May her light guide you... Teleporting...");
+                  setBubbleShow(true);
+                  window.setTimeout(() => setPanelExiting(true), 200);
+                  window.setTimeout(() => onPray(), 1500);
+                }}
+                style={{
+                  padding: "12px 20px",
+                  background: `linear-gradient(180deg, #d8b4e2 0%, #c492d6 100%)`,
+                  border: `2px solid #a365b9`,
+                  color: cream,
+                  fontFamily: PX,
+                  fontSize: 10,
+                  cursor: "pointer",
+                  boxShadow: `inset 0 1px 0 rgba(255,255,255,0.4), 0 3px 8px rgba(0,0,0,0.3)`,
+                  transition: "transform 0.1s",
+                  letterSpacing: 1,
+                }}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.transform = "translateY(-2px)")
+                }
+                onMouseLeave={(e) => (e.currentTarget.style.transform = "")}
+              >
+                ✨ PRAY (TELEPORT)
               </button>
             </div>
 

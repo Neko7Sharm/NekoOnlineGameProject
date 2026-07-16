@@ -19,7 +19,7 @@ const QUEST_WELCOME_QUOTES = [
 const QUEST_ACCEPT_QUOTES = [
   "This quest? You got it! Stamping it now... All set!",
   "Excellent choice! Good luck... Watch your step on the way out!",
-  "If it's you, Brave One, I'm sure you can handle it!",
+  "If it's you, Traveler, I'm sure you can handle it!",
 ];
 
 const QUEST_COMPLETE_QUOTES = [
@@ -257,8 +257,8 @@ export function QuestModal({
           </div>
         )}
         <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 5, padding: "10px 12px", background: `linear-gradient(180deg, ${guild2}ee 0%, ${guild1}f8 100%)`, borderTop: `3px solid ${guild3}`, boxShadow: `0 -4px 16px rgba(0,0,0,0.6)`, textAlign: "center" }}>
-          <div style={{ fontFamily: PX, fontSize: 9, color: cream, letterSpacing: 2, textShadow: `0 1px 3px ${guild1}` }}>GUILDMASTER</div>
-          <div style={{ fontFamily: NU, fontSize: 10, color: guild5, marginTop: 2 }}>Quest Dispatcher 📋</div>
+          <div style={{ fontFamily: PX, fontSize: 9, color: cream, letterSpacing: 2, textShadow: `0 1px 3px ${guild1}` }}>CHLOE</div>
+          <div style={{ fontFamily: NU, fontSize: 10, color: guild5, marginTop: 2 }}>Guild Staff 📋</div>
         </div>
       </div>
 

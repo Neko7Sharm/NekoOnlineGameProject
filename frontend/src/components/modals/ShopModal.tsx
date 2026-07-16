@@ -190,7 +190,7 @@ export function ShopModal({ char, onBuy, onClose }: { char: Character; onBuy: (i
           borderTop: `3px solid ${wood3}`,
           boxShadow: `0 -4px 16px rgba(0,0,0,0.6)`, textAlign: "center",
         }}>
-          <div style={{ fontFamily: PX, fontSize: 9, color: cream, letterSpacing: 2, textShadow: `0 1px 3px ${wood1}` }}>MIRA</div>
+          <div style={{ fontFamily: PX, fontSize: 9, color: cream, letterSpacing: 2, textShadow: `0 1px 3px ${wood1}` }}>HINA</div>
           <div style={{ fontFamily: NU, fontSize: 10, color: wood5, marginTop: 2 }}>General Shopkeeper</div>
         </div>
       </div>

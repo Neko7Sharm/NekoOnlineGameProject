@@ -18,7 +18,7 @@ export const CLASS_CFG: Record<CharClass, {
     hpBase: 12, acBase: 16,
     stats: { str: 16, dex: 13, con: 15, int: 8, wis: 12, cha: 10 },
     skills: ["Athletics", "Intimidation"], saves: ["Strength", "Constitution"],
-    weapon: { name: "Longsword", type: "weapon", damage: "1d8", damageType: "slashing", range: 5, value: 15, description: "A versatile blade. 1d8 slashing, 5ft reach." },
+    weapon: { name: "Longsword", type: "weapon", damage: "1d8", damageType: "slashing", range: 5, value: 15, description: "A versatile blade. 1d8 slashing, 1 tile reach." },
     armor: { name: "Chain Mail", type: "armor", ac: 16, value: 75, description: "Heavy interlocking rings. AC 16." },
   },
   Cleric: {
@@ -47,7 +47,7 @@ export const CLASS_CFG: Record<CharClass, {
     hpBase: 10, acBase: 14,
     stats: { str: 12, dex: 16, con: 13, int: 10, wis: 14, cha: 8 },
     skills: ["Survival", "Perception"], saves: ["Strength", "Dexterity"],
-    weapon: { name: "Shortbow", type: "weapon", damage: "1d6", damageType: "piercing", range: 80, value: 25, description: "Nimble hunting bow. 1d6 piercing, 80ft range." },
+    weapon: { name: "Shortbow", type: "weapon", damage: "1d6", damageType: "piercing", range: 80, value: 25, description: "Nimble hunting bow. 1d6 piercing, 16 tiles range." },
     armor: { name: "Leather Armor", type: "armor", ac: 13, value: 10, description: "Supple leather. AC 13 + DEX mod." },
     extra: [{ name: "Shortsword", type: "weapon", damage: "1d6", damageType: "piercing", range: 5, value: 10, description: "Light blade. 1d6 piercing." }],
   },
@@ -92,9 +92,9 @@ export const CLASS_SPELLS: Partial<Record<CharClass, Array<{
 // ─────────────────────────────────────────────────
 
 export const WIZARD_SPELL_CHOICES = [
-  { name: "Sleep", aoe: true, aoeRadius: 4, isCone: false, desc: "Magical slumber. AOE(Circle) 20ft radius. CON save DC 13 or incapacitated." },
-  { name: "Thunderwave", aoe: true, aoeRadius: 3, isCone: false, desc: "Thunder burst. AOE(Circle) 15ft radius. DEX save DC 13 or 2d8 + push." },
-  { name: "Burning Hands", aoe: true, aoeRadius: 3, isCone: true, desc: "Fire cone. AOE(Cone) 15ft. DEX save DC 13 or 3d6 fire damage." },
+  { name: "Sleep", aoe: true, aoeRadius: 4, isCone: false, desc: "Magical slumber. AOE(Circle) 4 tiles radius. CON save DC 13 or incapacitated." },
+  { name: "Thunderwave", aoe: true, aoeRadius: 3, isCone: false, desc: "Thunder burst. AOE(Circle) 3 tiles radius. DEX save DC 13 or 2d8 + push." },
+  { name: "Burning Hands", aoe: true, aoeRadius: 3, isCone: true, desc: "Fire cone. AOE(Cone) 3 tiles. DEX save DC 13 or 3d6 fire damage." },
 ];
 
 // ─────────────────────────────────────────────────
