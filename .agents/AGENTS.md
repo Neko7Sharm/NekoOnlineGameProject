@@ -30,3 +30,10 @@ Selenia is a permanent, central NPC who serves as a guide and a bridge between t
 ## 5. Feedback System
 - **Tell Selenia**: Selenia serves as the bridge between players and the developer. Players may send feedback through Selenia.
 - **Immersion**: The UI should never break immersion. Instead of a generic "Contact Developer" button, use "Tell Selenia". Selenia will respond as if she is delivering the player's words to the Creator.
+
+## 6. Quest System Philosophy
+- **Simplicity Over Complexity**: Initial quests are kept simple and limited in variety (e.g., Kill 5 enemies, Gather 5 items). Duplicate quests can appear on the board. This prevents players from being overwhelmed by too many mechanics early on.
+- **Quest Board**: The quest board displays exactly 10 available quests at any time. It refreshes its list automatically every 5 minutes.
+- **Active Limit**: A character may only have up to 2 active quests at the same time.
+- **Individual Progression**: Quests are bound to the individual character. Progress and rewards are personal, not shared across the party.
+- **Penalties for Canceling**: Players can cancel an active quest, but it incurs a flat fee (e.g., 10g) to prevent spamming and encourage commitment. Canceled quests do not return to the board.

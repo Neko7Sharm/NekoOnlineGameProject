@@ -19,11 +19,11 @@ export function loadState(): GameState {
       { id: gid(), sender: "System", text: "Welcome to DnD Online! Your adventure begins.", time: tnow() },
       { id: gid(), sender: "Tavern Master", text: "Ale and steel! The dungeon won't explore itself~", time: tnow() },
     ],
-    partyChat: [], party: null,
+    partyChat: [], party: null, // Keep for backward compatibility with older saves if needed
     dungeonMonsters: genMonsters(),
     availableQuests: genQuests(10),
-    partyQuests: [], questRefreshAt: Date.now() + 5 * 60 * 1000,
-  };
+    questRefreshAt: Date.now() + 5 * 60 * 1000,
+  } as GameState;
 }
 
 export function persist(gs: GameState) {

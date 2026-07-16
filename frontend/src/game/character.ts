@@ -3,6 +3,7 @@ import { CLASS_CFG, PROFICIENCY_LIST } from "../constants/classes";
 import { QUEST_TEMPLATES } from "../constants/quests";
 import { DUNGEON_ENTER } from "../constants/map";
 import { gid, getMod, calcAC, dist } from "../utils/dice";
+import { SKILL_DICTIONARY } from "../constants/skills";
 
 // ─────────────────────────────────────────────────
 // CHARACTER CREATION
@@ -30,11 +31,12 @@ export function createCharacter(
     level: 1, exp: 0, gold: 10,
     stats, hp: maxHp, maxHp, ac: cfg.acBase,
     profBonus: 2, skills: cfg.skills, savingThrows: cfg.saves,
+    gameSkills: cfg.gameSkills,
     spellSlots: cfg.spellMax ? { used: 0, max: cfg.spellMax } : undefined,
     spellChoice,
     customSkills: selectedSkills ?? cfg.skills,
     inventory: extra,
-    equipment: { weapon, armor, accessories: [null, null, null] },
+    equipment: { mainHand: weapon, offHand: null, armor, accessories: [null, null, null] },
     position: { x: 10, y: 7 }, currentMap: "town",
   };
   char.ac = calcAC(char);
@@ -69,19 +71,23 @@ export function genMonsters(): Monster[] {
 // ─────────────────────────────────────────────────
 
 export function genQuests(n = 10): Quest[] {
-  return [...QUEST_TEMPLATES].sort(() => Math.random() - 0.5).slice(0, n).map(t => {
+  const quests: Quest[] = [];
+  for (let i = 0; i < n; i++) {
+    const t = QUEST_TEMPLATES[Math.floor(Math.random() * QUEST_TEMPLATES.length)];
     if (t.gather) {
-      return {
+      quests.push({
         id: gid(), title: t.title, description: t.desc.replace("{n}", String(t.n)),
         gatherTarget: { itemName: t.gather, count: t.n },
         reward: { exp: t.exp, gold: t.gold },
-      };
+      });
+    } else {
+      quests.push({
+        id: gid(), title: t.title, description: t.desc.replace("{n}", String(t.n)),
+        killTarget: { monster: "Wooden Dummy", count: t.n, current: 0 },
+        reward: { exp: t.exp, gold: t.gold },
+      });
     }
-    return {
-      id: gid(), title: t.title, description: t.desc.replace("{n}", String(t.n)),
-      killTarget: { monster: "Wooden Dummy", count: t.n, current: 0 },
-      reward: { exp: t.exp, gold: t.gold },
-    };
-  });
+  }
+  return quests;
 }
 

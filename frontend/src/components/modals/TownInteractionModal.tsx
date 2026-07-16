@@ -14,6 +14,21 @@ import npcB02Img from "../../assets/npc/npc_b02.png";
 import npcB03Img from "../../assets/npc/npc_b03.png";
 import npcB04Img from "../../assets/npc/npc_b04.png";
 
+function TypewriterText({ text, speed = 30 }: { text: string; speed?: number }) {
+  const [displayed, setDisplayed] = useState("");
+  useEffect(() => {
+    setDisplayed("");
+    let i = 0;
+    const interval = setInterval(() => {
+      setDisplayed(text.substring(0, i + 1));
+      i++;
+      if (i >= text.length) clearInterval(interval);
+    }, speed);
+    return () => clearInterval(interval);
+  }, [text, speed]);
+  return <>{displayed}</>;
+}
+
 const EXP_THRESHOLDS: Record<number, number> = {
   1: 500, 2: 1000, 3: 2000, 4: 4000, 5: 8000,
   6: 16000, 7: 32000, 8: 64000, 9: 128000, 10: Infinity
@@ -307,7 +322,7 @@ export function TownInteractionModal({
               padding: "10px 12px", fontFamily: NU, fontSize: 12, color: theme.wood1, lineHeight: 1.5,
               boxShadow: `0 4px 16px rgba(100,50,0,0.35)`, position: "relative",
             }}>
-              {dialogue}
+              <TypewriterText text={dialogue} speed={25} />
               <div style={{ position: "absolute", bottom: -10, left: "50%", marginLeft: -7, width: 0, height: 0, borderLeft: "7px solid transparent", borderRight: "7px solid transparent", borderTop: `10px solid ${theme.wood3}` }} />
               <div style={{ position: "absolute", bottom: -6, left: "50%", marginLeft: -5, width: 0, height: 0, borderLeft: "5px solid transparent", borderRight: "5px solid transparent", borderTop: `8px solid ${theme.cream}` }} />
             </div>

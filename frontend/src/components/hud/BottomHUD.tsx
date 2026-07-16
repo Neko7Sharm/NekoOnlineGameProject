@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { C, PX, NU, MO, pixelBtn } from "../../constants/theme";
 import { CLASS_SPELLS, WIZARD_SPELL_CHOICES } from "../../constants/classes";
+import { SKILL_DICTIONARY } from "../../constants/skills";
 import iconBlessing from "../../assets/icon/skill/I_01.png";
 import { getMod } from "../../utils/dice";
 import { HpBar } from "../ui/HpBar";
@@ -12,18 +13,18 @@ import { StatBox } from "../ui/StatBox";
 import { ItemMenu } from "../modals/ItemMenu";
 import type { Character, GameState, Item, Quest, Stats, HudTab } from "../../types/game";
 
-export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTab, setChatTab, globalChat, partyChat, onSendChat, onEquipItem, onUnequipWeapon, onUnequipArmor, onUnequipAcc, onDropItem, onUseItem, party, onCreateParty, onLeaveParty, partyQuests, onUseSkill, inCombat }: {
+export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTab, setChatTab, globalChat, partyChat, onSendChat, onEquipItem, onUnequipMainHand, onUnequipOffHand, onUnequipArmor, onUnequipAcc, onDropItem, onUseItem, party, onCreateParty, onLeaveParty, activeQuests, onUseSkill, inCombat }: {
   char: Character; hudTab: HudTab; setHudTab: (t: HudTab) => void;
   hudOpen: boolean; setHudOpen: (o: boolean) => void;
   chatTab: "global" | "party"; setChatTab: (t: "global" | "party") => void;
   globalChat: GameState["globalChat"]; partyChat: GameState["partyChat"];
   onSendChat: (msg: string, ch: "global" | "party") => void;
-  onEquipItem: (i: Item) => void; onUnequipWeapon: () => void; onUnequipArmor: () => void; onUnequipAcc: (i: number) => void;
+  onEquipItem: (i: Item) => void; onUnequipMainHand: () => void; onUnequipOffHand: () => void; onUnequipArmor: () => void; onUnequipAcc: (i: number) => void;
   onDropItem: (id: string) => void; onUseItem: (i: Item) => void;
   party: { name: string; leaderId: string; memberIds: string[]; questIds: string[] } | null;
   onCreateParty: (n: string) => void; onLeaveParty: () => void;
-  partyQuests: Quest[];
-  onUseSkill: (spellName: string) => void;
+  activeQuests: Quest[];
+  onUseSkill: (sk: string) => void;
   inCombat: boolean;
 }) {
   const [itemMenu, setItemMenu] = useState<Item | null>(null);
@@ -32,7 +33,7 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
   const chatRef = useRef<HTMLDivElement>(null);
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null);
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
-  const [invCategory, setInvCategory] = useState<"usable" | "material" | "equip">("usable");
+  const [invCategory, setInvCategory] = useState<"usable" | "material">("usable");
 
   useEffect(() => { if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight; }, [globalChat, partyChat]);
 
@@ -48,6 +49,7 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
     { id: "equip", icon: <Sword className="w-3 h-3" />, label: "EQUIP" },
     { id: "acc", icon: <Star className="w-3 h-3" />, label: "JEWEL" },
     { id: "skills" as HudTab, icon: "✨", label: "SKILLS" },
+    { id: "quest" as HudTab, icon: "📜", label: "QUEST" },
     { id: "chat", icon: <MessageCircle className="w-3 h-3" />, label: "CHAT" },
     { id: "party", icon: <Users className="w-3 h-3" />, label: "PARTY" },
   ];
@@ -96,9 +98,17 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
           {/* CHAR */}
           {hudTab === "char" && (
             <div style={{ height: "100%", padding: "10px 14px", overflowY: "auto", display: "flex", gap: 16 }}>
-              <div>
+              <div style={{ width: 120, display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
+                <img src={char.avatar} alt="Avatar" style={{ width: 100, height: 100, objectFit: "cover", border: `2px solid ${C.border}`, borderRadius: 4, background: C.card2 }} />
+                {char.statusPoints > 0 && (
+                  <div style={{ fontFamily: PX, fontSize: 7, color: C.gold, background: C.gold + "20", padding: "4px 8px", border: `1px solid ${C.gold}`, borderRadius: 4, animation: "pulse 2s infinite" }}>
+                    STATUS POINTS: {char.statusPoints}
+                  </div>
+                )}
+              </div>
+              <div style={{ flexShrink: 0 }}>
                 <div style={{ fontFamily: PX, fontSize: 7, color: C.muted, marginBottom: 8, letterSpacing: 1 }}>ABILITY SCORES</div>
-                <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5 }}>
                   {(Object.entries(char.stats) as [keyof Stats, number][]).map(([k, v]) => <StatBox key={k} label={k} value={v} />)}
                 </div>
               </div>
@@ -143,6 +153,30 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
                     {char.savingThrows.map(s => <span key={s} style={{ fontFamily: NU, fontSize: 10, padding: "2px 6px", background: C.blue + "15", color: C.blue, border: `1px solid ${C.blue}30` }}>{s}</span>)}
                   </div>
                 </div>
+
+                {char.gameSkills && char.gameSkills.length > 0 && (
+                  <div style={{ marginTop: 12 }}>
+                    <div style={{ fontFamily: PX, fontSize: 7, color: C.gold, marginBottom: 4, letterSpacing: 1 }}>ABILITIES</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      {char.gameSkills.map(skillId => {
+                        const skill = SKILL_DICTIONARY[skillId];
+                        if (!skill) return null;
+                        const typeColor = skill.type === "active" ? C.red : skill.type === "passive" ? C.blue : C.gold;
+                        return (
+                          <div key={skillId} style={{ display: "flex", flexDirection: "column", background: C.card2, padding: "6px 8px", borderRadius: 4, border: `1px solid ${typeColor}40` }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <span style={{ fontFamily: PX, fontSize: 8, color: typeColor }}>{skill.icon} {skill.name}</span>
+                              <span style={{ fontFamily: PX, fontSize: 6, color: C.muted, border: `1px solid ${C.border}`, padding: "2px 4px" }}>
+                                {skill.type.toUpperCase()}{skill.cost !== "none" ? ` (${skill.cost.toUpperCase()})` : ""}
+                              </span>
+                            </div>
+                            <div style={{ fontFamily: NU, fontSize: 10, color: C.text + "aa", marginTop: 4 }}>{skill.description}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -152,7 +186,7 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
             <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
               <style>{`@keyframes item-detail-in { 0%{opacity:0;clip-path:polygon(0 0,100% 0,100% 0,0 0)} 100%{opacity:1;clip-path:polygon(0 0,100% 0,100% 100%,0 100%)} }`}</style>
               <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
-                {(["usable", "material", "equip"] as const).map(cat => (
+                {(["usable", "material"] as const).map(cat => (
                   <button key={cat} onClick={() => { setInvCategory(cat); setExpandedItem(null); }}
                     style={{
                       flex: 1, padding: "5px 4px", cursor: "pointer", border: "none",
@@ -161,7 +195,7 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
                       fontFamily: PX, fontSize: 6, letterSpacing: 0.3,
                       color: invCategory === cat ? C.blue : C.muted, transition: "all 0.15s",
                     }}>
-                    {cat === "usable" ? "💊 USE" : cat === "material" ? "🪵 MATS" : "⚔ EQUIP"}
+                    {cat === "usable" ? "💊 USE" : "🪵 MATS"}
                   </button>
                 ))}
               </div>
@@ -169,22 +203,45 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
                 {(() => {
                   const filtered = char.inventory.filter(i => {
                     if (invCategory === "usable") return i.type === "consumable" && !i.material;
-                    if (invCategory === "material") return i.material;
-                    return i.type === "weapon" || i.type === "armor" || i.type === "accessory";
+                    return i.material;
                   });
                   if (filtered.length === 0) return <div style={{ color: C.muted, fontFamily: NU, fontSize: 11, textAlign: "center", paddingTop: 20 }}>Empty</div>;
+                  
+                  const getRarityColor = (rarity?: string) => {
+                    if (rarity === "uncommon") return "#63c74d";
+                    if (rarity === "rare") return "#1e90ff";
+                    if (rarity === "epic") return "#9d57a9";
+                    if (rarity === "legendary") return "#fdb813";
+                    return C.border; // common
+                  };
+
+                  const stackedItems = Object.values(filtered.reduce((acc, item) => {
+                    if (acc[item.name]) {
+                      acc[item.name].count += 1;
+                    } else {
+                      acc[item.name] = { ...item, count: 1 };
+                    }
+                    return acc;
+                  }, {} as Record<string, Item & { count: number }>));
+
                   return (
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 5 }}>
-                      {filtered.map(item => (
+                      {stackedItems.map(item => (
                         <div key={item.id}
                           onClick={() => setExpandedItem(expandedItem === item.id ? null : item.id)}
                           style={{
                             cursor: "pointer", position: "relative",
-                            border: `2px solid ${expandedItem === item.id ? C.blue : C.border}`,
+                            border: `2px solid ${expandedItem === item.id ? C.blue : getRarityColor(item.rarity)}`,
                             background: expandedItem === item.id ? C.blue + "15" : C.card2,
                             padding: 6, display: "flex", flexDirection: "column", alignItems: "center",
                             transition: "border-color 0.15s, background 0.15s",
+                            boxShadow: item.rarity && item.rarity !== "common" ? `inset 0 0 8px ${getRarityColor(item.rarity)}40` : "none"
                           }}>
+                          {item.count > 1 && (
+                            <div style={{ position: "absolute", top: -4, right: -4, background: C.blue, color: "#fff", fontSize: 7, fontFamily: PX, padding: "1px 3px", borderRadius: 4, zIndex: 2 }}>
+                              x{item.count}
+                            </div>
+                          )}
                           <span style={{ fontSize: 18 }}>
                             {item.type === "weapon" ? "⚔" : item.type === "armor" ? "🛡" : item.type === "accessory" ? "💍" : item.material ? "🪵" : "💊"}
                           </span>
@@ -206,8 +263,10 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
                     background: C.card, flexShrink: 0,
                     animation: "item-detail-in 0.2s ease-out",
                   }}>
-                    <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
-                      <span style={{ fontFamily: PX, fontSize: 7, color: C.blue, flex: 1 }}>{item.name}</span>
+                    <div style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "center" }}>
+                      <span style={{ fontFamily: PX, fontSize: 8, color: getRarityColor(item.rarity), flex: 1, textShadow: item.rarity && item.rarity !== "common" ? `0 0 4px ${getRarityColor(item.rarity)}80` : "none" }}>{item.name}</span>
+                      {item.rarity && <span style={{ fontFamily: PX, fontSize: 5, padding: "2px 4px", border: `1px solid ${getRarityColor(item.rarity)}`, color: getRarityColor(item.rarity), borderRadius: 2 }}>{item.rarity.toUpperCase()}</span>}
+                      {item.hands === 2 && <span style={{ fontFamily: PX, fontSize: 5, padding: "2px 4px", border: `1px solid ${C.muted}`, color: C.muted, borderRadius: 2 }}>2H</span>}
                       <button onClick={() => setExpandedItem(null)} style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, fontFamily: MO, fontSize: 12 }}>×</button>
                     </div>
                     <div style={{ fontFamily: NU, fontSize: 10, color: C.muted, marginBottom: 6 }}>{item.description}</div>
@@ -243,21 +302,41 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
           {/* EQUIPMENT */}
           {hudTab === "equip" && (
             <div style={{ height: "100%", padding: "10px 14px", overflowY: "auto", display: "flex", gap: 14 }}>
-              <div>
-                <div style={{ fontFamily: PX, fontSize: 7, color: C.muted, marginBottom: 6, letterSpacing: 1 }}>WEAPON</div>
-                <SlotBox item={char.equipment.weapon} onClick={char.equipment.weapon ? () => setItemMenu(char.equipment.weapon!) : undefined} />
-                {char.equipment.weapon && (
-                  <div style={{ marginTop: 4 }}>
-                    <div style={{ fontFamily: PX, fontSize: 7, color: C.text }}>{char.equipment.weapon.name}</div>
-                    <div style={{ fontFamily: MO, fontSize: 9, color: C.muted }}>{(() => {
-                      const w = char.equipment.weapon;
-                      const isR = (w.range ?? 5) > 5;
-                      const sm = isR ? getMod(char.stats.dex) : getMod(char.stats.str);
-                      return `${w.damage}${sm >= 0 ? "+" : ""}${sm}`;
-                    })()}</div>
-                    <button onClick={onUnequipWeapon} style={{ fontFamily: NU, fontSize: 10, color: C.red + "80", background: "none", border: "none", cursor: "pointer", padding: 0, marginTop: 2 }}>unequip</button>
-                  </div>
-                )}
+              <div style={{ display: "flex", gap: 14 }}>
+                <div>
+                  <div style={{ fontFamily: PX, fontSize: 7, color: C.muted, marginBottom: 6, letterSpacing: 1 }}>MAIN HAND</div>
+                  <SlotBox item={char.equipment.mainHand} onClick={char.equipment.mainHand ? () => setItemMenu(char.equipment.mainHand!) : undefined} />
+                  {char.equipment.mainHand && (
+                    <div style={{ marginTop: 4 }}>
+                      <div style={{ fontFamily: PX, fontSize: 7, color: C.text }}>{char.equipment.mainHand.name}</div>
+                      <div style={{ fontFamily: MO, fontSize: 9, color: C.muted }}>{(() => {
+                        const w = char.equipment.mainHand;
+                        const isR = (w.range ?? 5) > 5;
+                        const sm = isR ? getMod(char.stats.dex) : getMod(char.stats.str);
+                        return `${w.damage}${sm >= 0 ? "+" : ""}${sm}`;
+                      })()}</div>
+                      <button onClick={onUnequipMainHand} style={{ fontFamily: NU, fontSize: 10, color: C.red + "80", background: "none", border: "none", cursor: "pointer", padding: 0, marginTop: 2 }}>unequip</button>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <div style={{ fontFamily: PX, fontSize: 7, color: C.muted, marginBottom: 6, letterSpacing: 1 }}>OFF HAND</div>
+                  {char.equipment.mainHand?.hands === 2 ? (
+                    <div style={{ width: 44, height: 44, border: `1px dashed ${C.border}`, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", background: C.card2, opacity: 0.5 }}>
+                      <span style={{ fontFamily: PX, fontSize: 6, color: C.muted, textAlign: "center" }}>(2H<br/>WEAPON)</span>
+                    </div>
+                  ) : (
+                    <>
+                      <SlotBox item={char.equipment.offHand} onClick={char.equipment.offHand ? () => setItemMenu(char.equipment.offHand!) : undefined} />
+                      {char.equipment.offHand && (
+                        <div style={{ marginTop: 4 }}>
+                          <div style={{ fontFamily: PX, fontSize: 7, color: C.text }}>{char.equipment.offHand.name}</div>
+                          <button onClick={onUnequipOffHand} style={{ fontFamily: NU, fontSize: 10, color: C.red + "80", background: "none", border: "none", cursor: "pointer", padding: 0, marginTop: 2 }}>unequip</button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
               <div style={{ width: 1, background: C.border }} />
               <div>
@@ -278,7 +357,12 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
                   {char.inventory.filter(i => i.type === "weapon" || i.type === "armor").map(item => (
                     <div key={item.id} style={{ position: "relative", cursor: "pointer" }} onClick={() => onEquipItem(item)} title={`Equip ${item.name}`}>
                       <SlotBox item={item} />
-                      <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.5)", opacity: 0, transition: "opacity 0.15s", fontFamily: PX, fontSize: 6, color: C.blue }}
+                      {item.type === "weapon" && (
+                        <div style={{ position: "absolute", top: -4, right: -4, background: C.card, border: `1px solid ${C.border}`, borderRadius: 3, padding: "1px 3px", fontFamily: MO, fontSize: 6, color: item.hands === 2 ? C.red : C.gold, zIndex: 2 }}>
+                          {item.hands === 2 ? "2H" : "1H"}
+                        </div>
+                      )}
+                      <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.5)", opacity: 0, transition: "opacity 0.15s", fontFamily: PX, fontSize: 6, color: C.blue, borderRadius: 4, zIndex: 1 }}
                         onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.opacity = "1"}
                         onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.opacity = "0"}>
                         EQUIP
@@ -477,6 +561,27 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
             </div>
           )}
 
+          {/* QUEST */}
+          {hudTab === "quest" && (
+            <div style={{ height: "100%", padding: "10px 14px", overflowY: "auto" }}>
+              <div style={{ fontFamily: PX, fontSize: 7, color: C.muted, marginBottom: 6, letterSpacing: 1 }}>ACTIVE QUESTS</div>
+              {activeQuests.length === 0
+                ? <div style={{ fontFamily: NU, fontSize: 11, color: C.muted }}>No quests. Visit the Quest Board in town.</div>
+                : activeQuests.map(q => (
+                  <div key={q.id} style={{ padding: "8px 10px", background: C.card2, border: `1px solid ${C.border}`, marginBottom: 6 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                      <span style={{ fontFamily: PX, fontSize: 7, color: C.blue }}>{q.title}</span>
+                      <span style={{ fontFamily: MO, fontSize: 9, color: C.muted }}>{q.killTarget?.current}/{q.killTarget?.count}</span>
+                    </div>
+                    <div style={{ height: 4, background: C.bg }}>
+                      <div style={{ height: "100%", background: C.blue, width: `${((q.killTarget?.current ?? 0) / (q.killTarget?.count ?? 1)) * 100}%` }} />
+                    </div>
+                  </div>
+                ))
+              }
+            </div>
+          )}
+
           {/* PARTY */}
           {hudTab === "party" && (
             <div style={{ height: "100%", padding: "10px 14px", overflowY: "auto" }}>
@@ -485,26 +590,9 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div>
                       <div style={{ fontFamily: PX, fontSize: 9, color: C.blue }}>{party.name}</div>
-                      <div style={{ fontFamily: NU, fontSize: 11, color: C.muted, marginTop: 2 }}>{party.memberIds.length} member · Quests: {party.questIds.length}/2</div>
+                      <div style={{ fontFamily: NU, fontSize: 11, color: C.muted, marginTop: 2 }}>{party.memberIds.length} member</div>
                     </div>
                     <button onClick={onLeaveParty} style={{ ...pixelBtn("danger", true), fontSize: 7 }}>LEAVE</button>
-                  </div>
-                  <div>
-                    <div style={{ fontFamily: PX, fontSize: 7, color: C.muted, marginBottom: 6, letterSpacing: 1 }}>ACTIVE QUESTS</div>
-                    {partyQuests.length === 0
-                      ? <div style={{ fontFamily: NU, fontSize: 11, color: C.muted }}>No quests. Visit the Quest Board in town.</div>
-                      : partyQuests.map(q => (
-                        <div key={q.id} style={{ padding: "8px 10px", background: C.card2, border: `1px solid ${C.border}`, marginBottom: 6 }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                            <span style={{ fontFamily: PX, fontSize: 7, color: C.blue }}>{q.title}</span>
-                            <span style={{ fontFamily: MO, fontSize: 9, color: C.muted }}>{q.killTarget?.current}/{q.killTarget?.count}</span>
-                          </div>
-                          <div style={{ height: 4, background: C.bg }}>
-                            <div style={{ height: "100%", background: C.blue, width: `${((q.killTarget?.current ?? 0) / (q.killTarget?.count ?? 1)) * 100}%` }} />
-                          </div>
-                        </div>
-                      ))
-                    }
                   </div>
                 </div>
               ) : (
@@ -535,6 +623,16 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
           onUse={itemMenu.type === "consumable" ? () => { onUseItem(itemMenu); setItemMenu(null); } : undefined}
           onEquip={["weapon", "armor", "accessory"].includes(itemMenu.type) && char.inventory.some(i => i.id === itemMenu.id)
             ? () => { onEquipItem(itemMenu); setItemMenu(null); } : undefined}
+          onUnequip={!char.inventory.some(i => i.id === itemMenu.id) ? () => {
+            if (char.equipment.mainHand?.id === itemMenu.id) onUnequipMainHand();
+            else if (char.equipment.offHand?.id === itemMenu.id) onUnequipOffHand();
+            else if (char.equipment.armor?.id === itemMenu.id) onUnequipArmor();
+            else {
+              const accIdx = char.equipment.accessories.findIndex(a => a.id === itemMenu.id);
+              if (accIdx >= 0) onUnequipAcc(accIdx);
+            }
+            setItemMenu(null);
+          } : undefined}
           onDrop={() => { onDropItem(itemMenu.id); setItemMenu(null); }}
           onClose={() => setItemMenu(null)}
         />

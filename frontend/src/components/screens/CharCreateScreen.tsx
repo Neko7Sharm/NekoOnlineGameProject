@@ -312,7 +312,7 @@ export function CharCreateScreen({ onCreated, onBack }: { onCreated: (c: Charact
             )}
             <div style={{ marginBottom: 14 }}>
               <div style={{ fontFamily: PX, fontSize: 7, color: C.muted, marginBottom: 8, letterSpacing: 1 }}>STARTING EQUIPMENT</div>
-              {[preview.equipment.weapon, preview.equipment.armor].filter(Boolean).map(item => item && (
+              {[preview.equipment.mainHand, preview.equipment.offHand, preview.equipment.armor].filter(Boolean).map(item => item && (
                 <div key={item.id} style={{ display: "flex", gap: 8, fontFamily: NU, fontSize: 12, marginBottom: 4 }}>
                   <span style={{ color: CLASS_CFG[cls].color }}>{item.type === "weapon" ? "⚔" : "🛡"}</span>
                   <span style={{ color: C.text }}>{item.name}</span>

@@ -7,7 +7,7 @@ import { ReactNode } from "react";
 export type Screen = "auth" | "charSelect" | "charCreate" | "worldMap" | "town" | "dungeon" | "sanctuary" | "tutorial";
 export type CharClass = "Fighter" | "Cleric" | "Paladin" | "Ranger" | "Wizard";
 export type ItemType = "weapon" | "armor" | "accessory" | "consumable";
-export type HudTab = "char" | "inv" | "equip" | "acc" | "chat" | "party" | "skills";
+export type HudTab = "char" | "inv" | "equip" | "acc" | "chat" | "party" | "skills" | "quest";
 
 export type Emotion = "normal" | "happy" | "gentle" | "playful" | "shocked" | "wondering" | "blushing";
 export interface DialogNode {
@@ -16,7 +16,7 @@ export interface DialogNode {
   choices?: { label: string; next: string | (() => void) }[];
   next?: string | (() => void);
 }
-export type CombatModeT = "none" | "move" | "attack" | "spell";
+export type CombatModeT = "none" | "move" | "attack" | "attack_offhand" | "spell";
 
 // ─────────────────────────────────────────────────
 // CORE GAME TYPES
@@ -26,9 +26,15 @@ export interface Stats {
   str: number; dex: number; con: number; int: number; wis: number; cha: number;
 }
 
+export type ItemRarity = "common" | "uncommon" | "rare" | "epic" | "legendary";
+export type DamageType = "slashing" | "piercing" | "bludgeoning" | "fire" | "cold" | "lightning" | "poison" | "necrotic" | "radiant";
+export type WeaponProperty = "light" | "heavy" | "finesse" | "reach" | "versatile" | "thrown" | "loading" | "two-handed";
+
 export interface Item {
   id: string; name: string; type: ItemType; description: string; value: number;
-  damage?: string; damageType?: string; range?: number;
+  damage?: string; damageType?: DamageType; range?: number; properties?: WeaponProperty[];
+  hands?: 1 | 2; // For weapons: 1-handed or 2-handed
+  rarity?: ItemRarity;
   ac?: number; healAmount?: string; effect?: string; stat?: keyof Stats; bonus?: number;
   material?: boolean;
   saveStat?: keyof Stats;
@@ -37,15 +43,17 @@ export interface Item {
 }
 
 export interface Equipment {
-  weapon: Item | null; armor: Item | null;
+  mainHand: Item | null; offHand: Item | null; armor: Item | null;
   accessories: [Item | null, Item | null, Item | null];
 }
 
 export interface Character {
   id: string; name: string; avatar: string; class: CharClass;
+  subclass?: string;
   level: number; exp: number; gold: number; stats: Stats;
   hp: number; maxHp: number; ac: number; profBonus: number;
-  skills: string[]; savingThrows: string[];
+  skills: string[]; savingThrows: string[]; // Roleplay proficiencies
+  gameSkills: string[]; // IDs for SkillDef
   spellSlots?: { used: number; max: number };
   spellChoice?: string;
   customSkills?: string[];
@@ -57,6 +65,7 @@ export interface Character {
   tutorialDeaths?: number;
   lastLoginTime?: number;
   lastSeenVersion?: string;
+  activeQuests?: Quest[];
 }
 
 export interface Monster {
@@ -70,8 +79,28 @@ export interface Combatant { id: string; type: "player" | "monster"; name: strin
 export interface CombatState {
   active: boolean; round: number;
   turnOrder: Combatant[]; currentIndex: number;
-  actionUsed: boolean; bonusActionUsed: boolean; movedSquares: number;
+  actionUsed: boolean; extraActionUsed: boolean; movedSquares: number;
   log: string[]; engagedMonsterIds: string[];
+  guardAmount?: number;
+  activeBuffs: string[];
+}
+
+export type SkillType = "active" | "passive" | "reaction";
+export type ActionCost = "main" | "extra" | "none";
+
+export interface SkillDef {
+  id: string;
+  name: string;
+  type: SkillType;
+  cost: ActionCost;
+  description: string;
+  icon?: string;
+  // Possible effects:
+  damage?: string;
+  healAmount?: string;
+  acBonus?: number;
+  hpBonus?: number;
+  range?: number;
 }
 
 export interface VisualEffect {
@@ -114,7 +143,6 @@ export interface GameState {
   party: Party | null;
   dungeonMonsters: Monster[];
   availableQuests: Quest[];
-  partyQuests: Quest[];
   questRefreshAt: number;
 }
 

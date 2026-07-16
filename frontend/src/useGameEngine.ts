@@ -15,9 +15,9 @@ import { loadState, persist } from "./storage";
 import { genMonsters, genQuests } from "./game/character";
 
 const INIT_COMBAT: CombatState = {
-  active: false, round: 0, turnOrder: [], currentIndex: 0,
-  actionUsed: false, bonusActionUsed: false, movedSquares: 0,
-  log: [], engagedMonsterIds: [],
+  active: false, round: 1, turnOrder: [], currentIndex: 0,
+  actionUsed: false, extraActionUsed: false, movedSquares: 0,
+  log: [], engagedMonsterIds: []
 };
 
 export function useGameEngine() {
@@ -148,7 +148,7 @@ export function useGameEngine() {
       ...engaged.map(m => `${m.name} initiative: ${order.find(o => o.id === m.id)?.initiative}`),
     ];
     setGs(prev => ({ ...prev, dungeonMonsters: prev.dungeonMonsters.map(m => monsterIds.includes(m.id) ? { ...m, alerted: true } : m) }));
-    setCombat({ active: true, round: 1, turnOrder: order, currentIndex: 0, actionUsed: false, bonusActionUsed: false, movedSquares: 0, log, engagedMonsterIds: monsterIds });
+    setCombat({ active: true, round: 1, turnOrder: order, currentIndex: 0, actionUsed: false, extraActionUsed: false, movedSquares: 0, log, engagedMonsterIds: monsterIds });
     setCombatMode("none");
   }, [char, gs.dungeonMonsters]);
 
@@ -163,14 +163,14 @@ export function useGameEngine() {
       if (Math.random() < 0.5) drops.push({ id: gid(), ...BRANCH_ITEM });
       if (Math.random() < 0.6) updateChar(char.id, ch => ({ gold: ch.gold + 2 + Math.floor(Math.random() * 5) }));
     });
-    let updatedPQ = gs.partyQuests.map(q => {
+    let updatedAQ = (char.activeQuests || []).map(q => {
       if (q.killTarget?.monster === "Wooden Dummy") {
         const nextCurrent = Math.min((q.killTarget.current ?? 0) + dead.length, q.killTarget.count);
         return { ...q, killTarget: { ...q.killTarget, current: nextCurrent } };
       }
       return q;
     });
-    updatedPQ = updatedPQ.map(q => {
+    updatedAQ = updatedAQ.map(q => {
       if (isQuestReadyToTurnIn(q, char.inventory) && !q.readyToTurnIn && !q.completed) {
         notify(`📋 Quest complete: ${q.title}! Return to the Quest Board to claim your reward.`);
         return { ...q, readyToTurnIn: true };
@@ -192,6 +192,7 @@ export function useGameEngine() {
           ...ch,
           exp: ch.exp + totalExp,
           inventory: [...ch.inventory, ...drops],
+          activeQuests: updatedAQ,
           tutorialCompleted: true,
           maxHp: ch.maxHp + 5,
           hp: ch.hp + 5,
@@ -203,6 +204,7 @@ export function useGameEngine() {
           ...ch,
           exp: ch.exp + totalExp,
           inventory: [...ch.inventory, ...drops],
+          activeQuests: updatedAQ,
           position: { x: 15, y: 15 },
           currentMap: "sanctuary"
         }));
@@ -249,7 +251,7 @@ export function useGameEngine() {
       }, 500);
 
     } else {
-      updateChar(char.id, ch => ({ exp: ch.exp + totalExp, inventory: [...ch.inventory, ...drops] }));
+      updateChar(char.id, ch => ({ exp: ch.exp + totalExp, inventory: [...ch.inventory, ...drops], activeQuests: updatedAQ }));
       if (char.tutorialCompleted && baseExp > 0 && totalExp > baseExp) {
         notify(`✨ Blessing of Selenia active!`);
       }
@@ -257,7 +259,7 @@ export function useGameEngine() {
     }
 
     setCombat(INIT_COMBAT); setCombatMode("none");
-  }, [char, gs.dungeonMonsters, gs.partyQuests, notify, updateChar, isQuestReadyToTurnIn]);
+  }, [char, gs.dungeonMonsters, notify, updateChar, isQuestReadyToTurnIn]);
 
   // Win condition
   useEffect(() => {
@@ -316,10 +318,13 @@ export function useGameEngine() {
       if (aliveM.length === 0) return prev;
       const nextIdx = (prev.currentIndex + 1) % prev.turnOrder.length;
       const isNew = nextIdx <= prev.currentIndex;
+      const nextActor = prev.turnOrder[nextIdx];
+      const isPlayerTurn = nextActor?.type === "player";
       return {
         ...prev, currentIndex: nextIdx,
         round: isNew ? prev.round + 1 : prev.round,
-        actionUsed: false, bonusActionUsed: false, movedSquares: 0,
+        actionUsed: false, extraActionUsed: false, movedSquares: 0,
+        guardAmount: isPlayerTurn ? 0 : prev.guardAmount,
         log: isNew ? [...prev.log.slice(-30), `── Round ${prev.round + 1} ──`] : prev.log,
       };
     });
@@ -359,20 +364,59 @@ export function useGameEngine() {
 
       const nd = dist(newPos, char.position);
       if (nd <= Math.ceil((monster.range ?? 5) / 5)) {
-        const atkRoll = d20() + monster.attackMod;
-        const logEntry = `${monster.name} attacks ${char.name}: [${atkRoll}] vs AC ${char.ac}`;
+        let atkRoll1 = d20();
+        let atkRoll2 = d20();
+        
+        // Protector Subclass: impose disadvantage
+        let hasDisadvantage = char.subclass === "protector" && nd <= 1;
+        let atkRollBase = hasDisadvantage ? Math.min(atkRoll1, atkRoll2) : atkRoll1;
+        let atkRoll = atkRollBase + monster.attackMod;
 
-        addDiceRoll({ type: "hit", value: atkRoll, total: atkRoll, mod: monster.attackMod, max: 20, label: `vs AC ${char.ac}` });
+        // Reaction: Wizard Shield
+        let effectiveAC = char.ac;
+        let usedShield = false;
+        if (atkRoll >= char.ac && atkRoll < char.ac + 5 && char.gameSkills?.includes("wizard_shield_spell")) {
+          effectiveAC += 5;
+          usedShield = true;
+        }
+
+        // Shield Wall Buff
+        if (combat.activeBuffs.includes("fighter_shield_wall")) {
+          effectiveAC += 2;
+        }
+
+        const disadvLabel = hasDisadvantage ? "(Disadv) " : "";
+        const logEntry = `${monster.name} attacks ${char.name}: ${disadvLabel}[${atkRollBase}+${monster.attackMod}=${atkRoll}] vs AC ${effectiveAC}${usedShield ? " (Shield Spell!)" : ""}`;
+
+        addDiceRoll({ type: "hit", value: atkRollBase, total: atkRoll, mod: monster.attackMod, max: 20, label: `${disadvLabel}vs AC ${effectiveAC}` });
 
         setTimeout(() => {
           if (!combat.active) return;
-          if (atkRoll >= char.ac) {
+          if (atkRoll >= effectiveAC) {
             setActionText({ text: "HIT!", color: C.red });
             setTimeout(() => setActionText(null), 1000);
 
             setTimeout(() => {
               if (!combat.active) return;
-              const dmg = rollDice(monster.damage);
+              let dmg = rollDice(monster.damage);
+              let blocked = 0;
+              
+              if (combat.guardAmount && combat.guardAmount > 0) {
+                blocked += combat.guardAmount;
+              }
+              
+              // Reaction: Paladin Shield Block
+              if (char.gameSkills?.includes("paladin_shield_block")) {
+                blocked += rollDice("1d10") + getMod(char.stats.str);
+              }
+
+              // Berserker Rage Resistance (Halve physical damage)
+              if (combat.activeBuffs.includes("fighter_berserker_rage")) {
+                dmg = Math.floor(dmg / 2);
+              }
+              
+              dmg = Math.max(0, dmg - blocked);
+              
               let actualNewHp = Math.max(0, char.hp - dmg);
               const cMaxHp = char.maxHp;
               let isTutorialDeath = false;
@@ -398,7 +442,7 @@ export function useGameEngine() {
 
               setCombat(prevC => ({
                 ...prevC,
-                log: [...newLog, logEntry, `  Hit! ${char.name} takes ${dmg} dmg. (${actualNewHp}/${cMaxHp})`]
+                log: [...newLog, logEntry, `  Hit! ${char.name} takes ${dmg} dmg.${blocked > 0 ? ` (${blocked} blocked)` : ""} (${actualNewHp}/${cMaxHp})`]
               }));
 
               if (isTutorialDeath) {
@@ -452,7 +496,16 @@ export function useGameEngine() {
                 showSeleniaPopup("happy", ["Ah, you're better at dodging than I thought!", "Nice footwork! Keep it up.", "That was close! Good job evading."]);
               }, 800);
             }
-            setTimeout(() => { doNextTurn(); }, 500);
+            
+            setTimeout(() => {
+              if (char.gameSkills.includes("fighter_counter_attack") && nd <= 1) {
+                notify("⚔️ Counter Attack!");
+                handleAttackMonster(monster.id, false, true);
+                setTimeout(doNextTurn, 1500);
+              } else {
+                doNextTurn();
+              }
+            }, 500);
           }
         }, 600);
       } else {
@@ -598,8 +651,12 @@ export function useGameEngine() {
     const allSpells = CLASS_SPELLS[char.class] ?? [];
     const wizAoe = WIZARD_SPELL_CHOICES.find(s => s.name === spellName);
     const spell = allSpells.find(s => s.name === spellName) as typeof allSpells[0] | undefined;
+    
+    // Also check SKILL_DICTIONARY
+    const gameSkill = SKILL_DICTIONARY[spellName];
+    const isGameSkill = !!gameSkill;
 
-    const needsSlot = spell ? spell.level > 0 : true;
+    const needsSlot = spell ? spell.level > 0 : false;
     if (needsSlot) {
       if (!char.spellSlots || char.spellSlots.used >= char.spellSlots.max) { notify("No spell slots remaining!"); return; }
       updateChar(char.id, c => ({ spellSlots: { ...c.spellSlots!, used: c.spellSlots!.used + 1 } }));
@@ -613,17 +670,30 @@ export function useGameEngine() {
       "Sacred Flame": "sacred_flame", "Divine Smite": "smite",
       "Sleep": "thunder", "Thunderwave": "thunder", "Burning Hands": "fire_aoe",
       "Cure Wounds": "heal", "Lay on Hands": "heal",
+      "fighter_second_wind": "heal", "cleric_healing_word": "heal"
     };
     const effectType = effectTypeMap[spellName] ?? "magic_missile";
 
-    if (spell && ((spell.type === "heal" || spell.type === "cantrip") && spell.heal)) {
+    // Handle Healing (Spells and GameSkills)
+    const healValue = spell?.heal ?? gameSkill?.healAmount;
+    if (healValue) {
+      const isExtra = isGameSkill ? gameSkill.cost === "extra" : !!spell?.isBonus;
+      setCombat(prev => ({ ...prev, [isExtra ? "extraActionUsed" : "actionUsed"]: true }));
       const spMod = getSpellcastingMod(char);
-      const healed = spell.heal === "5" ? 5 : rollDice(spell.heal) + spMod;
+      let healed = healValue === "5" ? 5 : rollDice(healValue) + (isGameSkill && char.class !== "Cleric" ? 0 : spMod);
+      if (spellName === "fighter_second_wind") {
+        healed += (char.level * 2);
+      }
       updateChar(char.id, c => ({ hp: Math.min(c.maxHp, c.hp + healed) }));
-      log.push(`${char.name} casts ${spell.name}: +${healed} HP`);
+      log.push(`${char.name} uses ${gameSkill?.name ?? spell?.name}: +${healed} HP`);
       addEffect({ type: "heal", gridX: char.position.x, gridY: char.position.y, value: String(healed) });
       notify(`✨ Healed ${healed} HP!`);
+      setCombatMode("none");
+      setSelectedSpell(null);
     } else if (wizAoe && target) {
+      setCombat(prev => ({ ...prev, actionUsed: true }));
+      setCombatMode("none");
+      setSelectedSpell(null);
       const aoeRadius = wizAoe.aoeRadius;
       const targets = gs.dungeonMonsters.filter(m => m.hp > 0 && dist(target.position, m.position) <= aoeRadius);
       let newMonsters = [...gs.dungeonMonsters];
@@ -651,22 +721,38 @@ export function useGameEngine() {
         setDyingMonsters(prev => new Set([...prev, id]));
         setTimeout(() => setDyingMonsters(prev => { const s = new Set(prev); s.delete(id); return s; }), 1000);
       });
-    } else if (spell && spell.damage && target) {
+    } else if (spellName === "fighter_action_surge") {
+      setCombat(prev => ({ ...prev, actionUsed: false, extraActionUsed: true }));
+      log.push(`${char.name} uses Action Surge! Restored Main Action.`);
+      notify("💥 Action Surge! Main Action restored.");
+      setCombatMode("none");
+      setSelectedSpell(null);
+    } else if (["fighter_shield_wall", "fighter_warrior_focus", "fighter_samurai_focus", "fighter_berserker_rage"].includes(spellName)) {
+      setCombat(prev => ({ ...prev, actionUsed: true, activeBuffs: [...prev.activeBuffs, spellName] }));
+      log.push(`${char.name} uses ${gameSkill?.name}!`);
+      notify(`✨ ${gameSkill?.name} activated!`);
+      setCombatMode("none");
+      setSelectedSpell(null);
+    } else if ((spell?.damage || gameSkill?.damage) && target) {
       const spMod = getSpellcastingMod(char);
-      const rawDmg = rollDice(spell.damage);
-      const dmg = Math.max(1, rawDmg + spMod);
-      const dmgLabel = spell.damage + (spMod !== 0 ? `${spMod >= 0 ? "+" : ""}${spMod}` : "");
+      const rawDmg = rollDice(spell?.damage ?? gameSkill!.damage!);
+      const dmg = Math.max(1, rawDmg + (isGameSkill ? 0 : spMod));
+      const dmgLabel = (spell?.damage ?? gameSkill!.damage!) + (spMod !== 0 && !isGameSkill ? `${spMod >= 0 ? "+" : ""}${spMod}` : "");
 
-      setCombat(prev => ({ ...prev, actionUsed: true }));
+      const isExtra = isGameSkill ? gameSkill.cost === "extra" : !!spell?.isBonus;
+      setCombat(prev => ({ ...prev, [isExtra ? "extraActionUsed" : "actionUsed"]: true }));
       setCombatMode("none");
       setSelectedSpell(null);
 
-      if (spell.saveStat && spell.saveDC) {
+      const saveStat = spell?.saveStat ?? gameSkill?.saveStat;
+      const saveDC = spell?.saveDC ?? gameSkill?.saveDC;
+      if (saveStat && saveDC) {
         const saveRoll = d20();
-        const saved = saveRoll >= spell.saveDC;
-        const logEntry = `${char.name} casts ${spell.name}: Save roll [${saveRoll}] vs DC ${spell.saveDC}`;
+        const saved = saveRoll >= saveDC;
+        const spellOrSkillName = spell?.name ?? gameSkill!.name;
+        const logEntry = `${char.name} uses ${spellOrSkillName}: Save roll [${saveRoll}] vs DC ${saveDC}`;
 
-        addDiceRoll({ type: "save", value: saveRoll, total: saveRoll, mod: 0, max: 20, label: `Save DC ${spell.saveDC}` });
+        addDiceRoll({ type: "save", value: saveRoll, total: saveRoll, mod: 0, max: 20, label: `Save DC ${saveDC}` });
 
         setTimeout(() => {
           if (saved) {
@@ -769,26 +855,99 @@ export function useGameEngine() {
     setCombatMode("none"); setSelectedSpell(null);
   }, [char, selectedSpell, handleCastSpell]);
 
+  const handleGuard = useCallback(() => {
+    if (!char || !combat.active || combat.extraActionUsed) return;
+    const conMod = getMod(char.stats.con);
+    const roll = rollDice("1d4");
+    const totalGuard = Math.max(1, roll + conMod);
+    setCombat(prev => ({ 
+      ...prev, 
+      extraActionUsed: true, 
+      guardAmount: (prev.guardAmount || 0) + totalGuard,
+      log: [...prev.log, `${char.name} uses Guard! Deflects up to ${totalGuard} damage.`]
+    }));
+    notify(`🛡️ Guard Active: -${totalGuard} incoming DMG`);
+    addEffect({ type: "heal", gridX: char.position.x, gridY: char.position.y, value: `Guard ${totalGuard}` });
+    setCombatMode("none");
+  }, [char, combat.active, combat.extraActionUsed, notify, addEffect]);
+
   const handleMonsterClick = useCallback((monsterId: string) => {
-    if (combatMode === "attack") handleAttackMonster(monsterId);
+    if (combatMode === "attack") handleAttackMonster(monsterId, false);
+    else if (combatMode === "attack_offhand") handleAttackMonster(monsterId, true);
     else if (combatMode === "spell" && selectedSpell) handleCastSpell(selectedSpell, monsterId);
   }, [combatMode, selectedSpell, handleCastSpell]);
 
-  function handleAttackMonster(monsterId: string) {
-    if (!char || !combat.active || combat.actionUsed) return;
-    const weapon = char.equipment.weapon;
-    if (!weapon) return;
+  function handleAttackMonster(monsterId: string, isOffHand: boolean = false, isReaction: boolean = false) {
+    if (!char || !combat.active) return;
+    if (!isReaction) {
+      if (isOffHand && combat.extraActionUsed) return;
+      if (!isOffHand && combat.actionUsed) {
+        // Allow Extra Attack if they have the buff
+        if (!(char.class === "Fighter" && char.level >= 5 && combat.activeBuffs.includes("extra_attack_used"))) {
+          return;
+        }
+      }
+    }
+    
+    const weapon = isOffHand ? char.equipment.offHand : char.equipment.mainHand;
+    if (!weapon || weapon.type !== "weapon") return;
+    
     const monster = gs.dungeonMonsters.find(m => m.id === monsterId);
     if (!monster || monster.hp <= 0) return;
+    
+    // Weapon Properties check
     const isRanged = (weapon.range ?? 5) > 5;
-    const mod = isRanged ? getMod(char.stats.dex) : getMod(char.stats.str);
-    const roll = d20();
-    const total = roll + mod + char.profBonus;
+    const isFinesse = weapon.properties?.includes("finesse");
+    const isTwoHanded = weapon.properties?.includes("two-handed");
+    const isLight = weapon.properties?.includes("light");
+    const isMelee = !isRanged;
 
-    setCombat(prev => ({ ...prev, actionUsed: true }));
+    let useDex = isRanged || (isFinesse && char.stats.dex > char.stats.str);
+    const mod = getMod(useDex ? char.stats.dex : char.stats.str);
+
+    // Samurai Focus Advantage
+    const hasSamuraiFocus = combat.activeBuffs.includes("fighter_samurai_focus");
+    let roll1 = d20();
+    let roll2 = d20();
+    let roll = hasSamuraiFocus ? Math.max(roll1, roll2) : roll1;
+
+    // Hit Buffs & Subclass
+    let extraHitBonus = 0;
+    if (combat.activeBuffs.includes("fighter_warrior_focus")) extraHitBonus += rollDice("1d4") + char.profBonus;
+    
+    if (char.subclass === "archer" && isRanged) extraHitBonus += 2;
+    if (char.subclass === "duelwield" && char.equipment.mainHand && char.equipment.offHand && isLight) extraHitBonus += 1;
+    if (char.subclass === "berserker" && isMelee && isTwoHanded) extraHitBonus += 2;
+    if (char.subclass === "samurai" && isMelee) extraHitBonus += 2;
+
+    const total = roll + mod + char.profBonus + extraHitBonus;
+
+    if (!isReaction) {
+      // Extra Attack Logic (Fighter Lv 5)
+      const canExtraAttack = char.class === "Fighter" && char.level >= 5;
+      const isFirstAttackOfAction = !combat.activeBuffs.includes("extra_attack_used");
+
+      if (!isOffHand) {
+        if (canExtraAttack && isFirstAttackOfAction) {
+          setCombat(prev => ({ ...prev, activeBuffs: [...prev.activeBuffs, "extra_attack_used"] }));
+        } else {
+          setCombat(prev => ({ ...prev, actionUsed: true }));
+        }
+      } else {
+        setCombat(prev => ({ ...prev, extraActionUsed: true }));
+      }
+    }
+
+    // Remove Samurai Focus buff after use
+    if (hasSamuraiFocus) {
+      setCombat(prev => ({ ...prev, activeBuffs: prev.activeBuffs.filter(b => b !== "fighter_samurai_focus") }));
+    }
+
     setCombatMode("none");
 
-    addDiceRoll({ type: "hit", value: roll, total, mod: mod + char.profBonus, max: 20, label: `vs AC ${monster.ac}` });
+    const advLabel = hasSamuraiFocus ? "(Adv) " : "";
+    const extraLabel = extraHitBonus > 0 ? `+${extraHitBonus}` : "";
+    addDiceRoll({ type: "hit", value: roll, total, mod: mod + char.profBonus + extraHitBonus, max: 20, label: `${advLabel}vs AC ${monster.ac}` });
 
     if (weapon.name === "Longsword") {
       addEffect({ type: "sword_swing", gridX: monster.position.x, gridY: monster.position.y, targetX: char.position.x, targetY: char.position.y });
@@ -800,15 +959,25 @@ export function useGameEngine() {
     setTimeout(() => {
       const isHit = total >= monster.ac;
       const isSurprise = !monster.alerted;
-      const logEntry = `${char.name} attacks ${monster.name}: [${roll}+${mod + char.profBonus}=${total}] vs AC ${monster.ac}`;
+      const logEntry = `${char.name} attacks ${monster.name}${isOffHand ? " (Off-Hand)" : ""}: [${roll}+${mod + char.profBonus}${extraLabel}=${total}] vs AC ${monster.ac}`;
 
       if (isHit) {
         setActionText({ text: isSurprise ? "AMBUSH!" : "HIT!", color: C.blue });
         setTimeout(() => setActionText(null), 1000);
 
         setTimeout(() => {
-          const dieRoll = rollDice(weapon.damage ?? "1d4");
-          const dmgMod = isRanged ? getMod(char.stats.dex) : getMod(char.stats.str);
+          let dieRoll = rollDice(weapon.damage ?? "1d4");
+          let dmgMod = isRanged ? getMod(char.stats.dex) : getMod(char.stats.str);
+          
+          if (weapon.name === "Shortbow") {
+            const distance = dist(char.position, monster.position);
+            dmgMod -= distance;
+          }
+
+          if (combat.activeBuffs.includes("fighter_berserker_rage") && isMelee) {
+            dieRoll += rollDice("1d6");
+          }
+
           const withMod = Math.max(1, dieRoll + dmgMod);
           const finalDmg = isSurprise ? withMod * 2 : withMod;
 
@@ -1004,6 +1173,10 @@ export function useGameEngine() {
           setCombatMode("move");
           return;
         }
+        if (combat.movedSquares >= MOVE_SQUARES) {
+          notify(`You can only move ${MOVE_SQUARES} squares per turn!`);
+          return;
+        }
       }
 
       const newX = Math.max(0, Math.min(COLS - 1, char.position.x + dx));
@@ -1040,6 +1213,9 @@ export function useGameEngine() {
 
       updateChar(char.id, { position: { x: newX, y: newY } });
       if (screen === "dungeon") revealFog({ x: newX, y: newY });
+      if (combat.active) {
+        setCombat(prev => ({ ...prev, movedSquares: prev.movedSquares + 1 }));
+      }
     }
 
     window.addEventListener("keydown", handleKeyDown);
@@ -1065,12 +1241,40 @@ export function useGameEngine() {
 
   // ── ITEM / EQUIP ──
 
+  function canChangeEquipment(): boolean {
+    if (!combat.active) return true;
+    if (combat.turnOrder[combat.currentIndex]?.id !== char?.id) {
+      notify("You can only change equipment on your turn during combat!");
+      return false;
+    }
+    if (combat.extraActionUsed) {
+      notify("You already used your extra action this turn!");
+      return false;
+    }
+    setCombat(prev => ({ ...prev, extraActionUsed: true, log: [...prev.log, `${char?.name} changed equipment (used extra action).`] }));
+    return true;
+  }
+
   function handleEquipItem(item: Item) {
     if (!char) return;
+    if (!canChangeEquipment()) return;
     updateChar(char.id, c => {
       const newInv = c.inventory.filter(i => i.id !== item.id);
       let eq = { ...c.equipment };
-      if (item.type === "weapon") { const old = eq.weapon; eq.weapon = item; if (old) newInv.push(old); }
+      if (item.type === "weapon") { 
+        if (item.hands === 2) {
+          const oldM = eq.mainHand; const oldO = eq.offHand;
+          eq.mainHand = item; eq.offHand = null;
+          if (oldM) newInv.push(oldM); if (oldO) newInv.push(oldO);
+        } else {
+          if (!eq.mainHand) { eq.mainHand = item; }
+          else if (!eq.offHand && eq.mainHand.hands !== 2) { eq.offHand = item; }
+          else {
+            const oldM = eq.mainHand; eq.mainHand = item; eq.offHand = null;
+            if (oldM) newInv.push(oldM);
+          }
+        }
+      }
       else if (item.type === "armor") { const old = eq.armor; eq.armor = item; if (old) newInv.push(old); }
       else if (item.type === "accessory") {
         const idx = eq.accessories.findIndex(a => a === null);
@@ -1084,13 +1288,14 @@ export function useGameEngine() {
       updated.ac = calcAC(updated); return updated;
     });
   }
-  function handleUnequipWeapon() { if (!char?.equipment.weapon) return; const w = char.equipment.weapon; updateChar(char.id, c => ({ inventory: [...c.inventory, w], equipment: { ...c.equipment, weapon: null } })); }
+  function handleUnequipMainHand() { if (!char?.equipment.mainHand || !canChangeEquipment()) return; const w = char.equipment.mainHand; updateChar(char.id, c => ({ inventory: [...c.inventory, w], equipment: { ...c.equipment, mainHand: null } })); }
+  function handleUnequipOffHand() { if (!char?.equipment.offHand || !canChangeEquipment()) return; const w = char.equipment.offHand; updateChar(char.id, c => ({ inventory: [...c.inventory, w], equipment: { ...c.equipment, offHand: null } })); }
   function handleUnequipArmor() {
-    if (!char?.equipment.armor) return; const a = char.equipment.armor;
+    if (!char?.equipment.armor || !canChangeEquipment()) return; const a = char.equipment.armor;
     updateChar(char.id, c => { const u = { ...c, inventory: [...c.inventory, a], equipment: { ...c.equipment, armor: null } }; u.ac = calcAC(u); return u; });
   }
   function handleUnequipAcc(i: number) {
-    if (!char || !char.equipment.accessories[i]) return; const acc = char.equipment.accessories[i]!;
+    if (!char || !char.equipment.accessories[i] || !canChangeEquipment()) return; const acc = char.equipment.accessories[i]!;
     updateChar(char.id, c => {
       const na: [Item | null, Item | null, Item | null] = [...c.equipment.accessories] as [Item | null, Item | null, Item | null]; na[i] = null;
       const u = { ...c, inventory: [...c.inventory, acc], equipment: { ...c.equipment, accessories: na } }; u.ac = calcAC(u); return u;
@@ -1099,16 +1304,21 @@ export function useGameEngine() {
   function handleDropItem(id: string) { if (!char) return; updateChar(char.id, c => ({ inventory: c.inventory.filter(i => i.id !== id) })); notify("Item dropped."); }
   function handleUseItem(item: Item) {
     if (!char) return;
+    const isCombat = combat.active && combat.turnOrder[combat.currentIndex]?.id === char.id;
+    
     if (item.effect === "heal" && item.healAmount) {
+      if (isCombat) setCombat(c => ({ ...c, extraActionUsed: true }));
       const healed = rollDice(item.healAmount);
       updateChar(char.id, c => ({ hp: Math.min(c.maxHp, c.hp + healed), inventory: c.inventory.filter(i => i.id !== item.id) }));
       notify(`🧪 ${item.name}: +${healed} HP!`);
     } else if (item.effect === "aoe_bomb") {
+      // Bombs are thrown using Main Action. The action is deducted when the bomb actually explodes (in handleMapClick -> spell).
       setCombatMode("spell");
       setSelectedSpell("Small Bomb");
       setPendingBombItemId(item.id);
       notify("💣 Bomb ready — select target area on the map. Click Cancel to abort.");
     } else {
+      if (isCombat) setCombat(c => ({ ...c, extraActionUsed: true }));
       notify(`Used ${item.name}.`);
       updateChar(char.id, c => ({ inventory: c.inventory.filter(i => i.id !== item.id) }));
     }
@@ -1122,25 +1332,19 @@ export function useGameEngine() {
   }
   function handleAcceptQuest(qid: string) {
     if (!char) return;
-    const currentParty = gs.party ?? { name: `${char.name}'s Party`, leaderId: char.id, memberIds: [char.id], questIds: [] as string[] };
-    if (currentParty.questIds.length >= 2) { notify("Party already has 2 active quests."); return; }
+    const activeQuests = char.activeQuests || [];
+    if (activeQuests.length >= 2) { notify("You already have 2 active quests."); return; }
     const q = gs.availableQuests.find(q => q.id === qid); if (!q) return;
-    setGs(prev => {
-      const nextParty = prev.party
-        ? { ...prev.party, questIds: [...prev.party.questIds, qid] }
-        : { name: `${char.name}'s Party`, leaderId: char.id, memberIds: [char.id], questIds: [qid] };
-      return {
-        ...prev,
-        availableQuests: prev.availableQuests.filter(q => q.id !== qid),
-        partyQuests: [...prev.partyQuests, q],
-        party: nextParty,
-      };
-    });
+    updateChar(char.id, c => ({ activeQuests: [...(c.activeQuests || []), q] }));
+    setGs(prev => ({
+      ...prev,
+      availableQuests: prev.availableQuests.filter(q => q.id !== qid),
+    }));
     notify(`Quest accepted: ${q.title}`);
   }
   function handleQuestClaim(questId: string) {
-    if (!char) return;
-    const q = gs.partyQuests.find(pq => pq.id === questId);
+    if (!char || !char.activeQuests) return;
+    const q = char.activeQuests.find(pq => pq.id === questId);
     if (!q) return;
 
     if (!isQuestReadyToTurnIn(q, char.inventory)) {
@@ -1150,8 +1354,7 @@ export function useGameEngine() {
 
     if (q.gatherTarget) {
       const { itemName, count } = q.gatherTarget;
-      const currentChar = gs.characters[char.id];
-      const matchingItems = currentChar.inventory.filter(i => i.name === itemName);
+      const matchingItems = char.inventory.filter(i => i.name === itemName);
       if (matchingItems.length < count) {
         notify(`Need ${count} ${itemName} (have ${matchingItems.length}). Collect more!`);
         return;
@@ -1165,11 +1368,7 @@ export function useGameEngine() {
         }),
         exp: c.exp + finalExp,
         gold: c.gold + q.reward.gold,
-      }));
-      setGs(prev => ({
-        ...prev,
-        partyQuests: prev.partyQuests.filter(pq => pq.id !== questId),
-        party: prev.party ? { ...prev.party, questIds: prev.party.questIds.filter(id => id !== questId) } : null,
+        activeQuests: (c.activeQuests || []).filter(pq => pq.id !== questId)
       }));
       if (char.tutorialCompleted && finalExp > q.reward.exp) notify(`✨ Blessing of Selenia: Bonus EXP!`);
       notify(`✅ Quest Complete! +${finalExp} EXP, +${q.reward.gold} gold`);
@@ -1177,11 +1376,10 @@ export function useGameEngine() {
     }
 
     const finalExp = char.tutorialCompleted ? Math.floor(q.reward.exp * 1.02) : q.reward.exp;
-    updateChar(char.id, ch => ({ exp: ch.exp + finalExp, gold: ch.gold + q.reward.gold }));
-    setGs(prev => ({
-      ...prev,
-      partyQuests: prev.partyQuests.filter(pq => pq.id !== questId),
-      party: prev.party ? { ...prev.party, questIds: prev.party.questIds.filter(id => id !== questId) } : null,
+    updateChar(char.id, ch => ({ 
+      exp: ch.exp + finalExp, 
+      gold: ch.gold + q.reward.gold,
+      activeQuests: (ch.activeQuests || []).filter(pq => pq.id !== questId)
     }));
     if (char.tutorialCompleted && finalExp > q.reward.exp) notify(`✨ Blessing of Selenia: Bonus EXP!`);
     notify(`✅ Reward claimed: +${finalExp} EXP, +${q.reward.gold} gold!`);
@@ -1201,41 +1399,43 @@ export function useGameEngine() {
 
   function handleUseSkillFromHUD(spellName: string) {
     if (!char) return;
-    if (spellName === "Second Wind") {
-      const healed = rollDice("1d10") + char.level;
-      updateChar(char.id, c => ({ hp: Math.min(c.maxHp, c.hp + healed) }));
-      notify(`⚔️ Second Wind! +${healed} HP`);
-      return;
-    }
-    if (spellName === "Hunter's Mark") {
-      notify("Hunter's Mark: Your next attack deals +1d6 damage.");
-      return;
-    }
+    
     const allSpells = CLASS_SPELLS[char.class] ?? [];
     const spell = allSpells.find(s => s.name === spellName);
-    if (!spell) return;
+    const gameSkill = SKILL_DICTIONARY[spellName];
 
-    if (spell.type === "heal" || (spell.type === "cantrip" && spell.heal)) {
+    if (!spell && !gameSkill) return;
+
+    const isHeal = spell?.type === "heal" || (spell?.type === "cantrip" && spell.heal) || gameSkill?.healAmount;
+
+    if (isHeal) {
       if (combat.active) {
         handleSpellSelect(spellName);
       } else {
-        if (spell.level > 0) {
+        if (spell && spell.level > 0) {
           if (!char.spellSlots || char.spellSlots.used >= char.spellSlots.max) { notify("No spell slots!"); return; }
           updateChar(char.id, c => ({ spellSlots: { ...c.spellSlots!, used: c.spellSlots!.used + 1 } }));
         }
         const spMod = getSpellcastingMod(char);
-        const healed = spell.heal === "5" ? 5 : rollDice(spell.heal ?? "1d4") + spMod;
+        let healed = 0;
+        if (spell?.heal) {
+          healed = spell.heal === "5" ? 5 : rollDice(spell.heal ?? "1d4") + spMod;
+        } else if (gameSkill?.healAmount) {
+          healed = rollDice(gameSkill.healAmount) + (spellName === "fighter_second_wind" ? char.level * 2 : 0);
+        }
         updateChar(char.id, c => ({ hp: Math.min(c.maxHp, c.hp + healed) }));
         addEffect({ type: "heal", gridX: char.position.x, gridY: char.position.y, value: String(healed) });
-        notify(`✨ ${spell.name}: +${healed} HP`);
+        notify(`✨ ${spell?.name ?? gameSkill?.name}: +${healed} HP`);
       }
       return;
     }
 
-    if (screen === "town") { notify("Cannot use attack spells in a safe zone."); return; }
+    if (screen === "town") { notify("Cannot use attack skills in a safe zone."); return; }
+    
+    // For non-heal active skills that require combat
     handleSpellSelect(spellName);
     if (!combat.active) {
-      notify(`${spellName} ready — select a target on the map!`);
+      notify(`${spell?.name ?? gameSkill?.name} ready — select a target!`);
     }
   }
 
@@ -1474,7 +1674,7 @@ export function useGameEngine() {
     
     setCombat({ 
       active: true, round: 1, turnOrder: order, currentIndex: 0, 
-      actionUsed: false, bonusActionUsed: false, movedSquares: 0, 
+      actionUsed: false, extraActionUsed: false, movedSquares: 0, 
       log: ["⚔ Tutorial Combat Started!"], engagedMonsterIds: [dummyId] 
     });
     setCombatMode("none");
@@ -1518,23 +1718,21 @@ export function useGameEngine() {
 
   const handleCancelQuest = useCallback((questId: string) => {
     if (!char) return;
-    const cancelFee = 50;
+    const cancelFee = 10; // Match QUEST_CANCEL_COST
     if (char.gold < cancelFee) {
-      notify("Not enough gold to cancel the quest. Fee is 50g.");
+      notify(`Not enough gold to cancel the quest. Fee is ${cancelFee}g.`);
       return;
     }
 
-    const quest = gs.partyQuests.find(q => q.id === questId);
+    const quest = (char.activeQuests || []).find(q => q.id === questId);
     if (!quest) return;
 
-    updateChar(char.id, c => ({ gold: c.gold - cancelFee }));
-    setGs(prev => ({
-      ...prev,
-      partyQuests: prev.partyQuests.filter(q => q.id !== questId),
-      availableQuests: [...prev.availableQuests, quest],
+    updateChar(char.id, c => ({ 
+      gold: c.gold - cancelFee,
+      activeQuests: (c.activeQuests || []).filter(q => q.id !== questId)
     }));
     notify(`Quest canceled. ${cancelFee}g fee deducted.`);
-  }, [char, gs.partyQuests, notify, updateChar]);
+  }, [char, notify, updateChar]);
 
   return {
     // state
@@ -1549,12 +1747,12 @@ export function useGameEngine() {
     updateChar,
     // combat
     startCombat, endCombat, endPlayerTurn, handleSpellSelect, handleCastSpellAtTile,
-    handleCastSpell, handleHealSelf, handleMonsterClick, handleAttackMonster,
+    handleCastSpell, handleHealSelf, handleGuard, handleMonsterClick, handleAttackMonster,
     executeBombEffect, handleAOECastFromGrid,
     // movement
     handleTileClick,
     // items
-    handleEquipItem, handleUnequipWeapon, handleUnequipArmor, handleUnequipAcc,
+    handleEquipItem, handleUnequipMainHand, handleUnequipOffHand, handleUnequipArmor, handleUnequipAcc,
     handleDropItem, handleUseItem, handleBuyItem,
     // quests/party/chat
     handleAcceptQuest, handleQuestClaim,

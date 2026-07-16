@@ -41,11 +41,16 @@ export function getSpellcastingMod(char: Character): number {
   }
 }
 
+import { SKILL_DICTIONARY } from "../constants/skills";
+
 export function calcAC(char: Character): number {
   const dexMod = getMod(char.stats.dex);
   const armorName = char.equipment.armor?.name ?? "";
   const armorAC = char.equipment.armor?.ac ?? (10 + dexMod);
   const addDex = ["Leather Armor", "Mage Robes"].includes(armorName);
   const accAC = char.equipment.accessories.reduce((s, a) => s + (a?.ac ?? 0), 0);
-  return armorAC + (addDex ? dexMod : 0) + accAC;
+  
+  const skillAC = char.gameSkills?.reduce((s, skillId) => s + (SKILL_DICTIONARY[skillId]?.acBonus ?? 0), 0) ?? 0;
+  
+  return armorAC + (addDex ? dexMod : 0) + accAC + skillAC;
 }

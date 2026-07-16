@@ -131,7 +131,8 @@ export default function App() {
             <CombatPanel combat={combat} char={char} monsters={gs.dungeonMonsters}
               combatMode={combatMode} setCombatMode={setCombatMode}
               selectedSpell={selectedSpell ?? undefined}
-              onEndTurn={eng.endPlayerTurn} onSelectSpell={eng.handleSpellSelect}
+              onEndTurn={eng.endPlayerTurn} onSelectSpell={eng.handleSpellSelect} onUseItem={eng.handleUseItem}
+              onGuard={eng.handleGuard}
               onFlee={() => {
                 // Check if any alive monster can still see the player (within sightRange)
                 const aliveEngaged = gs.dungeonMonsters.filter(m =>
@@ -222,12 +223,13 @@ export default function App() {
         {/* HUD */}
         <BottomHUD char={char} hudTab={hudTab} setHudTab={setHudTab} hudOpen={hudOpen} setHudOpen={setHudOpen}
           chatTab={chatTab} setChatTab={setChatTab} globalChat={gs.globalChat} partyChat={gs.partyChat}
-          onSendChat={eng.handleSendChat} onEquipItem={eng.handleEquipItem} onUnequipWeapon={eng.handleUnequipWeapon}
+          onSendChat={eng.handleSendChat} onEquipItem={eng.handleEquipItem} 
+          onUnequipMainHand={eng.handleUnequipMainHand} onUnequipOffHand={eng.handleUnequipOffHand}
           onUnequipArmor={eng.handleUnequipArmor} onUnequipAcc={eng.handleUnequipAcc}
           onDropItem={eng.handleDropItem} onUseItem={eng.handleUseItem}
-          party={gs.party} onCreateParty={eng.handleCreateParty} onLeaveParty={eng.handleLeaveParty} partyQuests={gs.partyQuests}
+          party={gs.party} onCreateParty={eng.handleCreateParty} onLeaveParty={eng.handleLeaveParty} activeQuests={char.activeQuests || []}
           onUseSkill={eng.handleUseSkillFromHUD}
-          inCombat={combat.active} />
+          inCombat={eng.combat.active} />
 
         {/* ========================================== */}
         {/* ✅ MODALS SECTION (แก้ไขใหม่ทั้งหมด) */}
@@ -325,8 +327,7 @@ export default function App() {
           <QuestModal
             char={char}
             quests={gs.availableQuests}
-            partyQuests={gs.partyQuests}
-            party={gs.party}
+            activeQuests={char.activeQuests || []}
             nextRefresh={gs.questRefreshAt}
             onAccept={(questId) => {
               eng.handleAcceptQuest(questId);
@@ -334,16 +335,9 @@ export default function App() {
             }}
             onClaim={(questId) => {
               eng.handleQuestClaim(questId);
-              eng.notify("Quest completed!");
             }}
             onCancel={(questId) => {
-              if (char.gold >= 10) {
-                eng.updateChar(char.id, (c: any) => ({ gold: c.gold - 10 }));
-                eng.handleCancelQuest(questId);
-                eng.notify("Quest canceled (10g fee)");
-              } else {
-                eng.notify("Not enough gold to cancel (10g required).");
-              }
+              eng.handleCancelQuest(questId);
             }}
             charInventory={char.inventory}
             onClose={() => eng.setSpecialDialog(null)}

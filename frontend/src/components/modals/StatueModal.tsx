@@ -7,6 +7,7 @@ import {
   getTotalExpForLevel,
   getExpToNextLevel,
 } from "../../constants/levels";
+import { SKILL_DICTIONARY } from "../../constants/skills";
 
 import npcStatueImg from "../../assets/npc/npc_d01.png";
 import npcStatueImg2 from "../../assets/npc/npc_d02.png";
@@ -68,7 +69,11 @@ export function StatueModal({
   const [bubbleText, setBubbleText] = useState<string>("");
   const [bubbleShow, setBubbleShow] = useState(false);
 
-  const [mode, setMode] = useState<"menu" | "levelup" | "stats">("menu");
+  const FIGHTER_TECHNIQUE_IDS = ["fighter_shield_wall", "fighter_counter_attack", "fighter_action_surge", "fighter_second_wind", "fighter_warrior_focus", "fighter_samurai_focus", "fighter_berserker_rage"];
+  const FIGHTER_SUBCLASS_IDS = ["subclass_archer", "subclass_guardian", "subclass_duelwield", "subclass_berserker", "subclass_samurai", "subclass_protector", "subclass_swordmage"];
+
+  const [mode, setMode] = useState<"menu" | "levelup" | "stats" | "choose_technique" | "choose_subclass">("menu");
+  const [pendingLevelUp, setPendingLevelUp] = useState(false);
   const [tempStats, setTempStats] = useState<Stats>(char.stats);
   const [statChanges, setStatChanges] = useState<Record<keyof Stats, number>>({
     str: 0,
@@ -129,14 +134,29 @@ export function StatueModal({
 
   function handleLevelUp() {
     if (!canLevelUp) return;
+    handleLevelUpTrigger();
+  }
 
+  function handleTestLevelUp() {
+    if (char.level >= 10) return;
+    handleLevelUpTrigger();
+  }
+
+  function handleLevelUpTrigger() {
+    const nextLevel = char.level + 1;
+    if (char.class === "Fighter") {
+      if (nextLevel === 2 || nextLevel === 5) { setMode("choose_technique"); return; }
+      if (nextLevel === 3) { setMode("choose_subclass"); return; }
+    }
+    executeLevelUp();
+  }
+
+  function executeLevelUp(chosenSkillId?: string, isSubclass?: boolean) {
     timersRef.current.forEach(clearTimeout);
     timersRef.current = [];
-    const quote =
-      STATUE_LEVELUP_QUOTES[
-        Math.floor(Math.random() * STATUE_LEVELUP_QUOTES.length)
-      ];
+    const quote = STATUE_LEVELUP_QUOTES[Math.floor(Math.random() * STATUE_LEVELUP_QUOTES.length)];
 
+    setMode("levelup");
     setBubbleShow(false);
     after(100, () => {
       setNpcFace("happy");
@@ -148,11 +168,28 @@ export function StatueModal({
 
     after(1200, () => {
       const newLevel = char.level + 1;
+      let hpBonus = 0;
+      let statusBonus = 1;
+      
+      if (char.class === "Fighter") {
+        hpBonus = 8;
+        if (newLevel === 4) statusBonus = 2;
+      } else {
+        // Fallback for other classes (will expand later)
+        hpBonus = 5;
+        if (newLevel % 4 === 0) statusBonus = 2;
+      }
+
       const leveledChar = {
         ...char,
         level: newLevel,
-        statusPoints: char.statusPoints + 1,
+        statusPoints: char.statusPoints + statusBonus,
+        maxHp: char.maxHp + hpBonus,
+        hp: char.hp + hpBonus,
+        gameSkills: chosenSkillId ? [...char.gameSkills, chosenSkillId] : char.gameSkills,
+        subclass: isSubclass && chosenSkillId ? chosenSkillId.replace("subclass_", "") : char.subclass
       };
+      
       onLevelUp(leveledChar);
     });
 
@@ -166,12 +203,13 @@ export function StatueModal({
 
   function handleStatChange(stat: keyof Stats, delta: number) {
     const newChange = statChanges[stat] + delta;
-    // Limit to max reduction of 8 per stat
-    if (newChange >= -8 && newChange <= 8) {
+    const absoluteStat = char.stats[stat] + newChange;
+    // Limit to prevent stat from dropping below 8
+    if (absoluteStat >= 8) {
       setStatChanges((prev) => ({ ...prev, [stat]: newChange }));
       setTempStats((prev) => ({
         ...prev,
-        [stat]: char.stats[stat] + newChange,
+        [stat]: absoluteStat,
       }));
     }
   }
@@ -600,11 +638,32 @@ export function StatueModal({
                   if (canLevelUp) e.currentTarget.style.transform = "translateY(-2px)";
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = "";
+                  if (canLevelUp) e.currentTarget.style.transform = "";
                 }}
               >
-                ⬆️ LEVEL UP
+                ⭐ ASCEND (LEVEL UP)
               </button>
+
+              {char.level < 10 && (
+                <button
+                  onClick={handleTestLevelUp}
+                  style={{
+                    padding: "8px 16px",
+                    background: "#ff9800",
+                    border: `2px solid #e65100`,
+                    color: cream,
+                    fontFamily: PX,
+                    fontSize: 8,
+                    cursor: "pointer",
+                    transition: "transform 0.1s",
+                    letterSpacing: 1,
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.transform = "translateY(-2px)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.transform = "")}
+                >
+                  🧪 TEST: INSTANT LEVEL UP
+                </button>
+              )}
 
               <button
                 onClick={() => {
@@ -761,6 +820,46 @@ export function StatueModal({
             >
               BACK
             </button>
+          </div>
+        )}
+
+        {(mode === "choose_technique" || mode === "choose_subclass") && (
+          <div style={{ flex: 1, padding: 24, overflowY: "auto", position: "relative", zIndex: 1 }}>
+            <div style={{ textAlign: "center", marginBottom: 20 }}>
+              <div style={{ fontFamily: PX, fontSize: 14, color: sacred1, marginBottom: 4 }}>
+                {mode === "choose_technique" ? "CHOOSE COMBAT TECHNIQUE" : "CHOOSE YOUR PATH (SUBCLASS)"}
+              </div>
+              <div style={{ fontFamily: NU, fontSize: 11, color: sacred3 }}>
+                {mode === "choose_technique" ? "Select a new combat technique to master." : "Select your Fighter subclass. This will determine your specialization."}
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gap: 12 }}>
+              {(mode === "choose_technique" ? FIGHTER_TECHNIQUE_IDS : FIGHTER_SUBCLASS_IDS).map(id => {
+                const skill = SKILL_DICTIONARY[id];
+                if (!skill) return null;
+                // Dont show if already have it
+                if (char.gameSkills.includes(id)) return null;
+
+                return (
+                  <div key={id} onClick={() => executeLevelUp(id, mode === "choose_subclass")}
+                    style={{
+                      background: `rgba(0,0,0,0.4)`, border: `1px solid ${sacred3}60`, borderRadius: 4,
+                      padding: 12, display: "flex", gap: 12, cursor: "pointer", alignItems: "center",
+                      transition: "all 0.2s"
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = `rgba(255,255,255,0.1)`}
+                    onMouseLeave={e => e.currentTarget.style.background = `rgba(0,0,0,0.4)`}
+                  >
+                    <div style={{ fontSize: 24 }}>{skill.icon}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontFamily: PX, fontSize: 10, color: sacred1, marginBottom: 4 }}>{skill.name}</div>
+                      <div style={{ fontFamily: NU, fontSize: 11, color: sacred3 }}>{skill.description}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 

@@ -70,8 +70,8 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
   }
 
   const attackableM = new Set<string>();
-  if (combat.active && combatMode === "attack" && char.equipment.weapon) {
-    const rs = Math.ceil((char.equipment.weapon.range ?? 5) / 5);
+  if (combat.active && combatMode === "attack" && char.equipment.mainHand) {
+    const rs = Math.ceil((char.equipment.mainHand.range ?? 5) / 5);
     monsters.filter(m => m.hp > 0).forEach(m => { if (dist(pos, m.position) <= rs) attackableM.add(m.id); });
   }
 
@@ -121,7 +121,8 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
   const isHealSpell = selectedSpell && (() => {
     const spells = CLASS_SPELLS[char.class] ?? [];
     const s = spells.find(sp => sp.name === selectedSpell);
-    return s?.type === "heal" || (s?.type === "cantrip" && s?.heal);
+    const gs = SKILL_DICTIONARY[selectedSpell];
+    return s?.type === "heal" || (s?.type === "cantrip" && s?.heal) || !!gs?.healAmount;
   })();
 
   return (

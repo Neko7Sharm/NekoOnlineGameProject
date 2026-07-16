@@ -8,6 +8,8 @@ import npcQuestImg from "../../assets/npc/npc_b01.png";
 import npcQuestImg2 from "../../assets/npc/npc_b02.png";
 import npcQuestImg3 from "../../assets/npc/npc_b03.png";
 import npcQuestImg4 from "../../assets/npc/npc_b04.png";
+import woodenBoardImg from "../../assets/wooden_board.png";
+import parchmentImg from "../../assets/parchment_paper.png";
 
 const QUEST_WELCOME_QUOTES = [
   "Welcome! We have new quests today... Eek! I almost spilled the ink!",
@@ -45,25 +47,23 @@ const QUEST_IDLE_QUOTES = [
 export function QuestModal({
   char,
   quests,
-  partyQuests,
-  party,
-  onAccept,
-  onClose,
-  onCancel,
+  activeQuests,
   nextRefresh,
+  onAccept,
+  onCancel,
   onClaim,
   charInventory,
+  onClose,
 }: {
   char: Character;
   quests: Quest[];
-  partyQuests: Quest[];
-  party: Party | null;
-  onAccept: (id: string) => void;
-  onClose: () => void;
-  onCancel?: (id: string) => void;
+  activeQuests: Quest[];
   nextRefresh: number;
+  onAccept: (id: string) => void;
+  onCancel?: (id: string) => void;
   onClaim?: (id: string) => void;
   charInventory?: Item[];
+  onClose: () => void;
 }) {
   type NpcFace = "talk" | "happy" | "sad" | "idle" | "exiting";
   const [npcFace, setNpcFace] = useState<NpcFace>("talk");
@@ -214,8 +214,8 @@ export function QuestModal({
   const tl = Math.max(0, nextRefresh - Date.now());
   const mins = Math.floor(tl / 60000);
   const secs = Math.floor((tl % 60000) / 1000);
-  const canAccept = (party?.questIds?.length ?? 0) < 2;
-  const selectedQuest = quests.find((q) => q.id === selectedQuestId) ?? null;
+  const canAccept = (activeQuests?.length ?? 0) < 2;
+  const selectedQuest = quests.find((q) => q.id === selectedQuestId) ?? activeQuests.find((q) => q.id === selectedQuestId) ?? null;
 
   return (
     <div
@@ -262,137 +262,106 @@ export function QuestModal({
         </div>
       </div>
 
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", background: paperBg, position: "relative", overflow: "hidden", animation: panelExiting ? "quest-panel-out 0.6s cubic-bezier(0.4, 0, 0.8, 0.4) forwards" : panelVisible ? "quest-panel-in 0.65s cubic-bezier(0.34, 1.2, 0.64, 1) forwards" : "none", opacity: panelVisible ? 1 : 0, transform: panelVisible ? "translateX(0)" : "translateX(70px)" }}>
-        <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 0, backgroundImage: `repeating-linear-gradient(90deg, transparent 0px, transparent 18px, ${guild5}08 18px, ${guild5}08 19px)` }} />
-        <div style={{ position: "relative", zIndex: 1, background: `linear-gradient(180deg, ${guild2} 0%, ${guild1} 100%)`, borderBottom: `4px solid ${guild1}`, boxShadow: `0 4px 12px rgba(0,0,0,0.4)` }}>
-          <div style={{ height: 8, background: `repeating-linear-gradient(90deg, ${guild3} 0px, ${guild3} 12px, ${guild4} 12px, ${guild4} 24px)` }} />
-          <div style={{ padding: "12px 20px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <div>
-              <div style={{ fontFamily: PX, fontSize: 12, color: cream, letterSpacing: 2, textShadow: `0 2px 4px ${guild1}` }}>📋 QUEST GUILD</div>
-              <div style={{ fontFamily: NU, fontSize: 10, color: guild5, marginTop: 3 }}>Refresh in {mins}:{secs.toString().padStart(2, "0")} • {partyQuests.length}/2</div>
-            </div>
-            <button onClick={handleClose} style={{ background: `linear-gradient(180deg, ${guild3} 0%, ${guild2} 100%)`, border: `2px solid ${guild1}`, cursor: "pointer", color: cream, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `inset 0 1px 0 ${guild4}60, 0 2px 4px rgba(0,0,0,0.4)`, transition: "transform 0.1s" }} onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(0.95)")} onMouseLeave={(e) => (e.currentTarget.style.transform = "")}><X className="w-4 h-4" /></button>
-          </div>
-        </div>
-
-        <div style={{ position: "relative", zIndex: 1, display: "flex", background: `linear-gradient(180deg, ${guild3}60 0%, ${guild4}30 100%)`, borderBottom: `3px solid ${guild3}` }}>
-          <button onClick={() => setView("available")} style={{ flex: 1, padding: "11px 8px", background: view === "available" ? `linear-gradient(180deg, ${cream} 0%, ${cream2} 100%)` : "none", border: "none", borderRight: `1px solid ${guild3}50`, borderBottom: view === "available" ? `3px solid ${guild2}` : "3px solid transparent", marginBottom: -3, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, transition: "background 0.2s" }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", backgroundImage: `url(${woodenBoardImg})`, backgroundSize: "128px", imageRendering: "pixelated", position: "relative", overflow: "hidden", animation: panelExiting ? "quest-panel-out 0.6s cubic-bezier(0.4, 0, 0.8, 0.4) forwards" : panelVisible ? "quest-panel-in 0.65s cubic-bezier(0.34, 1.2, 0.64, 1) forwards" : "none", opacity: panelVisible ? 1 : 0, transform: panelVisible ? "translateX(0)" : "translateX(70px)", boxShadow: "inset 10px 0 20px rgba(0,0,0,0.5)" }}>
+        
+        {/* Tabs - Now at the absolute top of the panel */}
+        <div style={{ position: "relative", zIndex: 1, display: "flex", borderBottom: `4px solid #302010`, boxShadow: "0 4px 10px rgba(0,0,0,0.5)" }}>
+          <button onClick={() => setView("available")} style={{ flex: 1, padding: "8px", background: view === "available" ? guild1 : guild2, border: "none", color: cream, cursor: "pointer", display: "flex", justifyContent: "center", alignItems: "center", gap: 8, transition: "background 0.2s" }}>
             <span style={{ fontSize: 16 }}>📝</span>
-            <span style={{ fontFamily: PX, fontSize: 7, letterSpacing: 0.5, color: view === "available" ? "#7a4010" : guild2 }}>AVAILABLE</span>
-          </button>
-          <button onClick={() => setView("active")} style={{ flex: 1, padding: "11px 8px", background: view === "active" ? `linear-gradient(180deg, ${cream} 0%, ${cream2} 100%)` : "none", border: "none", borderLeft: `1px solid ${guild3}50`, borderBottom: view === "active" ? `3px solid ${guild2}` : "3px solid transparent", marginBottom: -3, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, transition: "background 0.2s" }}>
-            <span style={{ fontSize: 16 }}>⚔️</span>
-            <span style={{ fontFamily: PX, fontSize: 7, letterSpacing: 0.5, color: view === "active" ? "#7a4010" : guild2 }}>ACTIVE</span>
-          </button>
-        </div>
-
-        <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: 12, alignContent: "start", position: "relative", zIndex: 1 }}>
-          {selectedQuest && (
-            <div style={{ border: `2px solid ${guild3}`, background: "#fff8ec", padding: "12px 14px", borderRadius: 10, boxShadow: `0 4px 10px rgba(0,0,0,0.12)` }}>
-              <div style={{ fontFamily: PX, fontSize: 8, color: guild2, letterSpacing: 1, marginBottom: 6 }}>SELECTED CONTRACT</div>
-              <div style={{ fontFamily: PX, fontSize: 11, color: guild1, marginBottom: 6 }}>{selectedQuest.title}</div>
-              <div style={{ fontFamily: NU, fontSize: 11, color: "#6f4d2d", lineHeight: 1.4, marginBottom: 8 }}>{selectedQuest.description}</div>
-              <div style={{ display: "flex", gap: 8, fontFamily: MO, fontSize: 9, marginBottom: 8 }}>
-                <span style={{ color: "#4a7c2a" }}>+{selectedQuest.reward.exp} EXP</span>
-                <span style={{ color: "#a07010" }}>+{selectedQuest.reward.gold}g</span>
-              </div>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleAccept(selectedQuest.id);
-                }}
-                disabled={!canAccept}
-                style={{ padding: "7px 10px", background: canAccept ? `linear-gradient(180deg, ${guild4} 0%, ${guild2} 100%)` : "#c0a898", border: `2px solid ${canAccept ? guild1 : "#9a8878"}`, color: cream, fontFamily: PX, fontSize: 8, cursor: canAccept ? "pointer" : "not-allowed", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: canAccept ? 1 : 0.6 }}
-              >
-                📋 ACCEPT QUEST
-              </button>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+              <span style={{ fontFamily: PX, fontSize: 10, letterSpacing: 2 }}>AVAILABLE</span>
+              <span style={{ fontFamily: MO, fontSize: 8, opacity: 0.8, marginTop: 2 }}>Refresh: {String(mins).padStart(2, '0')}:{String(secs).padStart(2, '0')}</span>
             </div>
-          )}
-
-          {view === "available" ? (
-            quests.length === 0 ? (
-              <div style={{ textAlign: "center", color: guild3, fontFamily: NU, fontSize: 13, padding: 32 }}>📋 No quests available. Check back after refresh.</div>
-            ) : (
-              quests.map((q) => (
-                <div key={q.id} onClick={() => setSelectedQuestId(q.id)} style={{ display: "flex", flexDirection: "column", gap: 8, padding: "14px 16px", background: cream, border: `2px solid ${borderW}`, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.7), 0 3px 8px rgba(100,50,0,0.12)`, position: "relative", overflow: "hidden", cursor: "pointer" }}>
-                  <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 4, background: `linear-gradient(90deg, ${guild3}, ${guild4}, ${guild3})` }} />
-                  <div style={{ paddingTop: 4 }}>
-                    <div style={{ fontFamily: PX, fontSize: 10, color: guild1, marginBottom: 4 }}>{q.title}</div>
-                    <div style={{ fontFamily: NU, fontSize: 11, color: "#7a5030", lineHeight: 1.4 }}>{q.description}</div>
-                  </div>
-                  <div style={{ display: "flex", gap: 8, fontFamily: MO, fontSize: 9, marginBottom: 8 }}>
-                    <span style={{ color: "#4a7c2a" }}>+{q.reward.exp} EXP</span>
-                    <span style={{ color: "#a07010" }}>+{q.reward.gold}g</span>
-                  </div>
-                  <button type="button" onClick={(e) => { e.stopPropagation(); handleAccept(q.id); }} disabled={!canAccept} style={{ padding: "7px 0", background: canAccept ? `linear-gradient(180deg, ${guild4} 0%, ${guild2} 100%)` : "#c0a898", border: `2px solid ${canAccept ? guild1 : "#9a8878"}`, color: cream, fontFamily: PX, fontSize: 8, cursor: canAccept ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: canAccept ? 1 : 0.6 }}>
-                    📋 ACCEPT
-                  </button>
-                </div>
-              ))
-            )
-          ) : (
-            partyQuests.length === 0 ? (
-              <div style={{ textAlign: "center", color: guild3, fontFamily: NU, fontSize: 13, padding: 32 }}>⚔️ No active quests. Accept one to begin!</div>
-            ) : (
-              partyQuests.map((q) => {
-                const isDone = q.readyToTurnIn || q.completed;
-                let gatherCurrent = 0;
-                let gatherReady = false;
-                if (q.gatherTarget && charInventory) {
-                  gatherCurrent = charInventory.filter((item) => item.name === q.gatherTarget?.itemName).length;
-                  gatherReady = gatherCurrent >= (q.gatherTarget?.count ?? 0);
-                }
-                const showTurnIn = isDone || gatherReady;
-
-                return (
-                  <div key={`${q.id}-active`} style={{ display: "flex", flexDirection: "column", gap: 8, padding: "14px 16px", background: showTurnIn ? "#f4e8d0" : cream, border: `2px solid ${showTurnIn ? "#d4a020" : borderW}`, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.7), 0 3px 8px rgba(100,50,0,0.12)`, position: "relative", overflow: "hidden" }}>
-                    <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 4, background: showTurnIn ? `linear-gradient(90deg, #d4a020, #f0d070, #d4a020)` : `linear-gradient(90deg, ${guild3}, ${guild4}, ${guild3})` }} />
-                    <div style={{ paddingTop: 4 }}>
-                      <div style={{ fontFamily: PX, fontSize: 10, color: showTurnIn ? "#8b5a00" : guild1, marginBottom: 4 }}>{q.title}</div>
-                      {showTurnIn ? (
-                        <div style={{ fontFamily: PX, fontSize: 8, color: "#2a6b2a" }}>✅ COMPLETE — Turn in your quest!</div>
-                      ) : q.gatherTarget ? (
-                        <div>
-                          <div style={{ fontFamily: MO, fontSize: 9, color: guild3, marginBottom: 6 }}>{gatherCurrent}/{q.gatherTarget.count} {q.gatherTarget.itemName}</div>
-                          <div style={{ height: 4, background: "#e0e0e0", border: `1px solid #b8b8b8` }}>
-                            <div style={{ height: "100%", width: `${Math.min(100, (gatherCurrent / q.gatherTarget.count) * 100)}%`, background: "#4cdb70" }} />
-                          </div>
-                        </div>
-                      ) : (
-                        <div>
-                          <div style={{ fontFamily: MO, fontSize: 9, color: guild3, marginBottom: 6 }}>{q.killTarget?.current}/{q.killTarget?.count} Defeated</div>
-                          <div style={{ height: 4, background: "#e0e0e0", border: `1px solid #b8b8b8` }}>
-                            <div style={{ height: "100%", width: `${((q.killTarget?.current ?? 0) / (q.killTarget?.count ?? 1)) * 100}%`, background: guild3 }} />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      {showTurnIn ? (
-                        <button onClick={() => handleClaim(q.id)} style={{ flex: 1, padding: "7px 0", background: `linear-gradient(180deg, #4cdb70 0%, #2a9a50 100%)`, border: `2px solid #1a6a30`, color: cream, fontFamily: PX, fontSize: 8, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                          🎁 TURN IN
-                        </button>
-                      ) : (
-                        <>
-                          <button onClick={() => handleCancelQuest(q.id)} disabled={char.gold < QUEST_CANCEL_COST} style={{ flex: 1, padding: "7px 0", background: char.gold >= QUEST_CANCEL_COST ? `linear-gradient(180deg, #f2c07b 0%, #df9d3f 100%)` : "#d8c0a0", border: `2px solid ${char.gold >= QUEST_CANCEL_COST ? "#a0651a" : "#b79c7d"}`, color: cream, fontFamily: PX, fontSize: 8, cursor: char.gold >= QUEST_CANCEL_COST ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: char.gold >= QUEST_CANCEL_COST ? 1 : 0.65 }}>
-                            🗑️ CANCEL (-{QUEST_CANCEL_COST})
-                          </button>
-                          <button onClick={() => handleClaim(q.id)} style={{ flex: 1, padding: "7px 0", background: `linear-gradient(180deg, #6aa2ff 0%, #4b7dd9 100%)`, border: `2px solid #3257a6`, color: cream, fontFamily: PX, fontSize: 8, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                            🧪 TEST
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                );
-              })
-            )
-          )}
+          </button>
+          <button onClick={() => setView("active")} style={{ flex: 1, padding: "12px", background: view === "active" ? "#1a6a30" : "#2a9a50", border: "none", color: cream, cursor: "pointer", display: "flex", justifyContent: "center", alignItems: "center", gap: 8, transition: "background 0.2s" }}>
+            <span style={{ fontSize: 16 }}>⚔️</span>
+            <span style={{ fontFamily: PX, fontSize: 10, letterSpacing: 2 }}>ACTIVE</span>
+          </button>
         </div>
 
-        <div style={{ position: "relative", zIndex: 1, padding: "10px 20px", borderTop: `3px solid ${guild3}`, background: `linear-gradient(180deg, ${guild4}40 0%, ${guild3}30 100%)`, display: "flex", justifyContent: "center" }}>
-          <span style={{ fontFamily: PX, fontSize: 7, color: guild2, letterSpacing: 2 }}>📋 GUILD BOARD · ALWAYS RECRUITING 📋</span>
+        <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: 16, position: "relative", zIndex: 1 }}>
+          
+          {/* Featured Selected Quest */}
+          <div style={{ border: `3px solid #302010`, borderRadius: 4, backgroundImage: `url(${parchmentImg})`, backgroundSize: "96px", backgroundRepeat: "repeat", imageRendering: "pixelated", display: "flex", minHeight: 180, boxShadow: "0 8px 16px rgba(0,0,0,0.4)" }}>
+            {selectedQuest ? (
+              <>
+                <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+                  <div style={{ background: "rgba(0, 0, 0, 0.1)", padding: "8px 12px", fontFamily: PX, fontSize: 12, color: "#302010", borderBottom: `2px solid #504030` }}>
+                    {selectedQuest.title}
+                  </div>
+                  <div style={{ flex: 1, background: "rgba(255, 255, 255, 0.4)", padding: "12px", fontFamily: NU, fontSize: 14, color: "#201000", display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div style={{ flex: 1 }}>{selectedQuest.description}</div>
+                    <div style={{ display: "flex", gap: 12, fontFamily: MO, fontSize: 10, color: "#8b5a00" }}>
+                      <span style={{ color: "#2a5c1a" }}>+{selectedQuest.reward.exp} EXP</span>
+                      <span style={{ color: "#805000" }}>+{selectedQuest.reward.gold}g</span>
+                    </div>
+                  </div>
+                  <div style={{ background: "rgba(100, 200, 100, 0.4)", padding: "8px 12px", borderTop: `2px solid #504030`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ fontFamily: MO, fontSize: 11, color: "#1a5a20", fontWeight: "bold" }}>
+                      {selectedQuest.killTarget ? `Target: ${selectedQuest.killTarget.count} ${selectedQuest.killTarget.monster}` : ""}
+                      {selectedQuest.gatherTarget ? `Target: ${selectedQuest.gatherTarget.count} ${selectedQuest.gatherTarget.itemName}` : ""}
+                      {view === "active" && selectedQuest.killTarget && ` (${selectedQuest.killTarget.current}/${selectedQuest.killTarget.count})`}
+                    </div>
+                    {view === "available" ? (
+                      <button onClick={() => handleAccept(selectedQuest.id)} disabled={!canAccept} style={{ padding: "8px 16px", background: canAccept ? "#e05050" : "#a0a0a0", border: "2px solid #802020", color: "#fff", fontFamily: PX, fontSize: 9, cursor: canAccept ? "pointer" : "not-allowed", borderRadius: 4 }}>
+                        ACCEPT QUEST
+                      </button>
+                    ) : (
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button onClick={() => handleCancelQuest(selectedQuest.id)} disabled={char.gold < QUEST_CANCEL_COST} style={{ padding: "6px 12px", background: char.gold >= QUEST_CANCEL_COST ? "#f2c07b" : "#a0a0a0", border: char.gold >= QUEST_CANCEL_COST ? "2px solid #a0651a" : "2px solid #606060", color: "#fff", fontFamily: PX, fontSize: 8, cursor: char.gold >= QUEST_CANCEL_COST ? "pointer" : "not-allowed", borderRadius: 4 }}>
+                          CANCEL (-{QUEST_CANCEL_COST}g)
+                        </button>
+                        {(() => {
+                          const canTurnIn = selectedQuest.killTarget 
+                            ? selectedQuest.killTarget.current >= selectedQuest.killTarget.count
+                            : selectedQuest.gatherTarget
+                            ? charInventory.filter(i => i.name === selectedQuest.gatherTarget?.itemName).length >= selectedQuest.gatherTarget.count
+                            : false;
+                          return (
+                            <button onClick={() => handleClaim(selectedQuest.id)} disabled={!canTurnIn} style={{ padding: "6px 12px", background: canTurnIn ? "#4cdb70" : "#a0a0a0", border: canTurnIn ? "2px solid #1a6a30" : "2px solid #606060", color: "#fff", fontFamily: PX, fontSize: 8, cursor: canTurnIn ? "pointer" : "not-allowed", borderRadius: 4 }}>
+                              TURN IN
+                            </button>
+                          );
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div style={{ width: 140, background: "rgba(255, 255, 255, 0.6)", borderLeft: `3px solid ${guild1}`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 12 }}>
+                  <div style={{ width: 80, height: 80, background: "rgba(0,0,0,0.1)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40, marginBottom: 8 }}>
+                    {selectedQuest.killTarget ? "🐉" : "🌿"}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: NU, fontSize: 14, color: guild3 }}>
+                Select a quest from the grid below
+              </div>
+            )}
+          </div>
+
+          {/* Quest Grid */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10, flex: 1, alignContent: "start" }}>
+            {(view === "available" ? quests : (activeQuests || [])).map((q) => {
+              const isSelected = selectedQuestId === q.id;
+              return (
+                <div key={q.id} onClick={() => setSelectedQuestId(q.id)} style={{ aspectRatio: "1/1.2", backgroundImage: `url(${parchmentImg})`, backgroundSize: "96px", backgroundRepeat: "repeat", imageRendering: "pixelated", borderRadius: 4, border: `2px solid ${isSelected ? "#d02020" : "#302010"}`, cursor: "pointer", display: "flex", flexDirection: "column", boxShadow: isSelected ? `0 0 0 2px ${guild4}, 0 6px 12px rgba(0,0,0,0.5)` : `0 4px 8px rgba(0,0,0,0.4)`, transition: "transform 0.1s, border-color 0.1s", transform: isSelected ? "scale(1.05)" : "scale(1)", overflow: "hidden" }}>
+                  <div style={{ flex: 1, background: "rgba(255, 255, 255, 0.6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, borderBottom: `2px solid #302010` }}>
+                    {q.killTarget ? "🐉" : "🌿"}
+                  </div>
+                  <div style={{ padding: "8px 4px", textAlign: "center", fontFamily: PX, fontSize: 13, fontWeight: "bold", color: "#110", background: "rgba(255, 255, 255, 0.7)", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 40 }}>
+                    {q.killTarget ? q.killTarget.monster : q.gatherTarget?.itemName}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+        </div>
+
+        <div style={{ position: "relative", zIndex: 1, padding: "8px 20px", borderTop: `2px solid ${guild3}`, background: `linear-gradient(180deg, ${guild4}40 0%, ${guild3}30 100%)`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontFamily: PX, fontSize: 7, color: guild2, letterSpacing: 2 }}>📋 GUILD BOARD</span>
+          <button onClick={handleClose} style={{ padding: "8px 16px", background: "#d03030", border: "2px solid #601010", color: "#fff", fontFamily: PX, fontSize: 10, cursor: "pointer", borderRadius: 4, boxShadow: "0 4px 8px rgba(0,0,0,0.4)" }}>CLOSE</button>
         </div>
       </div>
     </div>

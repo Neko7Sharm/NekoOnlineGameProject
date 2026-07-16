@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { C, PX, NU } from "../../constants/theme";
 
 // Half-body Portraits
@@ -12,6 +12,21 @@ import imgBlushing from "../../assets/npc/npc_g07.png";
 
 import type { Emotion, DialogNode } from "../../types/game";
 
+function useTypewriter(text: string, speed: number = 30) {
+  const [displayedText, setDisplayedText] = useState("");
+  useEffect(() => {
+    setDisplayedText("");
+    let i = 0;
+    const interval = setInterval(() => {
+      setDisplayedText(text.substring(0, i + 1));
+      i++;
+      if (i >= text.length) clearInterval(interval);
+    }, speed);
+    return () => clearInterval(interval);
+  }, [text, speed]);
+  return displayedText;
+}
+
 export function SeleniaDialog({
   dialogTree,
   initialNode = "start",
@@ -23,6 +38,7 @@ export function SeleniaDialog({
 }) {
   const [currentNodeId, setCurrentNodeId] = useState<string>(initialNode);
   const node = dialogTree[currentNodeId];
+  const typedText = useTypewriter(node?.text || "", 25);
 
   if (!node) {
     onClose();
@@ -109,7 +125,7 @@ export function SeleniaDialog({
 
         {/* Text */}
         <div style={{ fontSize: 16, lineHeight: 1.5, minHeight: 60, marginTop: 8 }}>
-          {node.text}
+          {typedText}
         </div>
 
         {/* Choices or Continue */}

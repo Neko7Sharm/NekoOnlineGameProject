@@ -1,14 +1,15 @@
 import { useState } from "react";
 import { C, PX, MO } from "../../constants/theme";
 import { CLASS_CFG, CLASS_SPELLS, WIZARD_SPELL_CHOICES } from "../../constants/classes";
+import { SKILL_DICTIONARY } from "../../constants/skills";
 import { MOVE_SQUARES } from "../../constants/map";
 import type { CombatState, Character, Monster, CombatModeT } from "../../types/game";
 
-export function CombatPanel({ combat, char, monsters, combatMode, setCombatMode, selectedSpell, onEndTurn, onSelectSpell, onFlee }: {
+export function CombatPanel({ combat, char, monsters, combatMode, setCombatMode, selectedSpell, onEndTurn, onSelectSpell, onUseItem, onFlee, onGuard }: {
   combat: CombatState; char: Character; monsters: Monster[];
   combatMode: CombatModeT; setCombatMode: (m: CombatModeT) => void;
   selectedSpell?: string;
-  onEndTurn: () => void; onSelectSpell: (name: string | null) => void; onFlee: () => void;
+  onEndTurn: () => void; onSelectSpell: (name: string | null) => void; onUseItem: (item: any) => void; onFlee: () => void; onGuard: () => void;
 }) {
   const current = combat.turnOrder[combat.currentIndex];
   const isPlayer = current?.type === "player";
@@ -19,11 +20,28 @@ export function CombatPanel({ combat, char, monsters, combatMode, setCombatMode,
   const [tooltip, setTooltip] = useState<{ name: string; desc: string } | null>(null);
 
   const baseSpells = CLASS_SPELLS[char.class] ?? [];
-  const spells = char.class === "Wizard" && char.spellChoice && char.spellChoice !== "Sleep"
+  let spells = char.class === "Wizard" && char.spellChoice && char.spellChoice !== "Sleep"
     ? baseSpells.map(s => s.name === "Sleep"
         ? { ...s, name: char.spellChoice!, desc: WIZARD_SPELL_CHOICES.find(w => w.name === char.spellChoice)?.desc ?? s.desc }
         : s)
     : baseSpells;
+
+  // Append active GameSkills from the new system
+  if (char.gameSkills) {
+    const activeSkills = char.gameSkills
+      .map(id => SKILL_DICTIONARY[id])
+      .filter(s => s && s.type === "active")
+      .map(s => ({
+        name: s.id, // using ID as the identifier to cast
+        desc: s.description,
+        isBonus: s.cost === "extra",
+        level: 0,
+        type: s.healAmount ? "heal" : "damage", // Simplification
+        displayName: s.name, // To show in UI
+        icon: s.icon
+      })) as any[];
+    spells = [...spells, ...activeSkills];
+  }
   const usableItems = char.inventory.filter(i => i.type === "consumable" && !i.material);
 
   function handleActionTab(tab: typeof actionTab) {
@@ -139,11 +157,22 @@ export function CombatPanel({ combat, char, monsters, combatMode, setCombatMode,
       {isPlayer && (
         <div style={{ position: "absolute", right: 4, top: 4, zIndex: 20, display: "flex", flexDirection: "column", gap: 3, width: 190, filter: `drop-shadow(0 4px 8px rgba(0,0,0,0.8)) drop-shadow(0 0 12px ${turnColor}aa)` }}>
 
+          <div style={{ ...rightCard(0), padding: "8px 12px", background: "rgba(10,10,25,0.9)", display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 9, color: combat.actionUsed ? C.muted : C.blue, fontFamily: PX }}>MAIN ACTION</span>
+              <span style={{ fontSize: 9, fontFamily: PX }}>{combat.actionUsed ? "❌" : "✅"}</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 9, color: combat.extraActionUsed ? C.muted : C.gold, fontFamily: PX }}>EXTRA ACTION</span>
+              <span style={{ fontSize: 9, fontFamily: PX }}>{combat.extraActionUsed ? "❌" : "✅"}</span>
+            </div>
+          </div>
+
           {/* MOVE */}
           <button className="cp-right-btn" onClick={() => { setCombatMode(combatMode === "move" ? "none" : "move"); setActionTab("none"); }}
             disabled={moveLeft === 0}
             style={{
-              ...rightCard(0),
+              ...rightCard(10),
               border: "none", padding: "10px 14px 10px 20px", textAlign: "right",
               background: combatMode === "move"
                 ? `linear-gradient(260deg, ${C.blue}cc, ${C.blue}55)`
@@ -152,69 +181,101 @@ export function CombatPanel({ combat, char, monsters, combatMode, setCombatMode,
               fontFamily: PX, fontSize: 9, letterSpacing: 2,
               boxShadow: combatMode === "move" ? `0 0 14px ${C.blue}60` : "none",
               display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8,
+              marginTop: 4
             }}>
             <span style={{ fontSize: 7, opacity: 0.65 }}>{moveLeft} tiles</span>
             MOVE ▶
           </button>
 
           {/* ACTION TABS */}
-          {!combat.actionUsed ? (
-            <>
-              {[
-                { id: "attack" as const, icon: "⚔", label: "ATTACK", col: C.red },
-                { id: "skill" as const, icon: "✨", label: "SKILL", col: "#c97fff" },
-                { id: "item" as const, icon: "💊", label: "ITEM", col: "#4cdb70" },
-              ].map((btn, bi) => (
-                <button key={btn.id} className="cp-right-btn"
-                  onClick={() => handleActionTab(btn.id)}
-                  style={{
-                    ...rightCard(60 + bi * 50),
-                    border: "none", padding: "10px 14px 10px 20px", textAlign: "right",
-                    background: actionTab === btn.id
-                      ? `linear-gradient(260deg, ${btn.col}cc, ${btn.col}44)`
-                      : "linear-gradient(260deg, rgba(20,14,40,0.95), rgba(10,8,24,0.95))",
-                    color: actionTab === btn.id ? "#fff" : "rgba(255,255,255,0.7)",
-                    fontFamily: PX, fontSize: 9, letterSpacing: 2,
-                    boxShadow: actionTab === btn.id ? `0 0 14px ${btn.col}50` : "none",
-                    display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10,
-                  }}>
-                  {btn.label}
-                  <span style={{ fontSize: 15 }}>{btn.icon}</span>
-                </button>
-              ))}
-            </>
-          ) : (
-            <div style={{ ...rightCard(60), padding: "9px 14px 9px 20px", background: "rgba(12,10,28,0.88)", textAlign: "right" }}>
-              <span style={{ fontFamily: PX, fontSize: 8, color: "rgba(255,255,255,0.28)", letterSpacing: 2 }}>ACTION USED</span>
-            </div>
-          )}
+          {[
+            { id: "attack" as const, icon: "⚔", label: "ATTACK", col: C.red },
+            { id: "skill" as const, icon: "✨", label: "SKILL", col: "#c97fff" },
+            { id: "item" as const, icon: "💊", label: "ITEM", col: "#4cdb70" },
+          ].map((btn, bi) => (
+            <button key={btn.id} className="cp-right-btn"
+              onClick={() => handleActionTab(btn.id)}
+              style={{
+                ...rightCard(60 + bi * 50),
+                border: "none", padding: "10px 14px 10px 20px", textAlign: "right",
+                background: actionTab === btn.id
+                  ? `linear-gradient(260deg, ${btn.col}cc, ${btn.col}44)`
+                  : "linear-gradient(260deg, rgba(20,14,40,0.95), rgba(10,8,24,0.95))",
+                color: actionTab === btn.id ? "#fff" : "rgba(255,255,255,0.7)",
+                fontFamily: PX, fontSize: 9, letterSpacing: 2,
+                boxShadow: actionTab === btn.id ? `0 0 14px ${btn.col}50` : "none",
+                display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10,
+              }}>
+              {btn.label}
+              <span style={{ fontSize: 15 }}>{btn.icon}</span>
+            </button>
+          ))}
 
           {/* ATTACK sub-panel */}
-          {!combat.actionUsed && actionTab === "attack" && char.equipment.weapon && (
-            <div style={{ ...rightCard(220), padding: "9px 14px 9px 20px", background: "linear-gradient(260deg, rgba(60,10,10,0.95), rgba(30,5,5,0.95))" }}>
-              <button className="cp-right-btn"
-                onClick={() => setCombatMode(combatMode === "attack" ? "none" : "attack")}
-                style={{
-                  background: "none", border: "none", width: "100%", padding: 0, cursor: "pointer",
-                  color: combatMode === "attack" ? C.red : "rgba(255,255,255,0.85)",
-                  fontFamily: PX, fontSize: 9, letterSpacing: 1,
-                  display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, textAlign: "right",
-                }}>
-                <span style={{ fontFamily: MO, fontSize: 9, color: C.red + "99" }}>{char.equipment.weapon.damage}</span>
-                ⚔ {char.equipment.weapon.name.slice(0, 14)}
-              </button>
+          {actionTab === "attack" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {char.equipment.mainHand && (
+                <div style={{ ...rightCard(220), padding: "9px 14px 9px 20px", background: "linear-gradient(260deg, rgba(60,10,10,0.95), rgba(30,5,5,0.95))" }}>
+                  <button className="cp-right-btn"
+                    onClick={() => !combat.actionUsed && setCombatMode(combatMode === "attack" ? "none" : "attack")}
+                    disabled={combat.actionUsed}
+                    style={{
+                      background: "none", border: "none", width: "100%", padding: 0, cursor: combat.actionUsed ? "not-allowed" : "pointer",
+                      color: combat.actionUsed ? "rgba(255,255,255,0.2)" : combatMode === "attack" ? C.red : "rgba(255,255,255,0.85)",
+                      fontFamily: PX, fontSize: 9, letterSpacing: 1,
+                      display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, textAlign: "right",
+                      opacity: combat.actionUsed ? 0.5 : 1
+                    }}>
+                    <span style={{ fontFamily: MO, fontSize: 9, color: C.red + "99" }}>{char.equipment.mainHand.damage}</span>
+                    ⚔ {char.equipment.mainHand.name.slice(0, 14)}
+                  </button>
+                </div>
+              )}
+              {char.equipment.offHand && char.equipment.offHand.type === "weapon" && (
+                <div style={{ ...rightCard(260), padding: "9px 14px 9px 20px", background: "linear-gradient(260deg, rgba(50,20,10,0.95), rgba(25,10,5,0.95))" }}>
+                  <button className="cp-right-btn"
+                    onClick={() => {
+                      if (char.equipment.offHand?.effect === "guard") {
+                        if (!combat.extraActionUsed) onGuard();
+                      } else {
+                        if (!combat.extraActionUsed) setCombatMode(combatMode === "attack_offhand" ? "none" : "attack_offhand");
+                      }
+                    }}
+                    disabled={combat.extraActionUsed}
+                    style={{
+                      background: "none", border: "none", width: "100%", padding: 0, cursor: combat.extraActionUsed ? "not-allowed" : "pointer",
+                      color: combat.extraActionUsed ? "rgba(255,255,255,0.2)" : combatMode === "attack_offhand" ? C.gold : "rgba(255,255,255,0.85)",
+                      fontFamily: PX, fontSize: 9, letterSpacing: 1,
+                      display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, textAlign: "right",
+                      opacity: combat.extraActionUsed ? 0.5 : 1
+                    }}>
+                    <span style={{ fontFamily: PX, fontSize: 6, color: C.gold, marginRight: "auto" }}>[EXTRA]</span>
+                    {char.equipment.offHand.effect === "guard" ? (
+                      <span style={{ fontFamily: MO, fontSize: 9, color: C.gold + "99" }}>🛡️ Guard</span>
+                    ) : (
+                      <>
+                        <span style={{ fontFamily: MO, fontSize: 9, color: C.gold + "99" }}>{char.equipment.offHand.damage}</span>
+                        🗡️ {char.equipment.offHand.name.slice(0, 12)}
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
           {/* SKILL sub-panel */}
-          {!combat.actionUsed && actionTab === "skill" && (
+          {actionTab === "skill" && (
             <div style={{ position: "relative" }}>
               {spells.filter(s => s.level === 0 || hasSlots).map((spell, si) => {
                 const isActive = combatMode === "spell" && selectedSpell === spell.name;
+                const isExtra = !!spell.isBonus;
+                const isDisabled = isExtra ? combat.extraActionUsed : combat.actionUsed;
                 return (
                   <button key={spell.name} className="cp-right-btn"
-                    onClick={() => onSelectSpell(isActive ? null : spell.name)}
-                    onMouseEnter={() => setTooltip({ name: spell.name, desc: spell.desc ?? "" })}
+                    onClick={() => !isDisabled && onSelectSpell(isActive ? null : spell.name)}
+                    disabled={isDisabled}
+                    onMouseEnter={() => setTooltip({ name: spell.displayName || spell.name, desc: spell.desc ?? "" })}
                     onMouseLeave={() => setTooltip(null)}
                     style={{
                       ...rightCard(220 + si * 40),
@@ -222,15 +283,18 @@ export function CombatPanel({ combat, char, monsters, combatMode, setCombatMode,
                       background: isActive
                         ? "linear-gradient(260deg, #6a22cc, #3a0a80)"
                         : "linear-gradient(260deg, rgba(40,14,70,0.95), rgba(20,8,40,0.95))",
-                      color: isActive ? "#fff" : "rgba(255,255,255,0.75)",
+                      color: isDisabled ? "rgba(255,255,255,0.2)" : isActive ? "#fff" : "rgba(255,255,255,0.75)",
                       fontFamily: PX, fontSize: 9, letterSpacing: 1,
                       display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8,
                       boxShadow: isActive ? "0 0 14px #7c3aed80" : "none",
                       marginBottom: 3, textAlign: "right",
+                      cursor: isDisabled ? "not-allowed" : "pointer",
+                      opacity: isDisabled ? 0.5 : 1
                     }}>
+                    {isExtra ? <span style={{ fontFamily: PX, fontSize: 6, color: C.gold, marginRight: "auto" }}>[EXTRA]</span> : null}
                     {spell.level > 0 && <span style={{ fontFamily: MO, fontSize: 7, color: "#c97fff88" }}>SLOT</span>}
                     {spell.level === 0 && <span style={{ fontFamily: MO, fontSize: 7, color: "rgba(255,255,255,0.3)" }}>∞</span>}
-                    {spell.name} ✨
+                    {spell.icon ? spell.icon : "✨"} {spell.displayName || spell.name}
                   </button>
                 );
               })}
@@ -251,24 +315,36 @@ export function CombatPanel({ combat, char, monsters, combatMode, setCombatMode,
           )}
 
           {/* ITEM sub-panel */}
-          {!combat.actionUsed && actionTab === "item" && (
+          {actionTab === "item" && (
             usableItems.length === 0 ? (
               <div style={{ ...rightCard(220), padding: "9px 14px", background: "rgba(12,10,28,0.88)", textAlign: "right" }}>
                 <span style={{ fontFamily: MO, fontSize: 10, color: "rgba(255,255,255,0.28)" }}>No items</span>
               </div>
-            ) : usableItems.map((item, ii) => (
-              <button key={item.id} className="cp-right-btn"
-                style={{
-                  ...rightCard(220 + ii * 40),
-                  border: "none", padding: "9px 14px 9px 20px", width: "100%", textAlign: "right",
-                  background: "linear-gradient(260deg, rgba(15,40,20,0.95), rgba(8,20,12,0.95))",
-                  color: "rgba(255,255,255,0.8)", fontFamily: PX, fontSize: 9, letterSpacing: 1,
-                  display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, marginBottom: 3,
-                }}>
-                <span style={{ fontFamily: MO, fontSize: 9, color: "#4cdb7088" }}>USE</span>
-                {item.name.slice(0, 16)} 💊
-              </button>
-            ))
+            ) : usableItems.map((item, ii) => {
+              const isBomb = item.effect === "aoe_bomb";
+              const isExtra = !isBomb; // Potions use extra action, bombs use main
+              const isDisabled = isExtra ? combat.extraActionUsed : combat.actionUsed;
+              return (
+                <button key={item.id} className="cp-right-btn"
+                  onClick={() => !isDisabled && onUseItem(item)}
+                  disabled={isDisabled}
+                  style={{
+                    ...rightCard(220 + ii * 40),
+                    border: "none", padding: "9px 14px 9px 20px", width: "100%", textAlign: "right",
+                    background: "linear-gradient(260deg, rgba(20,70,20,0.95), rgba(10,35,10,0.95))",
+                    color: isDisabled ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.85)",
+                    fontFamily: PX, fontSize: 9, letterSpacing: 1,
+                    display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8,
+                    marginBottom: 3,
+                    cursor: isDisabled ? "not-allowed" : "pointer",
+                    opacity: isDisabled ? 0.5 : 1
+                  }}>
+                  {isExtra ? <span style={{ fontFamily: PX, fontSize: 6, color: C.gold, marginRight: "auto" }}>[EXTRA]</span> : null}
+                  <span style={{ fontFamily: MO, fontSize: 7, color: C.muted }}>x1</span>
+                  {item.name} 💊
+                </button>
+              );
+            })
           )}
 
           {/* END TURN */}
