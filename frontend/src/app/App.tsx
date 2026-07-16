@@ -289,22 +289,8 @@ export default function App() {
           <StatueModal
             char={char}
             onLevelUp={(leveledChar) => {
-              const EXP_REQ: Record<number, number> = { 
-                1: 500, 2: 1000, 3: 2000, 4: 4000, 5: 8000,
-                6: 16000, 7: 32000, 8: 64000, 9: 128000, 10: Infinity 
-              };
-              if (char.exp >= EXP_REQ[char.level] && char.level < 10) {
-                eng.updateChar(char.id, (c: any) => ({ 
-                  level: c.level + 1, 
-                  statusPoints: (c.statusPoints || 0) + 1,
-                  maxHp: c.maxHp + 10,
-                  hp: c.maxHp + 10
-                }));
-                eng.notify("🎉 Level Up! You feel stronger!");
-              } else {
-                eng.notify("Not enough EXP to level up yet.");
-              }
-              setTimeout(() => eng.setSpecialDialog(null), 800);
+              eng.updateChar(char.id, () => leveledChar);
+              eng.notify("🎉 Level Up! You feel stronger!");
             }}
             onUpdateStats={(updatedChar) => {
               eng.updateChar(char.id, (c: any) => ({ 
@@ -312,7 +298,6 @@ export default function App() {
                 statusPoints: updatedChar.statusPoints
               }));
               eng.notify("✨ Status Points allocated!");
-              setTimeout(() => eng.setSpecialDialog(null), 800);
             }}
             onPray={() => {
               eng.setSpecialDialog(null);

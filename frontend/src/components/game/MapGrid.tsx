@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import { C, MO } from "../../constants/theme";
 import { CLASS_CFG } from "../../constants/classes";
 import { CLASS_SPELLS, WIZARD_SPELL_CHOICES } from "../../constants/classes";
+import { SKILL_DICTIONARY } from "../../constants/skills";
 import {
   COLS, ROWS, CELL, MOVE_SQUARES, SIGHT, DUNGEON_ENTER, DUNGEON_EXIT,
   TOWN_SPECIAL, SANCTUARY_SPECIAL, getTownTile, getDungeonTile, getSanctuaryTile, getTutorialTile
@@ -70,9 +71,22 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
   }
 
   const attackableM = new Set<string>();
+  const attackRangeTiles = new Set<string>();
+  
   if (combat.active && combatMode === "attack" && char.equipment.mainHand) {
     const rs = Math.ceil((char.equipment.mainHand.range ?? 5) / 5);
-    monsters.filter(m => m.hp > 0).forEach(m => { if (dist(pos, m.position) <= rs) attackableM.add(m.id); });
+    // Add all tiles within weapon range to attackRangeTiles
+    for (let dy = -rs; dy <= rs; dy++) {
+      for (let dx = -rs; dx <= rs; dx++) {
+        if (Math.abs(dx) + Math.abs(dy) <= rs) {
+          const tx = pos.x + dx, ty = pos.y + dy;
+          if (tx >= 0 && tx < COLS && ty >= 0 && ty < ROWS) attackRangeTiles.add(`${tx},${ty}`);
+        }
+      }
+    }
+    monsters.filter(m => m.hp > 0).forEach(m => { 
+      if (dist(pos, m.position) <= rs) attackableM.add(m.id); 
+    });
   }
 
   const spellableM = new Set<string>();
@@ -122,7 +136,8 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
     const spells = CLASS_SPELLS[char.class] ?? [];
     const s = spells.find(sp => sp.name === selectedSpell);
     const gs = SKILL_DICTIONARY[selectedSpell];
-    return s?.type === "heal" || (s?.type === "cantrip" && s?.heal) || !!gs?.healAmount;
+    const selfBuffs = ["fighter_action_surge", "fighter_shield_wall", "fighter_warrior_focus", "fighter_samurai_focus", "fighter_berserker_rage"];
+    return s?.type === "heal" || (s?.type === "cantrip" && s?.heal) || !!gs?.healAmount || selfBuffs.includes(selectedSpell);
   })();
 
   return (
@@ -169,6 +184,7 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
             const isFogged = mode === "dungeon" && !visible.has(key) && !fogRevealed.has(key);
             const isDimmed = mode === "dungeon" && !visible.has(key) && fogRevealed.has(key);
             const isReachable = reachable.has(key);
+            const isAttackRange = attackRangeTiles.has(key) && mode === "dungeon" && !isFogged;
             const isPlayer = x === pos.x && y === pos.y;
 
             let cellBg = special?.color ? special.color + "50" : tileBg;
@@ -194,11 +210,12 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
                   backgroundPosition: `-${x * CELL}px -${y * CELL}px`,
                   opacity: isDimmed ? 0.4 : 1,
                   cursor: td.isWall || isFogged ? "default" : isAoeCursor ? "crosshair" : "pointer",
-                  outline: isReachable ? `2px solid ${C.gold}` : "none",
+                  outline: isReachable ? `2px solid ${C.gold}` : isAttackRange ? `1px solid ${C.blue}50` : "none",
                   outlineOffset: "-2px",
-                  boxShadow: isReachable ? `inset 0 0 8px ${C.gold}20` : "none",
+                  boxShadow: isReachable ? `inset 0 0 8px ${C.gold}20` : isAttackRange ? `inset 0 0 12px ${C.blue}30` : "none",
                   transform: type === "fence" && (x === 0 || x === COLS - 1) ? "rotate(90deg)" : "none",
                 }}>
+                {isAttackRange && <div style={{ position: "absolute", inset: 0, background: `${C.blue}15`, pointerEvents: "none" }} />}
                 <div style={{ position: "absolute", inset: 0, border: mode === "town" ? "none" : "1px solid rgba(0,0,0,0.25)" }} />
 
                 {special && !isFogged && ["8,6", "9,6", "20,6", "21,6", "14,14", "15,14", "4,11", "22,19", "23,19", "24,19"].includes(key) && (

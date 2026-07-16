@@ -420,8 +420,6 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
                   : baseSpells;
 
                 const extraAbilities: Array<{ name: string; desc: string; color: string; level: number; type: string; icon?: string; isPassive?: boolean }> = [];
-                if (char.class === "Fighter") extraAbilities.push({ name: "Second Wind", desc: `Regain 1d10+${char.level} HP (1/short rest)`, color: C.red, level: 0, type: "cantrip" });
-                if (char.class === "Ranger") extraAbilities.push({ name: "Hunter's Mark", desc: "Mark a target. Deal extra 1d6 damage to it.", color: "#4cdb70", level: 0, type: "cantrip" });
                 
                 if (char.tutorialCompleted) {
                   extraAbilities.push({ 
@@ -434,6 +432,21 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
                     isPassive: true
                   });
                 }
+
+                char.gameSkills.forEach(skillId => {
+                  const def = SKILL_DICTIONARY[skillId];
+                  if (def) {
+                    extraAbilities.push({
+                      name: def.name,
+                      desc: def.description,
+                      color: def.type === "heal" ? "#4cdb70" : (char.class === "Fighter" ? C.red : C.blue),
+                      level: 0,
+                      type: def.type === "passive" ? "passive" : "cantrip",
+                      icon: def.icon,
+                      isPassive: def.type === "passive" || def.type === "reaction"
+                    });
+                  }
+                });
 
                 if (spells.length === 0 && extraAbilities.length === 0) return (
                   <div style={{ color: C.muted, fontFamily: NU, fontSize: 12, textAlign: "center", paddingTop: 30 }}>No skills available.</div>

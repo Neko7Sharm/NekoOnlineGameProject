@@ -4,6 +4,7 @@ import type {
 } from "./types/game";
 import { C } from "./constants/theme";
 import { CLASS_CFG, CLASS_SPELLS, WIZARD_SPELL_CHOICES } from "./constants/classes";
+import { SKILL_DICTIONARY } from "./constants/skills";
 import { SHOP_ITEMS, BRANCH_ITEM } from "./constants/items";
 import { NPC_CHAT } from "./constants/quests";
 import {
@@ -17,7 +18,7 @@ import { genMonsters, genQuests } from "./game/character";
 const INIT_COMBAT: CombatState = {
   active: false, round: 1, turnOrder: [], currentIndex: 0,
   actionUsed: false, extraActionUsed: false, movedSquares: 0,
-  log: [], engagedMonsterIds: []
+  log: [], engagedMonsterIds: [], activeBuffs: []
 };
 
 export function useGameEngine() {
@@ -381,7 +382,7 @@ export function useGameEngine() {
         }
 
         // Shield Wall Buff
-        if (combat.activeBuffs.includes("fighter_shield_wall")) {
+        if ((combat.activeBuffs || []).includes("fighter_shield_wall")) {
           effectiveAC += 2;
         }
 
@@ -411,7 +412,7 @@ export function useGameEngine() {
               }
 
               // Berserker Rage Resistance (Halve physical damage)
-              if (combat.activeBuffs.includes("fighter_berserker_rage")) {
+              if ((combat.activeBuffs || []).includes("fighter_berserker_rage")) {
                 dmg = Math.floor(dmg / 2);
               }
               
@@ -728,7 +729,7 @@ export function useGameEngine() {
       setCombatMode("none");
       setSelectedSpell(null);
     } else if (["fighter_shield_wall", "fighter_warrior_focus", "fighter_samurai_focus", "fighter_berserker_rage"].includes(spellName)) {
-      setCombat(prev => ({ ...prev, actionUsed: true, activeBuffs: [...prev.activeBuffs, spellName] }));
+      setCombat(prev => ({ ...prev, actionUsed: true, activeBuffs: [...(prev.activeBuffs || []), spellName] }));
       log.push(`${char.name} uses ${gameSkill?.name}!`);
       notify(`✨ ${gameSkill?.name} activated!`);
       setCombatMode("none");
@@ -871,29 +872,30 @@ export function useGameEngine() {
     setCombatMode("none");
   }, [char, combat.active, combat.extraActionUsed, notify, addEffect]);
 
-  const handleMonsterClick = useCallback((monsterId: string) => {
+  const handleMonsterClick = (monsterId: string) => {
+    notify(`Clicked monster ${monsterId} in mode ${combatMode}`);
     if (combatMode === "attack") handleAttackMonster(monsterId, false);
     else if (combatMode === "attack_offhand") handleAttackMonster(monsterId, true);
     else if (combatMode === "spell" && selectedSpell) handleCastSpell(selectedSpell, monsterId);
-  }, [combatMode, selectedSpell, handleCastSpell]);
+  };
 
   function handleAttackMonster(monsterId: string, isOffHand: boolean = false, isReaction: boolean = false) {
-    if (!char || !combat.active) return;
+    if (!char || !combat.active) { notify(`Debug: char or combat not active`); return; }
     if (!isReaction) {
-      if (isOffHand && combat.extraActionUsed) return;
+      if (isOffHand && combat.extraActionUsed) { notify(`Debug: offhand used`); return; }
       if (!isOffHand && combat.actionUsed) {
         // Allow Extra Attack if they have the buff
-        if (!(char.class === "Fighter" && char.level >= 5 && combat.activeBuffs.includes("extra_attack_used"))) {
-          return;
+        if (!(char.class === "Fighter" && char.level >= 5 && (combat.activeBuffs || []).includes("extra_attack_used"))) {
+          notify(`Debug: main action used and no extra attack`); return;
         }
       }
     }
     
     const weapon = isOffHand ? char.equipment.offHand : char.equipment.mainHand;
-    if (!weapon || weapon.type !== "weapon") return;
+    if (!weapon || weapon.type !== "weapon") { notify(`Debug: no weapon`); return; }
     
     const monster = gs.dungeonMonsters.find(m => m.id === monsterId);
-    if (!monster || monster.hp <= 0) return;
+    if (!monster || monster.hp <= 0) { notify(`Debug: monster dead or not found`); return; }
     
     // Weapon Properties check
     const isRanged = (weapon.range ?? 5) > 5;
@@ -906,14 +908,14 @@ export function useGameEngine() {
     const mod = getMod(useDex ? char.stats.dex : char.stats.str);
 
     // Samurai Focus Advantage
-    const hasSamuraiFocus = combat.activeBuffs.includes("fighter_samurai_focus");
+    const hasSamuraiFocus = (combat.activeBuffs || []).includes("fighter_samurai_focus");
     let roll1 = d20();
     let roll2 = d20();
     let roll = hasSamuraiFocus ? Math.max(roll1, roll2) : roll1;
 
     // Hit Buffs & Subclass
     let extraHitBonus = 0;
-    if (combat.activeBuffs.includes("fighter_warrior_focus")) extraHitBonus += rollDice("1d4") + char.profBonus;
+    if ((combat.activeBuffs || []).includes("fighter_warrior_focus")) extraHitBonus += rollDice("1d4") + char.profBonus;
     
     if (char.subclass === "archer" && isRanged) extraHitBonus += 2;
     if (char.subclass === "duelwield" && char.equipment.mainHand && char.equipment.offHand && isLight) extraHitBonus += 1;
@@ -925,11 +927,11 @@ export function useGameEngine() {
     if (!isReaction) {
       // Extra Attack Logic (Fighter Lv 5)
       const canExtraAttack = char.class === "Fighter" && char.level >= 5;
-      const isFirstAttackOfAction = !combat.activeBuffs.includes("extra_attack_used");
+      const isFirstAttackOfAction = !(combat.activeBuffs || []).includes("extra_attack_used");
 
       if (!isOffHand) {
         if (canExtraAttack && isFirstAttackOfAction) {
-          setCombat(prev => ({ ...prev, activeBuffs: [...prev.activeBuffs, "extra_attack_used"] }));
+          setCombat(prev => ({ ...prev, activeBuffs: [...(prev.activeBuffs || []), "extra_attack_used"] }));
         } else {
           setCombat(prev => ({ ...prev, actionUsed: true }));
         }
@@ -940,7 +942,7 @@ export function useGameEngine() {
 
     // Remove Samurai Focus buff after use
     if (hasSamuraiFocus) {
-      setCombat(prev => ({ ...prev, activeBuffs: prev.activeBuffs.filter(b => b !== "fighter_samurai_focus") }));
+      setCombat(prev => ({ ...prev, activeBuffs: (prev.activeBuffs || []).filter(b => b !== "fighter_samurai_focus") }));
     }
 
     setCombatMode("none");
@@ -974,7 +976,7 @@ export function useGameEngine() {
             dmgMod -= distance;
           }
 
-          if (combat.activeBuffs.includes("fighter_berserker_rage") && isMelee) {
+          if ((combat.activeBuffs || []).includes("fighter_berserker_rage") && isMelee) {
             dieRoll += rollDice("1d6");
           }
 
