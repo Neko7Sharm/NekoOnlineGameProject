@@ -37,3 +37,8 @@ Selenia is a permanent, central NPC who serves as a guide and a bridge between t
 - **Active Limit**: A character may only have up to 2 active quests at the same time.
 - **Individual Progression**: Quests are bound to the individual character. Progress and rewards are personal, not shared across the party.
 - **Penalties for Canceling**: Players can cancel an active quest, but it incurs a flat fee (e.g., 10g) to prevent spamming and encourage commitment. Canceled quests do not return to the board.
+
+## 7. Information & UI Design Philosophy
+- **Separation of Concept and Calculation**:
+  - **Selenia's Role (Lore & Concepts)**: Selenia is responsible for explaining the "Concepts" (e.g., what a Modifier is, how Armor Class works, the idea behind Hit Rolls) in a friendly, in-universe conversational manner. She teaches the player *how* the world works without overwhelming them with raw math.
+  - **Status Screen's Role (Math & Transparency)**: The Status screen (UI/HUD) is responsible for showing the "Actual Numbers" and the exact "Calculation Methods" (e.g., Base HP + Con Mod + Level Bonus). The UI acts as the mathematical truth of the character, providing transparency and detailed breakdowns (via clickable elements or tooltips) for players who want to understand their exact stats and mechanics.

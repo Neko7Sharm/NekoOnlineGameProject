@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef, ReactNode } from "react";
 import {
   User, Package, Sword, Star, MessageCircle, Users, Send,
-  ChevronDown, ChevronUp, Heart,
+  ChevronDown, ChevronUp, Heart, X,
 } from "lucide-react";
 import { C, PX, NU, MO, pixelBtn } from "../../constants/theme";
-import { CLASS_SPELLS, WIZARD_SPELL_CHOICES } from "../../constants/classes";
+import { CLASS_SPELLS, WIZARD_SPELL_CHOICES, CLASS_CFG } from "../../constants/classes";
 import { SKILL_DICTIONARY } from "../../constants/skills";
 import iconBlessing from "../../assets/icon/skill/I_01.png";
-import { getMod } from "../../utils/dice";
+import { getMod, getWeaponHitBonus, formatMod } from "../../utils/dice";
 import { HpBar } from "../ui/HpBar";
 import { StatBox } from "../ui/StatBox";
 import { ItemMenu } from "../modals/ItemMenu";
@@ -34,6 +34,13 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null);
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
   const [invCategory, setInvCategory] = useState<"usable" | "material">("usable");
+  const [activeSecModal, setActiveSecModal] = useState<"hit" | "ac" | "hp" | null>(null);
+
+  useEffect(() => {
+    const handleClickOutside = () => setActiveSecModal(null);
+    if (activeSecModal) window.addEventListener("click", handleClickOutside);
+    return () => window.removeEventListener("click", handleClickOutside);
+  }, [activeSecModal]);
 
   useEffect(() => { if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight; }, [globalChat, partyChat]);
 
@@ -68,6 +75,24 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
       }
     </div>
   );
+  const renderSecModalBtn = (type: "hit" | "ac" | "hp", e: React.MouseEvent) => {
+    e.stopPropagation();
+    setActiveSecModal(activeSecModal === type ? null : type);
+  };
+
+  const hpBase = CLASS_CFG[char.class]?.hpBase ?? 10;
+  const hpCon = getMod(char.stats.con) * char.level;
+  const hpLevelBonus = char.maxHp - hpBase - hpCon;
+
+  const acBase = char.equipment.armor ? (char.equipment.armor.ac || 11) : 10;
+  const addDex = !char.equipment.armor || ["Leather Armor", "Mage Robes"].includes(char.equipment.armor.name);
+  const acDex = addDex ? getMod(char.stats.dex) : 0;
+  const acShield = char.equipment.offHand?.effect === "guard" ? 2 : 0;
+  const acOther = char.ac - acBase - acDex - acShield;
+
+  const hitInfo = char.equipment.mainHand && char.equipment.mainHand.type === "weapon" 
+    ? getWeaponHitBonus(char, char.equipment.mainHand)
+    : { total: char.profBonus + getMod(char.stats.str), statName: "STR", statMod: getMod(char.stats.str), prof: char.profBonus, weaponBonus: 0 };
 
   return (
     <div style={{ background: C.card, borderTop: `2px solid ${C.border}`, flexShrink: 0, fontFamily: NU }}>
@@ -114,7 +139,7 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
               </div>
               <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-                  <div style={{ padding: "8px 10px", background: C.card2, border: `1px solid ${C.border}` }}>
+                  <div onClick={(e) => renderSecModalBtn("hp", e)} style={{ padding: "8px 10px", background: activeSecModal === "hp" ? C.card : C.card2, border: `1px solid ${C.border}`, cursor: "pointer", transition: "0.2s" }}>
                     <div style={{ fontFamily: PX, fontSize: 7, color: C.muted, marginBottom: 4, letterSpacing: 1 }}>HP</div>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
                       <Heart className="w-3 h-3" style={{ color: C.red }} />
@@ -122,10 +147,15 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
                     </div>
                     <HpBar hp={char.hp} maxHp={char.maxHp} size="sm" />
                   </div>
-                  <div style={{ padding: "8px 10px", background: C.card2, border: `1px solid ${C.border}` }}>
-                    <div style={{ fontFamily: PX, fontSize: 7, color: C.muted, marginBottom: 4, letterSpacing: 1 }}>AC / PROF</div>
-                    <span style={{ fontFamily: MO, fontSize: 14, color: C.blue }}>{char.ac}</span>
-                    <span style={{ fontFamily: MO, fontSize: 10, color: C.muted }}> / +{char.profBonus}</span>
+
+                  <div onClick={(e) => renderSecModalBtn("ac", e)} style={{ padding: "8px 10px", background: activeSecModal === "ac" ? C.card : C.card2, border: `1px solid ${C.border}`, cursor: "pointer", transition: "0.2s" }}>
+                    <div style={{ fontFamily: PX, fontSize: 7, color: C.muted, marginBottom: 4, letterSpacing: 1 }}>ARMOR CLASS</div>
+                    <span style={{ fontFamily: MO, fontSize: 16, color: C.blue }}>{char.ac}</span>
+                  </div>
+
+                  <div onClick={(e) => renderSecModalBtn("hit", e)} style={{ padding: "8px 10px", background: activeSecModal === "hit" ? C.card : C.card2, border: `1px solid ${C.border}`, cursor: "pointer", transition: "0.2s" }}>
+                    <div style={{ fontFamily: PX, fontSize: 7, color: C.muted, marginBottom: 4, letterSpacing: 1 }}>ATTACK BONUS</div>
+                    <span style={{ fontFamily: MO, fontSize: 16, color: C.blue }}>{formatMod(hitInfo.total)}</span>
                   </div>
                   {char.spellSlots && (
                     <div style={{ padding: "8px 10px", background: C.card2, border: `1px solid ${C.border}` }}>
@@ -419,7 +449,10 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
                       : s)
                   : baseSpells;
 
-                const extraAbilities: Array<{ name: string; desc: string; color: string; level: number; type: string; icon?: string; isPassive?: boolean }> = [];
+                const extraAbilities: Array<{ 
+                  name: string; desc: string; color: string; level: number; type: string; 
+                  icon?: string; isPassive?: boolean; maxUses?: number; used?: number; recharge?: string 
+                }> = [];
                 
                 if (char.tutorialCompleted) {
                   extraAbilities.push({ 
@@ -436,14 +469,18 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
                 char.gameSkills.forEach(skillId => {
                   const def = SKILL_DICTIONARY[skillId];
                   if (def) {
+                    const used = char.skillUsages?.[skillId] || 0;
                     extraAbilities.push({
                       name: def.name,
                       desc: def.description,
                       color: def.type === "heal" ? "#4cdb70" : (char.class === "Fighter" ? C.red : C.blue),
                       level: 0,
-                      type: def.type === "passive" ? "passive" : "cantrip",
+                      type: def.type === "passive" ? "passive" : (def.maxUses ? `${def.maxUses}/${def.recharge === "short" ? "Short" : "Long"} Rest` : "cantrip"),
                       icon: def.icon,
-                      isPassive: def.type === "passive" || def.type === "reaction"
+                      isPassive: def.type === "passive" || def.type === "reaction",
+                      maxUses: def.maxUses,
+                      used: used,
+                      recharge: def.recharge
                     });
                   }
                 });
@@ -479,7 +516,10 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
                               <img src={iconBlessing} alt="Blessing" style={{ width: 14, height: 14, objectFit: "contain", marginRight: 4 }} />
                             )}
                             <span style={{ fontFamily: PX, fontSize: 7, color: spellColor, flex: 1, textAlign: "left" }}>{spell.name}</span>
-                            <span style={{ fontFamily: MO, fontSize: 8, color: C.muted }}>{(spell as any).isPassive ? "passive" : (isCantrip ? "cantrip" : `lvl ${spell.level}`)}</span>
+                            <span style={{ fontFamily: MO, fontSize: 8, color: C.muted }}>
+                              {(spell as any).maxUses ? `${(spell as any).maxUses - ((spell as any).used || 0)}/${(spell as any).maxUses} ` : ""}
+                              {(spell as any).isPassive ? "passive" : (spell as any).type ? (spell as any).type : (isCantrip ? "cantrip" : `lvl ${spell.level}`)}
+                            </span>
                             <span style={{ fontFamily: MO, fontSize: 9, color: spellColor }}>{isExpanded ? "▲" : "▼"}</span>
                           </button>
 
@@ -649,6 +689,118 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
           onDrop={() => { onDropItem(itemMenu.id); setItemMenu(null); }}
           onClose={() => setItemMenu(null)}
         />
+      )}
+
+      {activeSecModal && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+          background: "rgba(0,0,0,0.6)", zIndex: 9999,
+          display: "flex", alignItems: "center", justifyContent: "center"
+        }} onClick={() => setActiveSecModal(null)}>
+          <div style={{
+            background: `linear-gradient(180deg, ${C.card} 0%, ${C.card2} 100%)`,
+            border: `2px solid ${C.border}`, padding: 20, borderRadius: 8,
+            width: 260, maxWidth: "90%", boxShadow: C.glow,
+            position: "relative"
+          }} onClick={e => e.stopPropagation()}>
+            <button onClick={() => setActiveSecModal(null)} style={{
+              position: "absolute", top: 8, right: 8, background: "none", border: "none",
+              color: C.muted, cursor: "pointer"
+            }}>
+              <X className="w-5 h-5" />
+            </button>
+
+            {activeSecModal === "hp" && (
+              <>
+                <div style={{ fontFamily: PX, fontSize: 14, color: C.red, borderBottom: `1px solid ${C.border}`, paddingBottom: 4, marginBottom: 8 }}>
+                  Maximum HP
+                </div>
+                <div style={{ fontFamily: MO, fontSize: 24, color: C.text, marginBottom: 12 }}>{char.maxHp}</div>
+                
+                <div style={{ display: "flex", justifyContent: "space-between", fontFamily: NU, fontSize: 13, color: C.text, marginBottom: 4 }}>
+                  <span>Base HP</span>
+                  <span style={{ fontFamily: MO, color: C.blue }}>{hpBase}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontFamily: NU, fontSize: 13, color: C.text, marginBottom: 4 }}>
+                  <span>Constitution</span>
+                  <span style={{ fontFamily: MO, color: C.blue }}>{formatMod(hpCon)}</span>
+                </div>
+                {hpLevelBonus > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", fontFamily: NU, fontSize: 13, color: C.text, marginBottom: 4 }}>
+                    <span>Level Bonus</span>
+                    <span style={{ fontFamily: MO, color: C.blue }}>{formatMod(hpLevelBonus)}</span>
+                  </div>
+                )}
+                <div style={{ display: "flex", justifyContent: "space-between", fontFamily: NU, fontSize: 13, color: C.red, marginTop: 12, paddingTop: 8, borderTop: `1px dashed ${C.border}` }}>
+                  <span>Total</span>
+                  <span style={{ fontFamily: MO }}>{char.maxHp}</span>
+                </div>
+              </>
+            )}
+
+            {activeSecModal === "ac" && (
+              <>
+                <div style={{ fontFamily: PX, fontSize: 14, color: C.gold, borderBottom: `1px solid ${C.border}`, paddingBottom: 4, marginBottom: 8 }}>
+                  Armor Class
+                </div>
+                <div style={{ fontFamily: MO, fontSize: 24, color: C.text, marginBottom: 12 }}>{char.ac}</div>
+                
+                <div style={{ display: "flex", justifyContent: "space-between", fontFamily: NU, fontSize: 13, color: C.text, marginBottom: 4 }}>
+                  <span>{char.equipment.armor?.name || "Base"}</span>
+                  <span style={{ fontFamily: MO, color: C.blue }}>{acBase}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontFamily: NU, fontSize: 13, color: C.text, marginBottom: 4 }}>
+                  <span>Dexterity Modifier</span>
+                  <span style={{ fontFamily: MO, color: C.blue }}>{formatMod(acDex)}</span>
+                </div>
+                {acShield > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", fontFamily: NU, fontSize: 13, color: C.text, marginBottom: 4 }}>
+                    <span>Shield</span>
+                    <span style={{ fontFamily: MO, color: C.blue }}>{formatMod(acShield)}</span>
+                  </div>
+                )}
+                {acOther > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", fontFamily: NU, fontSize: 13, color: C.text, marginBottom: 4 }}>
+                    <span>Other Bonus</span>
+                    <span style={{ fontFamily: MO, color: C.blue }}>{formatMod(acOther)}</span>
+                  </div>
+                )}
+                <div style={{ display: "flex", justifyContent: "space-between", fontFamily: NU, fontSize: 13, color: C.gold, marginTop: 12, paddingTop: 8, borderTop: `1px dashed ${C.border}` }}>
+                  <span>Total</span>
+                  <span style={{ fontFamily: MO }}>{char.ac}</span>
+                </div>
+              </>
+            )}
+
+            {activeSecModal === "hit" && (
+              <>
+                <div style={{ fontFamily: PX, fontSize: 14, color: C.gold, borderBottom: `1px solid ${C.border}`, paddingBottom: 4, marginBottom: 8 }}>
+                  Attack Bonus
+                </div>
+                <div style={{ fontFamily: MO, fontSize: 24, color: C.text, marginBottom: 12 }}>{formatMod(hitInfo.total)}</div>
+                
+                <div style={{ display: "flex", justifyContent: "space-between", fontFamily: NU, fontSize: 13, color: C.text, marginBottom: 4 }}>
+                  <span>{hitInfo.statName === "STR" ? "Strength" : "Dexterity"} Modifier</span>
+                  <span style={{ fontFamily: MO, color: C.blue }}>{formatMod(hitInfo.statMod)}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontFamily: NU, fontSize: 13, color: C.text, marginBottom: 4 }}>
+                  <span>Proficiency Bonus</span>
+                  <span style={{ fontFamily: MO, color: C.blue }}>{formatMod(hitInfo.prof)}</span>
+                </div>
+                {hitInfo.weaponBonus > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", fontFamily: NU, fontSize: 13, color: C.text, marginBottom: 4 }}>
+                    <span>Weapon Bonus</span>
+                    <span style={{ fontFamily: MO, color: C.blue }}>{formatMod(hitInfo.weaponBonus)}</span>
+                  </div>
+                )}
+                <div style={{ display: "flex", justifyContent: "space-between", fontFamily: NU, fontSize: 13, color: C.gold, marginTop: 12, paddingTop: 8, borderTop: `1px dashed ${C.border}` }}>
+                  <span>Total</span>
+                  <span style={{ fontFamily: MO }}>{formatMod(hitInfo.total)}</span>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

@@ -1,7 +1,8 @@
 import { Heart, Shield, Zap, RotateCcw, BookOpen } from "lucide-react";
 import { C, PX, NU, MO, pixelBtn } from "../constants/theme";
 import { CLASS_CFG } from "../constants/classes";
-import { COLS, ROWS } from "../constants/map";
+import { getMapCols, getMapRows, CELL } from "../constants/map";
+import { LONG_REST_COST } from "../constants/levels";
 import { useGameEngine } from "../useGameEngine";
 import { HpBar } from "../components/ui/HpBar";
 import { GoldBadge } from "../components/ui/GoldBadge";
@@ -93,16 +94,18 @@ export default function App() {
         {/* Map area - Camera Follow Mode */}
         <div
           onWheel={(e) => {
-            if (e.deltaY < 0) setZoom(z => Math.min(2.5, z + 0.1));
-            else setZoom(z => Math.max(0.6, z - 0.1));
+            if (e.deltaY < 0) setZoom(z => Math.min(3.0, z + 0.1));
+            else setZoom(z => Math.max(0.15, z - 0.1));
           }}
           style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", position: "relative", background: screen === "dungeon" ? "#040310" : screen === "sanctuary" ? "#ffffff" : "#080e04" }}>
           {(() => {
-             const mapScale = zoom;
-             const charX = char.position.x * 38 + 19;
-             const charY = char.position.y * 38 + 19;
-             const centerX = (COLS * 38) / 2;
-             const centerY = (ROWS * 38) / 2;
+             const mapScale = eng.zoom;
+             const mapCols = getMapCols(screen);
+             const mapRows = getMapRows(screen);
+             const charX = char.position.x * CELL + (CELL / 2);
+             const charY = char.position.y * CELL + (CELL / 2);
+             const centerX = (mapCols * CELL) / 2;
+             const centerY = (mapRows * CELL) / 2;
              const offsetX = centerX - charX;
              const offsetY = centerY - charY;
              return (
@@ -120,6 +123,7 @@ export default function App() {
                      effects={effects}
                      dyingMonsters={dyingMonsters}
                      hitTokenIds={hitTokenIds}
+                     insightVisionTiles={eng.insightVisionTiles}
                      onHealSelf={eng.handleHealSelf} />
                  </div>
                </div>
@@ -169,6 +173,45 @@ export default function App() {
               <span style={{ fontSize: 16 }}>⛺</span>
               SHORT REST
             </button>
+          )}
+
+          {/* Exploration Panel */}
+          {screen === "dungeon" && !combat.active && char && (
+            <div style={{
+              position: "absolute", top: 16, left: 16, zIndex: 100,
+              display: "flex", flexDirection: "column", gap: 8
+            }}>
+              {/* Insight Button */}
+              <button onClick={eng.handleInsight}
+                style={{
+                  background: Date.now() < eng.insightCooldown ? "#333" : "rgba(0,0,0,0.6)", 
+                  border: `1px solid ${C.border}`,
+                  color: Date.now() < eng.insightCooldown ? "#888" : C.muted, 
+                  padding: "8px 12px", borderRadius: 8,
+                  fontFamily: PX, cursor: Date.now() < eng.insightCooldown ? "not-allowed" : "pointer", 
+                  display: "flex", gap: 8, alignItems: "center", fontSize: 12, transition: "0.2s"
+                }}
+              >
+                <span style={{ fontSize: 16 }}>🔍</span>
+                {Date.now() < eng.insightCooldown ? `COOLDOWN (${Math.ceil((eng.insightCooldown - Date.now()) / 1000)}s)` : "INSIGHT (WIS)"}
+              </button>
+
+              {/* Stealth Button */}
+              <button onClick={eng.handleStealth}
+                style={{
+                  background: (eng.stealthActive || eng.stealthCasting) ? "rgba(40,100,40,0.8)" : "rgba(0,0,0,0.6)", 
+                  border: `1px solid ${(eng.stealthActive || eng.stealthCasting) ? "#4cdb70" : C.border}`,
+                  color: (eng.stealthActive || eng.stealthCasting) ? "#4cdb70" : C.muted, 
+                  padding: "8px 12px", borderRadius: 8,
+                  fontFamily: PX, cursor: eng.stealthCasting ? "not-allowed" : "pointer", 
+                  display: "flex", gap: 8, alignItems: "center", fontSize: 12, transition: "0.2s"
+                }}
+                disabled={eng.stealthCasting}
+              >
+                <span style={{ fontSize: 16 }}>🥷</span>
+                {eng.stealthCasting ? "HIDING..." : eng.stealthActive ? `STEALTHED` : "STEALTH (DEX)"}
+              </button>
+            </div>
           )}
 
           {/* Engage First button */}
@@ -269,14 +312,16 @@ export default function App() {
           <InnModal
             char={char}
             onLongRest={(healedChar) => {
-              if (char.gold >= 50) {
+              if (char.gold >= LONG_REST_COST) {
                 eng.updateChar(char.id, (c: any) => ({ 
-                  gold: c.gold - 50, 
-                  hp: c.maxHp 
+                  gold: c.gold - LONG_REST_COST, 
+                  hp: c.maxHp,
+                  skillUsages: {},
+                  spellSlots: c.spellSlots ? { ...c.spellSlots, used: 0 } : undefined
                 }));
                 eng.notify("You rest well at the inn and feel fully restored!");
               } else {
-                eng.notify("Not enough gold for a Long Rest (50g required).");
+                eng.notify(`Not enough gold for a Long Rest (${LONG_REST_COST}g required).`);
               }
               setTimeout(() => eng.setSpecialDialog(null), 800);
             }}

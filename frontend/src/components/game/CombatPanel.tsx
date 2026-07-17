@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { C, PX, MO } from "../../constants/theme";
+import { C, PX, MO, NU } from "../../constants/theme";
 import { CLASS_CFG, CLASS_SPELLS, WIZARD_SPELL_CHOICES } from "../../constants/classes";
 import { SKILL_DICTIONARY } from "../../constants/skills";
 import { MOVE_SQUARES } from "../../constants/map";
+import { getWeaponHitBonus, formatMod } from "../../utils/dice";
 import type { CombatState, Character, Monster, CombatModeT } from "../../types/game";
-
 export function CombatPanel({ combat, char, monsters, combatMode, setCombatMode, selectedSpell, onEndTurn, onSelectSpell, onUseItem, onFlee, onGuard }: {
   combat: CombatState; char: Character; monsters: Monster[];
   combatMode: CombatModeT; setCombatMode: (m: CombatModeT) => void;
@@ -13,11 +13,13 @@ export function CombatPanel({ combat, char, monsters, combatMode, setCombatMode,
 }) {
   const current = combat.turnOrder[combat.currentIndex];
   const isPlayer = current?.type === "player";
+  const isMainActionExhausted = combat.actionUsed && !(combat.extraMainActions && combat.extraMainActions > 0);
   const hasSlots = char.spellSlots ? char.spellSlots.used < char.spellSlots.max : false;
   const moveLeft = MOVE_SQUARES - combat.movedSquares;
   const [showLog, setShowLog] = useState(true);
   const [actionTab, setActionTab] = useState<"none" | "attack" | "skill" | "item">("none");
   const [tooltip, setTooltip] = useState<{ name: string; desc: string } | null>(null);
+  const [hoverHitMod, setHoverHitMod] = useState<{ x: number, y: number, weapon: any } | null>(null);
 
   const baseSpells = CLASS_SPELLS[char.class] ?? [];
   let spells = char.class === "Wizard" && char.spellChoice && char.spellChoice !== "Sleep"
@@ -31,15 +33,21 @@ export function CombatPanel({ combat, char, monsters, combatMode, setCombatMode,
     const activeSkills = char.gameSkills
       .map(id => SKILL_DICTIONARY[id])
       .filter(s => s && s.type === "active")
-      .map(s => ({
-        name: s.id, // using ID as the identifier to cast
-        desc: s.description,
-        isBonus: s.cost === "extra",
-        level: 0,
-        type: s.healAmount ? "heal" : "damage", // Simplification
-        displayName: s.name, // To show in UI
-        icon: s.icon
-      })) as any[];
+      .map(s => {
+        const used = char.skillUsages?.[s.id] || 0;
+        return {
+          name: s.id, // using ID as the identifier to cast
+          desc: s.description,
+          isBonus: s.cost === "extra",
+          level: 0,
+          type: s.healAmount ? "heal" : "damage", // Simplification
+          displayName: s.name, // To show in UI
+          icon: s.icon,
+          maxUses: s.maxUses,
+          used: used,
+          recharge: s.recharge
+        };
+      }) as any[];
     spells = [...spells, ...activeSkills];
   }
   const usableItems = char.inventory.filter(i => i.type === "consumable" && !i.material);
@@ -159,8 +167,11 @@ export function CombatPanel({ combat, char, monsters, combatMode, setCombatMode,
 
           <div style={{ ...rightCard(0), padding: "8px 12px", background: "rgba(10,10,25,0.9)", display: "flex", flexDirection: "column", gap: 4 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: 9, color: combat.actionUsed ? C.muted : C.blue, fontFamily: PX }}>MAIN ACTION</span>
-              <span style={{ fontSize: 9, fontFamily: PX }}>{combat.actionUsed ? "❌" : "✅"}</span>
+              <span style={{ fontSize: 9, color: (combat.actionUsed && !combat.extraMainActions) ? C.muted : C.blue, fontFamily: PX }}>MAIN ACTION</span>
+              <span style={{ fontSize: 9, fontFamily: PX }}>
+                {combat.actionUsed ? "❌" : "✅"}
+                {combat.extraMainActions && combat.extraMainActions > 0 ? Array(combat.extraMainActions).fill(" ✅").join("") : ""}
+              </span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span style={{ fontSize: 9, color: combat.extraActionUsed ? C.muted : C.gold, fontFamily: PX }}>EXTRA ACTION</span>
@@ -217,17 +228,32 @@ export function CombatPanel({ combat, char, monsters, combatMode, setCombatMode,
               {char.equipment.mainHand && (
                 <div style={{ ...rightCard(220), padding: "9px 14px 9px 20px", background: "linear-gradient(260deg, rgba(60,10,10,0.95), rgba(30,5,5,0.95))" }}>
                   <button className="cp-right-btn"
-                    onClick={() => !combat.actionUsed && setCombatMode(combatMode === "attack" ? "none" : "attack")}
-                    disabled={combat.actionUsed}
+                    onClick={() => !isMainActionExhausted && setCombatMode(combatMode === "attack" ? "none" : "attack")}
+                    disabled={isMainActionExhausted}
+                    onMouseEnter={(e) => setHoverHitMod({ x: e.clientX, y: e.clientY, weapon: char.equipment.mainHand })}
+                    onMouseMove={(e) => setHoverHitMod({ x: e.clientX, y: e.clientY, weapon: char.equipment.mainHand })}
+                    onMouseLeave={() => setHoverHitMod(null)}
                     style={{
-                      background: "none", border: "none", width: "100%", padding: 0, cursor: combat.actionUsed ? "not-allowed" : "pointer",
-                      color: combat.actionUsed ? "rgba(255,255,255,0.2)" : combatMode === "attack" ? C.red : "rgba(255,255,255,0.85)",
+                      background: "none", border: "none", width: "100%", padding: 0, cursor: isMainActionExhausted ? "not-allowed" : "pointer",
+                      color: isMainActionExhausted ? "rgba(255,255,255,0.2)" : combatMode === "attack" ? C.red : "rgba(255,255,255,0.85)",
                       fontFamily: PX, fontSize: 9, letterSpacing: 1,
                       display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, textAlign: "right",
-                      opacity: combat.actionUsed ? 0.5 : 1
+                      opacity: isMainActionExhausted ? 0.5 : 1
                     }}>
-                    <span style={{ fontFamily: MO, fontSize: 9, color: C.red + "99" }}>{char.equipment.mainHand.damage}</span>
-                    ⚔ {char.equipment.mainHand.name.slice(0, 14)}
+                    
+                    {(() => {
+                      const hitInfo = getWeaponHitBonus(char, char.equipment.mainHand!);
+                      return (
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
+                            <span style={{ fontFamily: MO, fontSize: 10, color: C.blue }}>{formatMod(hitInfo.total)} to Hit</span>
+                            <span style={{ fontFamily: MO, fontSize: 9, color: C.red + "99" }}>{char.equipment.mainHand.damage}</span>
+                            <span>⚔ {char.equipment.mainHand.name.slice(0, 14)}</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                   </button>
                 </div>
               )}
@@ -242,6 +268,17 @@ export function CombatPanel({ combat, char, monsters, combatMode, setCombatMode,
                       }
                     }}
                     disabled={combat.extraActionUsed}
+                    onMouseEnter={(e) => {
+                      if (char.equipment.offHand?.effect !== "guard") {
+                        setHoverHitMod({ x: e.clientX, y: e.clientY, weapon: char.equipment.offHand });
+                      }
+                    }}
+                    onMouseMove={(e) => {
+                      if (char.equipment.offHand?.effect !== "guard") {
+                        setHoverHitMod({ x: e.clientX, y: e.clientY, weapon: char.equipment.offHand });
+                      }
+                    }}
+                    onMouseLeave={() => setHoverHitMod(null)}
                     style={{
                       background: "none", border: "none", width: "100%", padding: 0, cursor: combat.extraActionUsed ? "not-allowed" : "pointer",
                       color: combat.extraActionUsed ? "rgba(255,255,255,0.2)" : combatMode === "attack_offhand" ? C.gold : "rgba(255,255,255,0.85)",
@@ -253,10 +290,18 @@ export function CombatPanel({ combat, char, monsters, combatMode, setCombatMode,
                     {char.equipment.offHand.effect === "guard" ? (
                       <span style={{ fontFamily: MO, fontSize: 9, color: C.gold + "99" }}>🛡️ Guard</span>
                     ) : (
-                      <>
-                        <span style={{ fontFamily: MO, fontSize: 9, color: C.gold + "99" }}>{char.equipment.offHand.damage}</span>
-                        🗡️ {char.equipment.offHand.name.slice(0, 12)}
-                      </>
+                      (() => {
+                        const hitInfo = getWeaponHitBonus(char, char.equipment.offHand!);
+                        return (
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
+                              <span style={{ fontFamily: MO, fontSize: 10, color: C.blue }}>{formatMod(hitInfo.total)} to Hit</span>
+                              <span style={{ fontFamily: MO, fontSize: 9, color: C.gold + "99" }}>{char.equipment.offHand.damage}</span>
+                              <span>🗡️ {char.equipment.offHand.name.slice(0, 12)}</span>
+                            </div>
+                          </div>
+                        );
+                      })()
                     )}
                   </button>
                 </div>
@@ -267,10 +312,11 @@ export function CombatPanel({ combat, char, monsters, combatMode, setCombatMode,
           {/* SKILL sub-panel */}
           {actionTab === "skill" && (
             <div style={{ position: "relative" }}>
-              {spells.filter(s => s.level === 0 || hasSlots).map((spell, si) => {
+              {spells.filter(s => s.level === 0 || hasSlots || s.maxUses).map((spell, si) => {
                 const isActive = combatMode === "spell" && selectedSpell === spell.name;
                 const isExtra = !!spell.isBonus;
-                const isDisabled = isExtra ? combat.extraActionUsed : combat.actionUsed;
+                const outOfUses = spell.maxUses !== undefined && spell.used >= spell.maxUses;
+                const isDisabled = (isExtra ? combat.extraActionUsed : isMainActionExhausted) || outOfUses;
                 return (
                   <button key={spell.name} className="cp-right-btn"
                     onClick={() => !isDisabled && onSelectSpell(isActive ? null : spell.name)}
@@ -292,8 +338,15 @@ export function CombatPanel({ combat, char, monsters, combatMode, setCombatMode,
                       opacity: isDisabled ? 0.5 : 1
                     }}>
                     {isExtra ? <span style={{ fontFamily: PX, fontSize: 6, color: C.gold, marginRight: "auto" }}>[EXTRA]</span> : null}
-                    {spell.level > 0 && <span style={{ fontFamily: MO, fontSize: 7, color: "#c97fff88" }}>SLOT</span>}
-                    {spell.level === 0 && <span style={{ fontFamily: MO, fontSize: 7, color: "rgba(255,255,255,0.3)" }}>∞</span>}
+                    {spell.maxUses !== undefined ? (
+                      <span style={{ fontFamily: MO, fontSize: 7, color: outOfUses ? C.red : "#c97fff88" }}>
+                        {spell.maxUses - (spell.used || 0)}/{spell.maxUses}
+                      </span>
+                    ) : spell.level > 0 ? (
+                      <span style={{ fontFamily: MO, fontSize: 7, color: "#c97fff88" }}>SLOT</span>
+                    ) : (
+                      <span style={{ fontFamily: MO, fontSize: 7, color: "rgba(255,255,255,0.3)" }}>∞</span>
+                    )}
                     {spell.icon ? spell.icon : "✨"} {spell.displayName || spell.name}
                   </button>
                 );
@@ -323,7 +376,7 @@ export function CombatPanel({ combat, char, monsters, combatMode, setCombatMode,
             ) : usableItems.map((item, ii) => {
               const isBomb = item.effect === "aoe_bomb";
               const isExtra = !isBomb; // Potions use extra action, bombs use main
-              const isDisabled = isExtra ? combat.extraActionUsed : combat.actionUsed;
+              const isDisabled = isExtra ? combat.extraActionUsed : isMainActionExhausted;
               return (
                 <button key={item.id} className="cp-right-btn"
                   onClick={() => !isDisabled && onUseItem(item)}
@@ -383,6 +436,45 @@ export function CombatPanel({ combat, char, monsters, combatMode, setCombatMode,
             <div style={{ fontFamily: PX, fontSize: 8, color: "rgba(255,100,100,0.7)", letterSpacing: 2, textAlign: "right" }}>ENEMY</div>
             <div style={{ fontFamily: PX, fontSize: 7, color: "rgba(255,255,255,0.3)", letterSpacing: 1, textAlign: "right" }}>THINKING...</div>
           </div>
+        </div>
+      )}
+
+      {hoverHitMod && (
+        <div style={{
+          position: "fixed", top: hoverHitMod.y - 70, left: hoverHitMod.x - 215, zIndex: 99999, pointerEvents: "none",
+          background: "rgba(20, 10, 10, 0.95)", border: `1px solid ${C.red}50`,
+          padding: "8px 12px", borderRadius: 4, width: 200,
+          display: "flex", flexDirection: "column", gap: 4, textAlign: "left",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.8)"
+        }}>
+          {(() => {
+            const hitInfo = getWeaponHitBonus(char, hoverHitMod.weapon);
+            return (
+              <>
+                <div style={{ fontFamily: PX, fontSize: 9, color: C.gold, borderBottom: `1px solid ${C.border}`, paddingBottom: 4, marginBottom: 2 }}>
+                  ATTACK ROLL BONUS
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontFamily: NU, fontSize: 11, color: C.text }}>
+                  <span>Base ({hitInfo.statName})</span>
+                  <span style={{ fontFamily: MO, color: C.blue }}>{formatMod(hitInfo.statMod)}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontFamily: NU, fontSize: 11, color: C.text }}>
+                  <span>Proficiency</span>
+                  <span style={{ fontFamily: MO, color: C.blue }}>{formatMod(hitInfo.prof)}</span>
+                </div>
+                {hitInfo.weaponBonus > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", fontFamily: NU, fontSize: 11, color: C.text }}>
+                    <span>Weapon Bonus</span>
+                    <span style={{ fontFamily: MO, color: C.blue }}>{formatMod(hitInfo.weaponBonus)}</span>
+                  </div>
+                )}
+                <div style={{ display: "flex", justifyContent: "space-between", fontFamily: NU, fontSize: 11, color: C.gold, marginTop: 4, paddingTop: 4, borderTop: `1px dashed ${C.border}` }}>
+                  <span>Total Hit Roll</span>
+                  <span style={{ fontFamily: MO }}>{formatMod(hitInfo.total)}</span>
+                </div>
+              </>
+            );
+          })()}
         </div>
       )}
     </>

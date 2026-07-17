@@ -45,5 +45,5 @@ export function getLevelProgress(level: number, exp: number): number {
 // ─────────────────────────────────────────────────
 
 export const SHORT_REST_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
-export const LONG_REST_COST = 50; // gold
+export const LONG_REST_COST = 10; // gold
 export const QUEST_CANCEL_COST = 10; // gold

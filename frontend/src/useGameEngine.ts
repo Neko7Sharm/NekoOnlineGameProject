@@ -8,18 +8,46 @@ import { SKILL_DICTIONARY } from "./constants/skills";
 import { SHOP_ITEMS, BRANCH_ITEM } from "./constants/items";
 import { NPC_CHAT } from "./constants/quests";
 import {
-  COLS, ROWS, MOVE_SQUARES, SIGHT, DUNGEON_ENTER, DUNGEON_EXIT, TOWN_ENTER,
+  getMapCols, getMapRows, MOVE_SQUARES, SIGHT, DUNGEON_ENTER, DUNGEON_EXIT, TOWN_ENTER,
   TOWN_SPECIAL, SANCTUARY_SPECIAL, isWalkable
 } from "./constants/map";
 import { gid, d20, getMod, dist, tnow, rollDice, getSpellcastingMod, calcAC } from "./utils/dice";
 import { loadState, persist } from "./storage";
 import { genMonsters, genQuests } from "./game/character";
+import { parseWhisperingForest } from "./maps/whispering_forest";
+const wfMap = parseWhisperingForest();
+
+// Bresenham's Line Algorithm for Line of Sight
+export function checkLineOfSight(x0: number, y0: number, x1: number, y1: number, obstacles: Set<string>): boolean {
+  let dx = Math.abs(x1 - x0);
+  let dy = Math.abs(y1 - y0);
+  let sx = (x0 < x1) ? 1 : -1;
+  let sy = (y0 < y1) ? 1 : -1;
+  let err = dx - dy;
+
+  while(true) {
+    if (x0 === x1 && y0 === y1) return true; // Reached target
+    if (obstacles.has(`${x0},${y0}`)) return false; // Blocked by obstacle
+    
+    let e2 = 2 * err;
+    if (e2 > -dy) { err -= dy; x0 += sx; }
+    if (e2 < dx) { err += dx; y0 += sy; }
+  }
+}
 
 const INIT_COMBAT: CombatState = {
   active: false, round: 1, turnOrder: [], currentIndex: 0,
   actionUsed: false, extraActionUsed: false, movedSquares: 0,
+  extraMainActions: 0,
   log: [], engagedMonsterIds: [], activeBuffs: []
 };
+
+function consumeMainAction(prev: CombatState): Partial<CombatState> {
+  if (prev.extraMainActions && prev.extraMainActions > 0) {
+    return { extraMainActions: prev.extraMainActions - 1 };
+  }
+  return { actionUsed: true };
+}
 
 export function useGameEngine() {
   const [gs, setGs] = useState<GameState>(loadState);
@@ -57,8 +85,30 @@ export function useGameEngine() {
   const [notification, setNotification] = useState<string | null>(null);
   const [actionText, setActionText] = useState<{ text: string; color: string } | null>(null);
   const [restAnim, setRestAnim] = useState<"short" | "long" | null>(null);
-  const [zoom, setZoom] = useState(1.3);
+  const [zooms, setZooms] = useState<Record<string, number>>({
+    town: 0.4,
+    sanctuary: 0.5,
+    dungeon: 1.0,
+    tutorial: 1.0,
+    worldMap: 1.0
+  });
+  const zoom = zooms[screen] ?? 1.0;
+  const setZoom = useCallback((valOrFn: React.SetStateAction<number>) => {
+    setZooms(prev => {
+      const current = prev[screen] ?? 1.0;
+      const next = typeof valOrFn === "function" ? (valOrFn as any)(current) : valOrFn;
+      return { ...prev, [screen]: next };
+    });
+  }, [screen]);
   const [shopPurchaseAnim, setShopPurchaseAnim] = useState<string | null>(null);
+  
+  // Exploration System States
+  const [insightCooldown, setInsightCooldown] = useState<number>(0);
+  const [insightVisionTiles, setInsightVisionTiles] = useState<Set<string>>(new Set());
+  const [stealthActive, setStealthActive] = useState(false);
+  const stealthedMonstersRef = useRef<Set<string>>(new Set());
+  const [stealthCasting, setStealthCasting] = useState(false);
+
   const monsterTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const char = activeCharId ? gs.characters[activeCharId] : null;
@@ -133,6 +183,11 @@ export function useGameEngine() {
 
   const startCombat = useCallback((monsterIds: string[]) => {
     if (!char) return;
+    setStealthActive(false);
+    stealthedMonstersRef.current.clear();
+    setStealthCasting(false);
+    setActionText({ text: "COMBAT START!", color: C.red });
+    setTimeout(() => setActionText(null), 1500);
     setBattleStart(true);
     setTimeout(() => setBattleStart(false), 1800);
     const playerInit = 20 + getMod(char.stats.dex);
@@ -149,7 +204,7 @@ export function useGameEngine() {
       ...engaged.map(m => `${m.name} initiative: ${order.find(o => o.id === m.id)?.initiative}`),
     ];
     setGs(prev => ({ ...prev, dungeonMonsters: prev.dungeonMonsters.map(m => monsterIds.includes(m.id) ? { ...m, alerted: true } : m) }));
-    setCombat({ active: true, round: 1, turnOrder: order, currentIndex: 0, actionUsed: false, extraActionUsed: false, movedSquares: 0, log, engagedMonsterIds: monsterIds });
+    setCombat({ active: true, round: 1, turnOrder: order, currentIndex: 0, actionUsed: false, extraActionUsed: false, extraMainActions: 0, movedSquares: 0, log, engagedMonsterIds: monsterIds, activeBuffs: [] });
     setCombatMode("none");
   }, [char, gs.dungeonMonsters]);
 
@@ -165,9 +220,13 @@ export function useGameEngine() {
       if (Math.random() < 0.6) updateChar(char.id, ch => ({ gold: ch.gold + 2 + Math.floor(Math.random() * 5) }));
     });
     let updatedAQ = (char.activeQuests || []).map(q => {
-      if (q.killTarget?.monster === "Wooden Dummy") {
-        const nextCurrent = Math.min((q.killTarget.current ?? 0) + dead.length, q.killTarget.count);
-        return { ...q, killTarget: { ...q.killTarget, current: nextCurrent } };
+      if (q.killTarget) {
+        const targetMonster = q.killTarget.monster;
+        const matchingDeadCount = dead.filter(m => m.name === targetMonster || m.name.includes(targetMonster)).length;
+        if (matchingDeadCount > 0) {
+          const nextCurrent = Math.min((q.killTarget.current ?? 0) + matchingDeadCount, q.killTarget.count);
+          return { ...q, killTarget: { ...q.killTarget, current: nextCurrent } };
+        }
       }
       return q;
     });
@@ -270,20 +329,102 @@ export function useGameEngine() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gs.dungeonMonsters, combat.active]);
 
-  // Monster sight
+  // Out of combat exploration tick
   useEffect(() => {
     if (screen !== "dungeon" || combat.active || !char) return;
     clearTimeout(monsterTimerRef.current);
     monsterTimerRef.current = setTimeout(() => {
-      const triggered = gs.dungeonMonsters.filter(m => m.hp > 0 && dist(char.position, m.position) <= m.sightRange);
-      if (triggered.length > 0) startCombat(triggered.map(m => m.id));
-    }, 300);
-  }, [char?.position, screen, combat.active, gs.dungeonMonsters, startCombat]);
+      let shouldStartCombat = false;
+      let combatMonsters: string[] = [];
+      let newMonsters = gs.dungeonMonsters.map(m => ({ ...m }));
+      let stealthBroken = false;
+
+      newMonsters.forEach(m => {
+        if (m.hp <= 0) return;
+        const sight = m.state === "alert" ? m.sightRange + 3 : m.sightRange;
+        const d = dist(char.position, m.position);
+        const hasLoS = checkLineOfSight(m.position.x, m.position.y, char.position.x, char.position.y, wfMap.obstacles);
+
+        if (d <= sight && hasLoS) {
+          // Player is in sight
+          let detected = true;
+          if (stealthActive) {
+            if (stealthedMonstersRef.current.has(m.id)) {
+              detected = false; // Player is hidden
+            } else {
+              const dexMod = getMod(char.stats.dex);
+              const roll = d20();
+              const total = roll + dexMod;
+              const perceptionRoll = d20() + Math.floor((m.insightDC ?? 10) / 2);
+              if (total >= perceptionRoll) {
+                detected = false;
+                stealthedMonstersRef.current.add(m.id);
+                addDiceRoll({ type: "skill", value: roll, total, mod: dexMod, max: 20, label: `Stealth vs ${m.name}` });
+                notify(`🥷 Evaded ${m.name}! (Stealth ${total} vs Perception ${perceptionRoll})`);
+              } else {
+                stealthBroken = true;
+                addDiceRoll({ type: "skill", value: roll, total, mod: dexMod, max: 20, label: `Stealth Failed` });
+                notify(`⚠️ ${m.name} spotted you! (Perception ${perceptionRoll} vs Stealth ${total})`);
+              }
+            }
+          }
+
+          if (detected) {
+            if (stealthBroken || m.state === "alert") {
+              if (m.state !== "alert") notify(`❗️ ${m.name} spots you!`);
+              m.state = "alert";
+              m.lastKnownPos = { ...char.position };
+              shouldStartCombat = true;
+              combatMonsters.push(m.id);
+            } else {
+              m.state = "alert";
+              m.lastKnownPos = { ...char.position };
+              notify(`❗️ ${m.name} is alerted!`);
+            }
+          }
+        } else if (m.state === "alert" && m.lastKnownPos) {
+          // Move towards last known pos
+          if (m.position.x === m.lastKnownPos.x && m.position.y === m.lastKnownPos.y) {
+            m.state = "idle"; // Reached spot, nothing there
+            notify(`❓ ${m.name} lost track of you.`);
+          } else {
+            const dx = m.lastKnownPos.x - m.position.x;
+            const dy = m.lastKnownPos.y - m.position.y;
+            const sx = Math.abs(dx) >= Math.abs(dy) ? Math.sign(dx) : 0;
+            const sy = Math.abs(dy) > Math.abs(dx) ? Math.sign(dy) : 0;
+            const nx = m.position.x + sx;
+            const ny = m.position.y + sy;
+            if (isWalkable("dungeon", nx, ny)) {
+              m.position = { x: nx, y: ny };
+            }
+          }
+        }
+      });
+
+      if (stealthBroken) {
+        setStealthActive(false);
+        stealthedMonstersRef.current.clear();
+      }
+      
+      // Update monster positions
+      if (JSON.stringify(newMonsters) !== JSON.stringify(gs.dungeonMonsters)) {
+        setGs(prev => ({ ...prev, dungeonMonsters: newMonsters }));
+      }
+
+      if (shouldStartCombat) {
+        startCombat(combatMonsters);
+      }
+    }, 400); // slightly slower tick
+  }, [char?.position, screen, combat.active, gs.dungeonMonsters, startCombat, stealthActive, addDiceRoll]);
 
   // New monsters joining
   useEffect(() => {
     if (!combat.active || !char || screen !== "dungeon") return;
-    const inSight = gs.dungeonMonsters.filter(m => m.hp > 0 && dist(char.position, m.position) <= m.sightRange);
+    const inSight = gs.dungeonMonsters.filter(m => 
+      m.hp > 0 && 
+      dist(char.position, m.position) <= m.sightRange &&
+      checkLineOfSight(m.position.x, m.position.y, char.position.x, char.position.y, wfMap.obstacles)
+    );
     const newOnes = inSight.filter(m => !combat.engagedMonsterIds.includes(m.id));
     if (newOnes.length === 0) return;
 
@@ -320,11 +461,20 @@ export function useGameEngine() {
       const nextIdx = (prev.currentIndex + 1) % prev.turnOrder.length;
       const isNew = nextIdx <= prev.currentIndex;
       const nextActor = prev.turnOrder[nextIdx];
+      const currentActor = prev.turnOrder[prev.currentIndex];
       const isPlayerTurn = nextActor?.type === "player";
+      const isPlayerTurnEnding = currentActor?.type === "player";
+      
+      let newBuffs = prev.activeBuffs || [];
+      if (isPlayerTurnEnding) {
+        newBuffs = newBuffs.filter(b => b !== "rooted" && b !== "extra_attack_used");
+      }
+
       return {
         ...prev, currentIndex: nextIdx,
         round: isNew ? prev.round + 1 : prev.round,
-        actionUsed: false, extraActionUsed: false, movedSquares: 0,
+        activeBuffs: newBuffs,
+        actionUsed: false, extraActionUsed: false, extraMainActions: 0, movedSquares: 0,
         guardAmount: isPlayerTurn ? 0 : prev.guardAmount,
         log: isNew ? [...prev.log.slice(-30), `── Round ${prev.round + 1} ──`] : prev.log,
       };
@@ -351,30 +501,115 @@ export function useGameEngine() {
       let charHp = char.hp;
       const d = dist(monster.position, char.position);
       let newPos = { ...monster.position };
-      if (d > 1) {
-        const dx = char.position.x - monster.position.x;
-        const dy = char.position.y - monster.position.y;
-        const sx = Math.abs(dx) >= Math.abs(dy) ? Math.sign(dx) : 0;
-        const sy = Math.abs(dy) > Math.abs(dx) ? Math.sign(dy) : 0;
-        newPos = { x: Math.max(0, Math.min(COLS - 1, monster.position.x + sx)), y: Math.max(0, Math.min(ROWS - 1, monster.position.y + sy)) };
-        newLog.push(`${monster.name} moves.`);
+      let maxDist = Math.ceil((monster.range ?? 5) / 5);
+      let steps = monster.speed ?? 1;
+
+      // Boss Skills check BEFORE movement
+      let bossSkillUsedThisTurn = false;
+      if (monster.name === "Ancient Treant Sapling") {
+         if (monster.hp < monster.maxHp * 0.4 && !monster.bossSkillsUsed?.["Forest Blessing"]) {
+             newMonsters[mIdx].bossSkillsUsed = { ...newMonsters[mIdx].bossSkillsUsed, "Forest Blessing": 1 };
+             newMonsters[mIdx].hp += 10;
+             newLog.push(`🌿 ${monster.name} casts Forest Blessing! (+10 HP)`);
+             bossSkillUsedThisTurn = true;
+         } else if (combat.round % 3 === 0 && combat.round > 0) {
+             let dexSave = d20() + getMod(char.stats.dex);
+             newLog.push(`🪵 ${monster.name} casts Root Prison!`);
+             if (dexSave < 14) {
+                 // Add Rooted to player
+                 setCombat(prevC => ({ ...prevC, activeBuffs: [...(prevC.activeBuffs || []), "rooted"] }));
+                 newLog.push(`  You are Rooted! (Save ${dexSave} vs DC 14)`);
+                 notify("You have been Rooted!");
+             } else {
+                 newLog.push(`  You avoided the roots! (Save ${dexSave} vs DC 14)`);
+             }
+             bossSkillUsedThisTurn = true;
+         }
       }
+
+      if (!bossSkillUsedThisTurn && monster.name !== "Walking Vine" && monster.name !== "Ancient Treant Sapling") {
+          for (let i = 0; i < steps; i++) {
+              const d = dist(newPos, char.position);
+              if (monster.name === "Goblin Scout" && d <= 2) {
+                  // Kite away
+                  const dx = newPos.x - char.position.x;
+                  const dy = newPos.y - char.position.y;
+                  const sx = Math.abs(dx) >= Math.abs(dy) ? Math.sign(dx) : 0;
+                  const sy = Math.abs(dy) > Math.abs(dx) ? Math.sign(dy) : 0;
+                  let nx = newPos.x + sx;
+                  let ny = newPos.y + sy;
+                  if (isWalkable("dungeon", nx, ny)) {
+                      newPos = { x: nx, y: ny };
+                  } else break;
+              } else if (d > maxDist || (d <= maxDist && !checkLineOfSight(newPos.x, newPos.y, char.position.x, char.position.y, wfMap.obstacles))) {
+                  // Chase
+                  // Slime: Random Wander if no line of sight, but if in combat it should probably chase slowly.
+                  // For now, standard chase.
+                  const dx = char.position.x - newPos.x;
+                  const dy = char.position.y - newPos.y;
+                  const sx = Math.abs(dx) >= Math.abs(dy) ? Math.sign(dx) : 0;
+                  const sy = Math.abs(dy) > Math.abs(dx) ? Math.sign(dy) : 0;
+                  let nx = newPos.x + sx;
+                  let ny = newPos.y + sy;
+                  if (isWalkable("dungeon", nx, ny)) {
+                      newPos = { x: nx, y: ny };
+                  } else {
+                      // Try alternative axis
+                      if (sx !== 0 && isWalkable("dungeon", newPos.x, newPos.y + Math.sign(dy))) {
+                          newPos = { x: newPos.x, y: newPos.y + Math.sign(dy) };
+                      } else if (sy !== 0 && isWalkable("dungeon", newPos.x + Math.sign(dx), newPos.y)) {
+                          newPos = { x: newPos.x + Math.sign(dx), y: newPos.y };
+                      } else {
+                          break;
+                      }
+                  }
+              } else {
+                  break; // Reached range and LoS
+              }
+          }
+          if (newPos.x !== monster.position.x || newPos.y !== monster.position.y) {
+              newLog.push(`${monster.name} moves.`);
+          }
+      }
+      
       newMonsters[mIdx] = { ...newMonsters[mIdx], position: newPos };
 
       setGs(prev => ({ ...prev, dungeonMonsters: newMonsters }));
 
       const nd = dist(newPos, char.position);
-      if (nd <= Math.ceil((monster.range ?? 5) / 5)) {
+      const hasLineOfSight = checkLineOfSight(newPos.x, newPos.y, char.position.x, char.position.y, wfMap.obstacles);
+      if (nd <= Math.ceil((monster.range ?? 5) / 5) && hasLineOfSight) {
         let atkRoll1 = d20();
         let atkRoll2 = d20();
         
         // Protector Subclass: impose disadvantage
         let hasDisadvantage = char.subclass === "protector" && nd <= 1;
         let atkRollBase = hasDisadvantage ? Math.min(atkRoll1, atkRoll2) : atkRoll1;
-        let atkRoll = atkRollBase + monster.attackMod;
+        
+        let packHunterBonus = 0;
+        if (monster.name === "Wolf") {
+            const hasAdjacentWolf = gs.dungeonMonsters.some(m => m.name === "Wolf" && m.id !== monster.id && m.hp > 0 && dist(m.position, char.position) <= 1);
+            if (hasAdjacentWolf) packHunterBonus = 2;
+        }
+        
+        let atkRoll = atkRollBase + monster.attackMod + packHunterBonus;
+
+        // Cover check (if ranged attack)
+        let hasCover = false;
+        if (nd > 1) {
+          const adjs = [[0,1], [0,-1], [1,0], [-1,0], [1,1], [-1,-1], [1,-1], [-1,1]];
+          for (let [dx, dy] of adjs) {
+            if (wfMap.covers.has(`${char.position.x + dx},${char.position.y + dy}`)) {
+              hasCover = true;
+              break;
+            }
+          }
+        }
 
         // Reaction: Wizard Shield
         let effectiveAC = char.ac;
+        if (hasCover) effectiveAC += 2; // +2 AC for half cover
+        
         let usedShield = false;
         if (atkRoll >= char.ac && atkRoll < char.ac + 5 && char.gameSkills?.includes("wizard_shield_spell")) {
           effectiveAC += 5;
@@ -386,11 +621,21 @@ export function useGameEngine() {
           effectiveAC += 2;
         }
 
+        const coverLabel = hasCover ? " (Cover +2 AC)" : "";
+        const packLabel = packHunterBonus > 0 ? " (Pack Hunter +2)" : "";
         const disadvLabel = hasDisadvantage ? "(Disadv) " : "";
-        const logEntry = `${monster.name} attacks ${char.name}: ${disadvLabel}[${atkRollBase}+${monster.attackMod}=${atkRoll}] vs AC ${effectiveAC}${usedShield ? " (Shield Spell!)" : ""}`;
+        const logEntry = `${monster.name} attacks ${char.name}: ${disadvLabel}[${atkRollBase}+${monster.attackMod}${packLabel}=${atkRoll}] vs AC ${effectiveAC}${coverLabel}${usedShield ? " (Shield Spell!)" : ""}`;
 
-        addDiceRoll({ type: "hit", value: atkRollBase, total: atkRoll, mod: monster.attackMod, max: 20, label: `${disadvLabel}vs AC ${effectiveAC}` });
-
+        addDiceRoll({ 
+          type: "hit", 
+          value: atkRollBase, 
+          total: atkRoll, 
+          mod: monster.attackMod + packHunterBonus, 
+          max: 20, 
+          label: `${disadvLabel}vs AC ${effectiveAC}${coverLabel}`,
+          advValues: hasDisadvantage ? [atkRoll1, atkRoll2] : undefined,
+          advType: hasDisadvantage ? "dis" : undefined
+        });
         setTimeout(() => {
           if (!combat.active) return;
           if (atkRoll >= effectiveAC) {
@@ -437,7 +682,12 @@ export function useGameEngine() {
               });
 
               addDiceRoll({ type: "damage", value: dmg, total: dmg, mod: 0, max: dmg, label: monster.damage });
-              addEffect({ type: "scratch", gridX: char.position.x, gridY: char.position.y });
+              let atkFx: "scratch" | "arrow" | "whip" | "rootslam" = "scratch";
+              if (monster.name === "Goblin Scout") atkFx = "arrow";
+              else if (monster.name === "Vine") atkFx = "whip";
+              else if (monster.name === "Treant Sapling") atkFx = "rootslam";
+              
+              addEffect({ type: atkFx, gridX: char.position.x, gridY: char.position.y, targetX: monster.position.x, targetY: monster.position.y });
               addEffect({ type: "number", gridX: char.position.x, gridY: char.position.y, value: `-${dmg}` });
               addHit(char.id);
 
@@ -518,6 +768,78 @@ export function useGameEngine() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [combat.currentIndex, combat.active, combat.round]);
 
+  // ── EXPLORATION SKILLS ──
+  const handleInsight = useCallback(() => {
+    if (combat.active || screen !== "dungeon" || !char) return;
+    const now = Date.now();
+    if (now < insightCooldown) {
+      notify(`Insight is on cooldown. Wait ${Math.ceil((insightCooldown - now) / 1000)}s.`);
+      return;
+    }
+    const roll = d20();
+    const wisMod = getMod(char.stats.wis);
+    const total = roll + wisMod;
+    addDiceRoll({ type: "skill", value: roll, total, mod: wisMod, max: 20, label: "Insight Check" });
+    
+    let successCount = 0;
+    const newTiles = new Set<string>();
+    gs.dungeonMonsters.forEach(m => {
+      if (m.hp > 0 && dist(char.position, m.position) <= 15) {
+        if (total >= (m.insightDC ?? 10)) {
+          successCount++;
+          // Calc vision area for this monster
+          const range = m.state === "alert" ? m.sightRange + 3 : m.sightRange;
+          for (let dy = -range; dy <= range; dy++) {
+            for (let dx = -range; dx <= range; dx++) {
+              if (Math.abs(dx) + Math.abs(dy) <= range) {
+                const vx = m.position.x + dx;
+                const vy = m.position.y + dy;
+                if (checkLineOfSight(m.position.x, m.position.y, vx, vy, wfMap.obstacles)) {
+                  newTiles.add(`${vx},${vy}`);
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (successCount > 0) {
+      notify("Insight check successful!");
+      setInsightVisionTiles(newTiles);
+      setTimeout(() => setInsightVisionTiles(new Set()), 15000); // 15s duration
+    } else {
+      notify("You fail to read the surroundings.");
+    }
+    setInsightCooldown(now + 120000); // 120s cooldown
+  }, [char, combat.active, screen, insightCooldown, gs.dungeonMonsters, notify, addDiceRoll]);
+
+  const handleStealth = useCallback(() => {
+    if (combat.active || screen !== "dungeon" || !char || stealthCasting) return;
+    
+    if (stealthActive) {
+      setStealthActive(false);
+      stealthedMonstersRef.current.clear();
+      notify("You exit Stealth Mode.");
+      return;
+    }
+
+    setStealthCasting(true);
+    setActionText({ text: "HIDING...", color: C.muted });
+    notify("Attempting to hide... (takes 2 seconds)");
+    
+    setTimeout(() => {
+      setStealthCasting(prev => {
+        if (!prev) return false; // Was interrupted
+        setStealthActive(true);
+        stealthedMonstersRef.current.clear();
+        notify(`You enter Stealth Mode. Move carefully.`);
+        setActionText(null);
+        return false;
+      });
+    }, 2000);
+  }, [char, combat.active, screen, stealthCasting, stealthActive, notify, addDiceRoll]);
+
   // ── SPELL / BOMB / ATTACK ──
 
   const handleSpellSelect = useCallback((name: string | null) => {
@@ -544,7 +866,7 @@ export function useGameEngine() {
     const targets = gs.dungeonMonsters.filter(m => m.hp > 0 && dist(center, m.position) <= aoeSpell.aoeRadius);
     if (targets.length === 0) {
       notify(`${spellName} — no targets caught!`);
-      setCombat(prev => ({ ...prev, actionUsed: true }));
+      setCombat(prev => ({ ...prev, ...consumeMainAction(prev) }));
       setCombatMode("none"); setSelectedSpell(null);
       return;
     }
@@ -566,7 +888,7 @@ export function useGameEngine() {
       });
     });
     setGs(prev => ({ ...prev, dungeonMonsters: newMonsters }));
-    setCombat(prev => ({ ...prev, actionUsed: true, log }));
+    setCombat(prev => ({ ...prev, log, ...consumeMainAction(prev) }));
     diedIds.forEach(id => {
       setDyingMonsters(prev => new Set([...prev, id]));
       setTimeout(() => setDyingMonsters(prev => { const s = new Set(prev); s.delete(id); return s; }), 1000);
@@ -603,7 +925,7 @@ export function useGameEngine() {
       });
     });
     setGs(prev => ({ ...prev, dungeonMonsters: newMonsters }));
-    if (combat.active) setCombat(prev => ({ ...prev, actionUsed: true, log }));
+    if (combat.active) setCombat(prev => ({ ...prev, log, ...consumeMainAction(prev) }));
     updateChar(char.id, c => ({ inventory: c.inventory.filter(i => i.id !== bombItemId) }));
     diedIds.forEach(id => {
       setDyingMonsters(prev => new Set([...prev, id]));
@@ -657,6 +979,17 @@ export function useGameEngine() {
     const gameSkill = SKILL_DICTIONARY[spellName];
     const isGameSkill = !!gameSkill;
 
+    if (isGameSkill && gameSkill.maxUses) {
+      const used = char.skillUsages?.[spellName] || 0;
+      if (used >= gameSkill.maxUses) {
+        notify(`No uses remaining for ${gameSkill.name}!`);
+        return;
+      }
+      updateChar(char.id, c => ({
+        skillUsages: { ...c.skillUsages, [spellName]: used + 1 }
+      }));
+    }
+
     const needsSlot = spell ? spell.level > 0 : false;
     if (needsSlot) {
       if (!char.spellSlots || char.spellSlots.used >= char.spellSlots.max) { notify("No spell slots remaining!"); return; }
@@ -679,7 +1012,10 @@ export function useGameEngine() {
     const healValue = spell?.heal ?? gameSkill?.healAmount;
     if (healValue) {
       const isExtra = isGameSkill ? gameSkill.cost === "extra" : !!spell?.isBonus;
-      setCombat(prev => ({ ...prev, [isExtra ? "extraActionUsed" : "actionUsed"]: true }));
+      setCombat(prev => {
+        if (isExtra) return { ...prev, extraActionUsed: true };
+        return { ...prev, ...consumeMainAction(prev) };
+      });
       const spMod = getSpellcastingMod(char);
       let healed = healValue === "5" ? 5 : rollDice(healValue) + (isGameSkill && char.class !== "Cleric" ? 0 : spMod);
       if (spellName === "fighter_second_wind") {
@@ -692,7 +1028,7 @@ export function useGameEngine() {
       setCombatMode("none");
       setSelectedSpell(null);
     } else if (wizAoe && target) {
-      setCombat(prev => ({ ...prev, actionUsed: true }));
+      setCombat(prev => ({ ...prev, ...consumeMainAction(prev) }));
       setCombatMode("none");
       setSelectedSpell(null);
       const aoeRadius = wizAoe.aoeRadius;
@@ -705,11 +1041,17 @@ export function useGameEngine() {
         const saved = saveRoll >= 13;
         const dmgDice = spellName === "Burning Hands" ? "3d6" : "2d8";
         const rawDmg = rollDice(dmgDice);
-        const finalDmg = saved ? Math.floor(rawDmg / 2) : rawDmg;
+        let dmgType = spellName === "Burning Hands" ? "Fire" : "Force";
+        let resMul = 1;
+        let effectText = "";
+        if (mt.weaknesses?.includes(dmgType)) { resMul = 2; effectText = " (Weakness!)"; }
+        if (mt.resistances?.includes(dmgType)) { resMul = 0.5; effectText = " (Resisted)"; }
+
+        const finalDmg = Math.floor((saved ? Math.floor(rawDmg / 2) : rawDmg) * resMul);
         addDiceRoll({ type: "damage", value: finalDmg, total: finalDmg, mod: 0, max: finalDmg, label: dmgDice });
         newMonsters = newMonsters.map(m => {
           if (m.id !== mt.id) return m;
-          log.push(`${spellName}: ${m.name} ${saved ? "saves" : "fails"} → ${finalDmg} dmg`);
+          log.push(`${spellName}: ${m.name} ${saved ? "saves" : "fails"} → ${finalDmg} dmg${effectText}`);
           addEffect({ type: effectType, gridX: m.position.x, gridY: m.position.y });
           addEffect({ type: "number", gridX: m.position.x, gridY: m.position.y, value: String(finalDmg) });
           const newHp = Math.max(0, m.hp - finalDmg);
@@ -723,13 +1065,17 @@ export function useGameEngine() {
         setTimeout(() => setDyingMonsters(prev => { const s = new Set(prev); s.delete(id); return s; }), 1000);
       });
     } else if (spellName === "fighter_action_surge") {
-      setCombat(prev => ({ ...prev, actionUsed: false, extraActionUsed: true }));
-      log.push(`${char.name} uses Action Surge! Restored Main Action.`);
-      notify("💥 Action Surge! Main Action restored.");
+      setCombat(prev => ({ 
+        ...prev, 
+        extraMainActions: (prev.extraMainActions || 0) + 1,
+        extraActionUsed: true 
+      }));
+      log.push(`${char.name} uses Action Surge! Gain an additional Main Action.`);
+      notify("💥 Action Surge! Main Action gained.");
       setCombatMode("none");
       setSelectedSpell(null);
     } else if (["fighter_shield_wall", "fighter_warrior_focus", "fighter_samurai_focus", "fighter_berserker_rage"].includes(spellName)) {
-      setCombat(prev => ({ ...prev, actionUsed: true, activeBuffs: [...(prev.activeBuffs || []), spellName] }));
+      setCombat(prev => ({ ...prev, activeBuffs: [...(prev.activeBuffs || []), spellName], ...consumeMainAction(prev) }));
       log.push(`${char.name} uses ${gameSkill?.name}!`);
       notify(`✨ ${gameSkill?.name} activated!`);
       setCombatMode("none");
@@ -737,11 +1083,22 @@ export function useGameEngine() {
     } else if ((spell?.damage || gameSkill?.damage) && target) {
       const spMod = getSpellcastingMod(char);
       const rawDmg = rollDice(spell?.damage ?? gameSkill!.damage!);
-      const dmg = Math.max(1, rawDmg + (isGameSkill ? 0 : spMod));
+      const baseDmg = Math.max(1, rawDmg + (isGameSkill ? 0 : spMod));
       const dmgLabel = (spell?.damage ?? gameSkill!.damage!) + (spMod !== 0 && !isGameSkill ? `${spMod >= 0 ? "+" : ""}${spMod}` : "");
 
+      let dmgType = spellName.includes("Fire") ? "Fire" : "Force";
+      let resMul = 1;
+      let effectText = "";
+      if (target.weaknesses?.includes(dmgType)) { resMul = 2; effectText = " (Weakness!)"; }
+      if (target.resistances?.includes(dmgType)) { resMul = 0.5; effectText = " (Resisted)"; }
+
+      const dmg = Math.floor(baseDmg * resMul);
+
       const isExtra = isGameSkill ? gameSkill.cost === "extra" : !!spell?.isBonus;
-      setCombat(prev => ({ ...prev, [isExtra ? "extraActionUsed" : "actionUsed"]: true }));
+      setCombat(prev => {
+        if (isExtra) return { ...prev, extraActionUsed: true };
+        return { ...prev, ...consumeMainAction(prev) };
+      });
       setCombatMode("none");
       setSelectedSpell(null);
 
@@ -779,7 +1136,7 @@ export function useGameEngine() {
 
               addDiceRoll({ type: "damage", value: rawDmg, total: dmg, mod: spMod, max: rawDmg, label: dmgLabel });
 
-              setCombat(prevC => ({ ...prevC, log: [...prevC.log, logEntry, `  ${target.name} fails save! ${dmg} dmg → ${newHp}/${target.maxHp}`] }));
+              setCombat(prevC => ({ ...prevC, log: [...prevC.log, logEntry, `  ${target.name} fails save! ${dmg} dmg${effectText} → ${newHp}/${target.maxHp}`] }));
 
               addEffect({ type: effectType, gridX: target.position.x, gridY: target.position.y });
               addEffect({ type: "number", gridX: target.position.x, gridY: target.position.y, value: String(dmg) });
@@ -816,7 +1173,7 @@ export function useGameEngine() {
 
           addDiceRoll({ type: "damage", value: rawDmg, total: dmg, mod: spMod, max: rawDmg, label: dmgLabel });
 
-          setCombat(prevC => ({ ...prevC, log: [...prevC.log, `${char.name} casts ${spell.name}: ${dmg} dmg to ${target.name} (${newHp}/${target.maxHp})${spMod !== 0 ? ` [+${spMod} spell mod]` : ""}`] }));
+          setCombat(prevC => ({ ...prevC, log: [...prevC.log, `${char.name} casts ${spell?.name ?? gameSkill?.name}: ${dmg} dmg${effectText} to ${target.name} (${newHp}/${target.maxHp})${spMod !== 0 && !isGameSkill ? ` [+${spMod} spell mod]` : ""}`] }));
 
           addEffect({ type: effectType, gridX: target.position.x, gridY: target.position.y });
           addEffect({ type: "number", gridX: target.position.x, gridY: target.position.y, value: String(dmg) });
@@ -842,7 +1199,7 @@ export function useGameEngine() {
       log.push(`${char.name} casts ${spellName}... no effect.`);
     }
 
-    setCombat(prev => ({ ...prev, actionUsed: true, log }));
+    setCombat(prev => ({ ...prev, log, ...consumeMainAction(prev) }));
     setCombatMode("none");
     setSelectedSpell(null);
     if (!combat.active && target) {
@@ -894,6 +1251,12 @@ export function useGameEngine() {
     const weapon = isOffHand ? char.equipment.offHand : char.equipment.mainHand;
     if (!weapon || weapon.type !== "weapon") { notify(`Debug: no weapon`); return; }
     
+    if (char.hp <= 0) return;
+    if (stealthActive) {
+      setStealthActive(false);
+      stealthedMonstersRef.current.clear();
+      notify("Your stealth is broken by attacking!");
+    }
     const monster = gs.dungeonMonsters.find(m => m.id === monsterId);
     if (!monster || monster.hp <= 0) { notify(`Debug: monster dead or not found`); return; }
     
@@ -933,7 +1296,7 @@ export function useGameEngine() {
         if (canExtraAttack && isFirstAttackOfAction) {
           setCombat(prev => ({ ...prev, activeBuffs: [...(prev.activeBuffs || []), "extra_attack_used"] }));
         } else {
-          setCombat(prev => ({ ...prev, actionUsed: true }));
+          setCombat(prev => ({ ...prev, ...consumeMainAction(prev) }));
         }
       } else {
         setCombat(prev => ({ ...prev, extraActionUsed: true }));
@@ -949,8 +1312,16 @@ export function useGameEngine() {
 
     const advLabel = hasSamuraiFocus ? "(Adv) " : "";
     const extraLabel = extraHitBonus > 0 ? `+${extraHitBonus}` : "";
-    addDiceRoll({ type: "hit", value: roll, total, mod: mod + char.profBonus + extraHitBonus, max: 20, label: `${advLabel}vs AC ${monster.ac}` });
-
+    addDiceRoll({ 
+      type: "hit", 
+      value: roll, 
+      total, 
+      mod: mod + char.profBonus + extraHitBonus, 
+      max: 20, 
+      label: `${advLabel}vs AC ${monster.ac}`,
+      advValues: hasSamuraiFocus ? [roll1, roll2] : undefined,
+      advType: hasSamuraiFocus ? "adv" : undefined
+    });
     if (weapon.name === "Longsword") {
       addEffect({ type: "sword_swing", gridX: monster.position.x, gridY: monster.position.y, targetX: char.position.x, targetY: char.position.y });
     } else if (isRanged) {
@@ -976,12 +1347,30 @@ export function useGameEngine() {
             dmgMod -= distance;
           }
 
+          let extraRawDmg = 0;
+          let extraLogStr = "";
+          let extraUiStr = "";
+
           if ((combat.activeBuffs || []).includes("fighter_berserker_rage") && isMelee) {
-            dieRoll += rollDice("1d6");
+            const rageDmg = rollDice("1d6");
+            extraRawDmg += rageDmg;
+            extraLogStr += `+1d6(${rageDmg})`;
+            extraUiStr += `+1d6`;
           }
 
           const withMod = Math.max(1, dieRoll + dmgMod);
-          const finalDmg = isSurprise ? withMod * 2 : withMod;
+          const baseDmg = (isSurprise ? withMod * 2 : withMod) + extraRawDmg;
+
+          let dmgType = "Piercing";
+          if (weapon.name.includes("sword") || weapon.name.includes("Axe")) dmgType = "Slashing";
+          else if (weapon.name.includes("Hammer") || weapon.name.includes("Club")) dmgType = "Bludgeoning";
+
+          let resMul = 1;
+          let effectText = "";
+          if (monster.weaknesses?.includes(dmgType)) { resMul = 2; effectText = " (Weakness!)"; }
+          if (monster.resistances?.includes(dmgType)) { resMul = 0.5; effectText = " (Resisted)"; }
+
+          const finalDmg = Math.floor(baseDmg * resMul);
 
           let newHp = 0;
           setGs(prevGs => {
@@ -991,15 +1380,15 @@ export function useGameEngine() {
             return { ...prevGs, dungeonMonsters: prevGs.dungeonMonsters.map(mm => mm.id === monsterId ? { ...mm, hp: newHp, alerted: true } : mm) };
           });
 
-          const dmgLabel = `${weapon.damage}${dmgMod >= 0 ? "+" : ""}${dmgMod}`;
+          const dmgLabel = `${weapon.damage}${dmgMod >= 0 ? "+" : ""}${dmgMod}${extraUiStr}`;
           addDiceRoll({ type: "damage", value: dieRoll, total: finalDmg, mod: dmgMod, max: dieRoll, label: dmgLabel });
 
           setCombat(prevC => {
             const newLog = [...prevC.log, logEntry];
             if (isSurprise) {
-              newLog.push(`  💥 SURPRISE! ×2 dmg! [${dieRoll}${dmgMod >= 0 ? "+" : ""}${dmgMod}]×2=${finalDmg} → ${newHp}/${monster.maxHp} HP`);
+              newLog.push(`  💥 SURPRISE! ×2 dmg! [${dieRoll}${dmgMod >= 0 ? "+" : ""}${dmgMod}]×2${extraLogStr}=${baseDmg}${effectText} → ${newHp}/${monster.maxHp} HP`);
             } else {
-              newLog.push(`  Hit! [${dieRoll}${dmgMod >= 0 ? "+" : ""}${dmgMod}]=${finalDmg} dmg → ${newHp}/${monster.maxHp} HP`);
+              newLog.push(`  Hit! [${dieRoll}${dmgMod >= 0 ? "+" : ""}${dmgMod}]${extraLogStr}=${baseDmg}${effectText} → ${finalDmg} dmg → ${newHp}/${monster.maxHp} HP`);
             }
             if (newHp === 0) newLog.push(`  ${monster.name} destroyed!`);
             return { ...prevC, log: newLog };
@@ -1060,15 +1449,32 @@ export function useGameEngine() {
         for (let dx = -SIGHT; dx <= SIGHT; dx++) {
           if (Math.abs(dx) + Math.abs(dy) <= SIGHT) {
             const fx = pos.x + dx, fy = pos.y + dy;
-            if (fx >= 0 && fx < COLS && fy >= 0 && fy < ROWS) next.add(`${fx},${fy}`);
+            if (fx >= 0 && fx < getMapCols(screen) && fy >= 0 && fy < getMapRows(screen)) next.add(`${fx},${fy}`);
           }
         }
       return next;
     });
   }
 
+  const moveCooldownRef = useRef<number>(0);
+
   function handleTileClick(x: number, y: number) {
     if (!char || specialDialog) return;
+    if (stealthCasting) {
+      notify("Cannot move while hiding!");
+      return;
+    }
+    
+    // Prevent spamming movement
+    const now = Date.now();
+    const moveDelay = stealthActive ? 400 : 200;
+    if (now - moveCooldownRef.current < moveDelay) return;
+    moveCooldownRef.current = now;
+
+    if ((combat.activeBuffs || []).includes("rooted")) {
+      notify("You are Rooted and cannot move!");
+      return;
+    }
 
     if (combat.active && combatMode === "move") {
       const d = dist(char.position, { x, y });
@@ -1160,6 +1566,10 @@ export function useGameEngine() {
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if ((screen !== "town" && screen !== "dungeon" && screen !== "sanctuary" && screen !== "tutorial") || !char || specialDialog) return;
+      if (stealthCasting) {
+        notify("Cannot move while hiding!");
+        return;
+      }
 
       let dx = 0, dy = 0;
       if (e.key === "w" || e.key === "W" || e.key === "ArrowUp") dy = -1;
@@ -1168,6 +1578,11 @@ export function useGameEngine() {
       if (e.key === "d" || e.key === "D" || e.key === "ArrowRight") dx = 1;
 
       if (dx === 0 && dy === 0) return;
+
+      const now = Date.now();
+      const moveDelay = stealthActive ? 400 : 200;
+      if (now - moveCooldownRef.current < moveDelay) return;
+      moveCooldownRef.current = now;
 
       if (combat.active) {
         if (combat.turnOrder[combat.currentIndex]?.id !== char.id) return;
@@ -1181,8 +1596,8 @@ export function useGameEngine() {
         }
       }
 
-      const newX = Math.max(0, Math.min(COLS - 1, char.position.x + dx));
-      const newY = Math.max(0, Math.min(ROWS - 1, char.position.y + dy));
+      const newX = Math.max(0, Math.min(getMapCols(screen) - 1, char.position.x + dx));
+      const newY = Math.max(0, Math.min(getMapRows(screen) - 1, char.position.y + dy));
 
       if (newX === char.position.x && newY === char.position.y) return;
       if (!isWalkable(screen as any, newX, newY)) return; // WASD collision check
@@ -1515,7 +1930,7 @@ export function useGameEngine() {
     if (!char) return; 
     setSeleniaTalkCount(0);updateChar(char.id, { position: DUNGEON_ENTER, currentMap: "dungeon" }); setScreen("dungeon"); setCombat(INIT_COMBAT);
     setFogRevealed(new Set([`${DUNGEON_ENTER.x},${DUNGEON_ENTER.y}`, `${DUNGEON_ENTER.x},${DUNGEON_ENTER.y - 1}`, `${DUNGEON_ENTER.x - 1},${DUNGEON_ENTER.y}`]));
-    setGs(prev => ({ ...prev, dungeonMonsters: genMonsters() }));
+    setGs(prev => ({ ...prev, dungeonMonsters: parseWhisperingForest().monsters }));
     notify("Entered Darkroot Depths. Monsters lurk in the dark...", 3000);
   }
   function enterSanctuary() { if (!char) return; updateChar(char.id, { position: { x: 15, y: 16 }, currentMap: "sanctuary" }); setScreen("sanctuary"); setCombat(INIT_COMBAT); }
@@ -1560,6 +1975,7 @@ export function useGameEngine() {
         text: "Is there something you'd like to talk about?",
         choices: [
           { label: "Learn the basics again", next: "tutorial_ask" },
+          { label: "I have a question about the world", next: "questions_menu" },
           { label: "Send a message to the Creator", next: "feedback_ask" },
           { label: "I want another blessing", next: "more_blessing" },
           { label: "I just missed you", next: "miss_you" },
@@ -1567,6 +1983,35 @@ export function useGameEngine() {
           { label: "I should get going", next: () => setSeleniaDialogTree(null) }
         ]
       },
+      questions_menu: {
+        emotion: "gentle",
+        text: "Of course. What would you like to know?",
+        choices: [
+          { label: "Explain Stats (STR, DEX, CON...)", next: "q_stats" },
+          { label: "What is a Modifier?", next: "q_modifier" },
+          { label: "What is a Hit Roll?", next: "q_hitroll" },
+          { label: "What is AC?", next: "q_ac" },
+          { label: "How is Damage calculated?", next: "q_damage" },
+          { label: "What is a Saving Throw?", next: "q_save" },
+          { label: "Long Rest vs Short Rest?", next: "q_rest" },
+          { label: "What stats should I upgrade?", next: "q_upgrade" },
+          { label: "Tell me about the Classes", next: "q_classes" },
+          { label: "How do Skills work?", next: "q_skills" },
+          { label: "How does Equipment work?", next: "q_equip" },
+          { label: "Actually, never mind", next: "options" }
+        ]
+      },
+      q_stats: { emotion: "normal", text: "There are six core attributes: Strength (STR) for raw power, Dexterity (DEX) for agility, Constitution (CON) for health, Intelligence (INT) for arcane magic, Wisdom (WIS) for divine magic, and Charisma (CHA) for presence.", choices: [{ label: "I have another question", next: "questions_menu" }, { label: "That's all for now", next: "options" }] },
+      q_modifier: { emotion: "gentle", text: "When your stats grow, you gain a bonus called a Modifier. A stat of 10 gives a +0 Modifier, while 12 gives +1, 14 gives +2, and so on. This bonus is added to your dice rolls to ensure your success!", choices: [{ label: "I have another question", next: "questions_menu" }, { label: "That's all for now", next: "options" }] },
+      q_hitroll: { emotion: "normal", text: "When you attack, you roll a 20-sided die (d20). Then, we add your weapon's stat Modifier and your Proficiency Bonus. This total is your Hit Roll. If it equals or beats the enemy's Armor Class (AC), you hit!", choices: [{ label: "I have another question", next: "questions_menu" }, { label: "That's all for now", next: "options" }] },
+      q_ac: { emotion: "wondering", text: "AC stands for Armor Class. It represents how hard it is to land a solid blow on you. It's calculated based on the armor you wear, plus your Dexterity Modifier if your armor is light enough.", choices: [{ label: "I have another question", next: "questions_menu" }, { label: "That's all for now", next: "options" }] },
+      q_damage: { emotion: "normal", text: "If your Hit Roll succeeds, you deal damage! The damage is determined by your weapon's dice—like 1d8 for a Longsword—plus your stat Modifier. Some spells have fixed damage dice without modifiers.", choices: [{ label: "I have another question", next: "questions_menu" }, { label: "That's all for now", next: "options" }] },
+      q_save: { emotion: "gentle", text: "Sometimes an enemy casts a spell or sets a trap. Instead of rolling to hit your AC, they force you to make a Saving Throw. You roll a d20 and add the relevant Modifier. If you roll high enough, you resist the effect!", choices: [{ label: "I have another question", next: "questions_menu" }, { label: "That's all for now", next: "options" }] },
+      q_rest: { emotion: "normal", text: "Resting is vital! A Short Rest at a campfire takes a few hours and heals a bit of HP. A Long Rest at the Inn costs 10g but fully restores your HP and all your Skill uses for the day.", choices: [{ label: "I have another question", next: "questions_menu" }, { label: "That's all for now", next: "options" }] },
+      q_upgrade: { emotion: "happy", text: "Focus on your class's primary stat! Fighters rely on Strength or Dexterity. Wizards need Intelligence. Clerics and Paladins use Wisdom or Charisma. And everyone benefits from Constitution for extra health!", choices: [{ label: "I have another question", next: "questions_menu" }, { label: "That's all for now", next: "options" }] },
+      q_classes: { emotion: "normal", text: "Fighters master weapons and armor. Wizards study arcane spells and unleash area damage. Clerics channel divine magic to heal and smite. Paladins blend martial prowess with holy auras.", choices: [{ label: "I have another question", next: "questions_menu" }, { label: "That's all for now", next: "options" }] },
+      q_skills: { emotion: "wondering", text: "As you level up, you will unlock Skills. Some can be used infinitely, but many powerful Skills can only be used once before you must take a Long Rest to recover your stamina or magic slots.", choices: [{ label: "I have another question", next: "questions_menu" }, { label: "That's all for now", next: "options" }] },
+      q_equip: { emotion: "gentle", text: "You can equip a weapon in your Main Hand, a shield or another weapon in your Off Hand, Armor on your body, and magical Accessories. Better gear significantly improves your combat potential!", choices: [{ label: "I have another question", next: "questions_menu" }, { label: "That's all for now", next: "options" }] },
       tutorial_ask: {
         emotion: "wondering",
         text: "Hm? Why do you want to learn it again?",
@@ -1676,15 +2121,37 @@ export function useGameEngine() {
     
     setCombat({ 
       active: true, round: 1, turnOrder: order, currentIndex: 0, 
-      actionUsed: false, extraActionUsed: false, movedSquares: 0, 
+      actionUsed: false, extraActionUsed: false, extraMainActions: 0, movedSquares: 0, 
       log: ["⚔ Tutorial Combat Started!"], engagedMonsterIds: [dummyId] 
     });
     setCombatMode("none");
 
     setTimeout(() => showSeleniaPopup("gentle", ["Try walking around using WASD or the arrow keys.", "Take a few steps! The world is yours to explore.", "Don't be shy, take a walk!", "Movement is the first step of any grand adventure."]), 1000);
     setTimeout(() => showSeleniaPopup("happy", ["See? It's not that hard.", "You're getting the hang of it!", "That's it! Just take it one step at a time.", "Perfect! You move quite gracefully."]), 7000);
-    setTimeout(() => showSeleniaPopup("gentle", ["Now, try attacking that dummy over there.", "Ready for some action? Hit that training dummy!", "Let's see your combat skills! Attack the dummy.", "Show me what you've got! Strike the dummy."]), 13000);
-    setTimeout(() => showSeleniaPopup("wondering", ["The menu is very important... Many adventurers forget how to open it on their first day.", "Don't forget to check your menu! It's easy to get lost without it.", "Your equipment and stats are all in the menu. Don't forget about them!", "Some heroes wander for days without ever opening their inventory... don't be one of them."]), 20000);
+    
+    setTimeout(() => {
+      setSeleniaDialogTree({
+        start: {
+          emotion: "gentle",
+          text: "Before you strike, let me explain how your power works. In this world, your attributes give you hidden bonuses called Modifiers.",
+          next: "mod2"
+        },
+        mod2: {
+          emotion: "normal",
+          text: "For instance, if your Strength is 16, you receive a +3 Modifier. This means your strikes are more accurate and hit harder!",
+          next: "mod3"
+        },
+        mod3: {
+          emotion: "happy",
+          text: "So keep growing stronger! Even if fate is unkind to you, your Modifiers will guide your blade true. Now, go hit that dummy!",
+          choices: [
+            { label: "I'm ready!", next: () => setSeleniaDialogTree(null) }
+          ]
+        }
+      });
+    }, 13000);
+
+    setTimeout(() => showSeleniaPopup("wondering", ["The menu is very important... Many adventurers forget how to open it on their first day.", "Don't forget to check your menu! It's easy to get lost without it.", "Your equipment and stats are all in the menu. Don't forget about them!", "Some heroes wander for days without ever opening their inventory... don't be one of them."]), 35000);
   }
 
   const handleLongRest = useCallback(() => {
@@ -1751,6 +2218,10 @@ export function useGameEngine() {
     startCombat, endCombat, endPlayerTurn, handleSpellSelect, handleCastSpellAtTile,
     handleCastSpell, handleHealSelf, handleGuard, handleMonsterClick, handleAttackMonster,
     executeBombEffect, handleAOECastFromGrid,
+    handleFlee: () => {}, // unused
+    handleShortRest, handleLongRest,
+    handleInsight, handleStealth,
+    insightCooldown, insightVisionTiles, stealthActive, stealthCasting,
     // movement
     handleTileClick,
     // items

@@ -54,6 +54,7 @@ export interface Character {
   hp: number; maxHp: number; ac: number; profBonus: number;
   skills: string[]; savingThrows: string[]; // Roleplay proficiencies
   gameSkills: string[]; // IDs for SkillDef
+  skillUsages?: Record<string, number>; // Usage count for per-skill slots
   spellSlots?: { used: number; max: number };
   spellChoice?: string;
   customSkills?: string[];
@@ -72,14 +73,27 @@ export interface Monster {
   id: string; name: string; hp: number; maxHp: number; ac: number;
   position: { x: number; y: number }; damage: string; range: number;
   attackMod: number; initiative: number; xp: number; sightRange: number; alerted: boolean;
+  insightDC?: number;
+  state?: "idle" | "suspicious" | "alert" | "combat";
+  stealth?: number;
+  image?: string;
+  speed?: number;
+  damageType?: string;
+  resistances?: string[];
+  weaknesses?: string[];
+  drops?: string[];
+  bossSkillsUsed?: Record<string, number>;
 }
 
 export interface Combatant { id: string; type: "player" | "monster"; name: string; initiative: number }
 
 export interface CombatState {
-  active: boolean; round: number;
-  turnOrder: Combatant[]; currentIndex: number;
+  active: boolean;
+  round: number;
+  turnOrder: { id: string; type: "player" | "monster"; name: string; initiative: number }[];
+  currentIndex: number;
   actionUsed: boolean; extraActionUsed: boolean; movedSquares: number;
+  extraMainActions?: number; // Added by Action Surge
   log: string[]; engagedMonsterIds: string[];
   guardAmount?: number;
   activeBuffs: string[];
@@ -95,6 +109,8 @@ export interface SkillDef {
   cost: ActionCost;
   description: string;
   icon?: string;
+  maxUses?: number; // E.g. 1
+  recharge?: "short" | "long"; // When the usage is reset
   // Possible effects:
   damage?: string;
   healAmount?: string;
@@ -105,7 +121,7 @@ export interface SkillDef {
 
 export interface VisualEffect {
   id: string;
-  type: "slash" | "scratch" | "fire_bolt" | "magic_missile" | "sacred_flame" | "thunder" | "fire_aoe" | "smite" | "heal" | "miss" | "number" | "sword_swing" | "arrow";
+  type: "slash" | "scratch" | "fire_bolt" | "magic_missile" | "sacred_flame" | "thunder" | "fire_aoe" | "smite" | "heal" | "miss" | "number" | "sword_swing" | "arrow" | "whip" | "rootslam";
   targetX?: number; targetY?: number;
   gridX: number; gridY: number;
   value?: string;
@@ -113,13 +129,15 @@ export interface VisualEffect {
 
 export interface DiceRollDisplay {
   id: string;
-  type: "hit" | "save" | "damage";
+  type: "hit" | "save" | "damage" | "skill";
   value: number;
   total: number;
   mod: number;
   max: number;
   label: string;
   phase: "rolling" | "done";
+  advValues?: [number, number];
+  advType?: "adv" | "dis";
 }
 
 export interface Quest {
@@ -162,4 +180,5 @@ export interface MapGridProps {
   dyingMonsters?: Set<string>;
   hitTokenIds?: Set<string>;
   onHealSelf?: () => void;
+  insightVisionTiles?: Set<string>;
 }

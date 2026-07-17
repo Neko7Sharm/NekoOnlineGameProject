@@ -2,9 +2,12 @@
 // QUEST TEMPLATES
 // ─────────────────────────────────────────────────
 
-export const QUEST_TEMPLATES: Array<{ title: string; desc: string; n: number; exp: number; gold: number; gather?: string }> = [
-  { title: "Training Exercise", desc: "Defeat {n} Wooden Dummies.", n: 5, exp: 100, gold: 25 },
-  { title: "Timber Collection", desc: "Collect {n} wooden branches from training dummies.", n: 5, exp: 50, gold: 20, gather: "Branch" },
+export const QUEST_TEMPLATES: Array<{ title: string; desc: string; killTarget?: { monster: string; count: number }; exp: number; gold: number; gather?: string }> = [
+  { title: "Slime Hunt", desc: "Defeat 3 Slimes in the Whispering Forest.", killTarget: { monster: "Slime", count: 3 }, exp: 120, gold: 30 },
+  { title: "Wolf Pack", desc: "Defeat 3 Wolves in the Whispering Forest.", killTarget: { monster: "Wolf", count: 3 }, exp: 150, gold: 40 },
+  { title: "Goblin Scouting", desc: "Defeat 3 Goblin Scouts in the Whispering Forest.", killTarget: { monster: "Goblin Scout", count: 3 }, exp: 180, gold: 50 },
+  { title: "Vine Clearing", desc: "Defeat 3 Creeping Vines in the Whispering Forest.", killTarget: { monster: "Creeping Vine", count: 3 }, exp: 200, gold: 60 },
+  { title: "The Ancient Treant", desc: "Defeat the Ancient Treant Sapling boss.", killTarget: { monster: "Ancient Treant Sapling", count: 1 }, exp: 500, gold: 200 },
 ];
 
 // ─────────────────────────────────────────────────

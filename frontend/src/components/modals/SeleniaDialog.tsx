@@ -129,7 +129,7 @@ export function SeleniaDialog({
         </div>
 
         {/* Choices or Continue */}
-        <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 16 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "flex-end", marginTop: 16, maxHeight: "40vh", overflowY: "auto", paddingRight: 4, paddingBottom: 4 }}>
           {node.choices ? (
             node.choices.map((c, i) => (
               <button key={i} onClick={() => handleChoice(c.next)}

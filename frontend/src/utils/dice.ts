@@ -8,6 +8,7 @@ export const gid = () => Math.random().toString(36).slice(2, 9);
 export const d20 = () => Math.floor(Math.random() * 20) + 1;
 export const getMod = (s: number) => Math.floor((s - 10) / 2);
 export const modStr = (s: number) => { const m = getMod(s); return m >= 0 ? `+${m}` : `${m}`; };
+export const formatMod = (m: number) => m >= 0 ? `+${m}` : `${m}`;
 export const dist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
   Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 export const tnow = () => new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -53,4 +54,23 @@ export function calcAC(char: Character): number {
   const skillAC = char.gameSkills?.reduce((s, skillId) => s + (SKILL_DICTIONARY[skillId]?.acBonus ?? 0), 0) ?? 0;
   
   return armorAC + (addDex ? dexMod : 0) + accAC + skillAC;
+}
+
+export function getWeaponStat(char: Character, weapon: import("../types/game").Item): { stat: keyof Stats; mod: number } {
+  const strMod = getMod(char.stats.str);
+  const dexMod = getMod(char.stats.dex);
+  if (weapon.properties?.includes("finesse") && dexMod > strMod) {
+    return { stat: "dex", mod: dexMod };
+  }
+  if (weapon.properties?.includes("thrown") || weapon.name.includes("Bow") || weapon.name.includes("Crossbow")) {
+    return { stat: "dex", mod: dexMod };
+  }
+  return { stat: "str", mod: strMod };
+}
+
+export function getWeaponHitBonus(char: Character, weapon: import("../types/game").Item): { total: number; statName: string; statMod: number; prof: number; weaponBonus: number } {
+  const { stat, mod } = getWeaponStat(char, weapon);
+  const prof = char.profBonus;
+  const weaponBonus = 0; // Simplified for now
+  return { total: mod + prof + weaponBonus, statName: stat.toUpperCase(), statMod: mod, prof, weaponBonus };
 }

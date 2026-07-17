@@ -107,13 +107,13 @@ export const WIZARD_SPELL_CHOICES = [
 // STAT DESCRIPTIONS
 // ─────────────────────────────────────────────────
 
-export const STAT_DESCRIPTIONS: Record<keyof Stats, { label: string; effect: string }> = {
-  str: { label: "Strength", effect: "Melee ATK/DMG bonus, Athletics, carrying" },
-  dex: { label: "Dexterity", effect: "Ranged ATK, AC (light armor), Initiative" },
-  con: { label: "Constitution", effect: "Max HP bonus per level, CON saves" },
-  int: { label: "Intelligence", effect: "Wizard spell DC & ATK, Arcana, History" },
-  wis: { label: "Wisdom", effect: "Cleric/Paladin spell DC, Perception, Insight" },
-  cha: { label: "Charisma", effect: "Persuasion, Deception, Paladin aura" },
+export const STAT_DESCRIPTIONS: Record<keyof Stats, { label: string; effects: string[] }> = {
+  str: { label: "Strength", effects: ["Melee ATK & DMG bonus", "Athletics", "Carrying capacity"] },
+  dex: { label: "Dexterity", effects: ["Ranged ATK & DMG bonus", "AC (light/med armor)", "Initiative & Acrobatics"] },
+  con: { label: "Constitution", effects: ["Max HP bonus per level", "CON saves (Concentration)"] },
+  int: { label: "Intelligence", effects: ["Wizard spell DC & ATK", "Arcana, History, Investigation"] },
+  wis: { label: "Wisdom", effects: ["Cleric/Paladin spell DC", "Perception, Insight, Survival"] },
+  cha: { label: "Charisma", effects: ["Persuasion, Deception", "Paladin aura & spells"] },
 };
 
 // ─────────────────────────────────────────────────

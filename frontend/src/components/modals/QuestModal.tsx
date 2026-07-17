@@ -11,6 +11,21 @@ import npcQuestImg4 from "../../assets/npc/npc_b04.png";
 import woodenBoardImg from "../../assets/wooden_board.png";
 import parchmentImg from "../../assets/parchment_paper.png";
 
+import monsterSlime from "../../assets/monster_slime.png";
+import monsterWolf from "../../assets/monster_wolf.png";
+import monsterGoblin from "../../assets/monster_goblin.png";
+import monsterVine from "../../assets/monster_vine.png";
+import monsterTreant from "../../assets/monster_treant.png";
+
+function getMonsterImage(name: string) {
+  if (name.includes("Slime")) return monsterSlime;
+  if (name.includes("Wolf")) return monsterWolf;
+  if (name.includes("Goblin")) return monsterGoblin;
+  if (name.includes("Vine")) return monsterVine;
+  if (name.includes("Treant")) return monsterTreant;
+  return null;
+}
+
 const QUEST_WELCOME_QUOTES = [
   "Welcome! We have new quests today... Eek! I almost spilled the ink!",
   "Ah! Where did that document go... Oh, found it! Which quest interests you?",
@@ -328,8 +343,10 @@ export function QuestModal({
                   </div>
                 </div>
                 <div style={{ width: 140, background: "rgba(255, 255, 255, 0.6)", borderLeft: `3px solid ${guild1}`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 12 }}>
-                  <div style={{ width: 80, height: 80, background: "rgba(0,0,0,0.1)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40, marginBottom: 8 }}>
-                    {selectedQuest.killTarget ? "🐉" : "🌿"}
+                  <div style={{ width: 80, height: 80, background: "rgba(0,0,0,0.1)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40, marginBottom: 8, overflow: "hidden" }}>
+                    {selectedQuest.killTarget && getMonsterImage(selectedQuest.killTarget.monster) ? (
+                      <img src={getMonsterImage(selectedQuest.killTarget.monster) ?? ""} style={{ width: 64, height: 64, imageRendering: "pixelated" }} />
+                    ) : selectedQuest.killTarget ? "🐉" : "🌿"}
                   </div>
                 </div>
               </>
@@ -347,7 +364,9 @@ export function QuestModal({
               return (
                 <div key={q.id} onClick={() => setSelectedQuestId(q.id)} style={{ aspectRatio: "1/1.2", backgroundImage: `url(${parchmentImg})`, backgroundSize: "96px", backgroundRepeat: "repeat", imageRendering: "pixelated", borderRadius: 4, border: `2px solid ${isSelected ? "#d02020" : "#302010"}`, cursor: "pointer", display: "flex", flexDirection: "column", boxShadow: isSelected ? `0 0 0 2px ${guild4}, 0 6px 12px rgba(0,0,0,0.5)` : `0 4px 8px rgba(0,0,0,0.4)`, transition: "transform 0.1s, border-color 0.1s", transform: isSelected ? "scale(1.05)" : "scale(1)", overflow: "hidden" }}>
                   <div style={{ flex: 1, background: "rgba(255, 255, 255, 0.6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, borderBottom: `2px solid #302010` }}>
-                    {q.killTarget ? "🐉" : "🌿"}
+                    {q.killTarget && getMonsterImage(q.killTarget.monster) ? (
+                      <img src={getMonsterImage(q.killTarget.monster) ?? ""} style={{ width: 48, height: 48, imageRendering: "pixelated" }} />
+                    ) : q.killTarget ? "🐉" : "🌿"}
                   </div>
                   <div style={{ padding: "8px 4px", textAlign: "center", fontFamily: PX, fontSize: 13, fontWeight: "bold", color: "#110", background: "rgba(255, 255, 255, 0.7)", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 40 }}>
                     {q.killTarget ? q.killTarget.monster : q.gatherTarget?.itemName}

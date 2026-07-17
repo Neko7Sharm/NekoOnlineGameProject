@@ -2,13 +2,13 @@ import type { SkillDef } from "../types/game";
 
 export const SKILL_DICTIONARY: Record<string, SkillDef> = {
   // Fighter Combat Techniques (Lv 2, Lv 5)
-  "fighter_second_wind": { id: "fighter_second_wind", name: "Second Wind", type: "active", cost: "extra", description: "Draw on stamina to heal 1d10 + (Level x 2) HP. Usable once per long rest.", icon: "💨", healAmount: "1d10" },
-  "fighter_action_surge": { id: "fighter_action_surge", name: "Action Surge", type: "active", cost: "extra", description: "Push yourself beyond normal limits for an additional Main Action this turn. Usable once per long rest.", icon: "🔥" },
-  "fighter_shield_wall": { id: "fighter_shield_wall", name: "Shield Wall", type: "active", cost: "main", description: "Grants +2 AC and +2 to DEX Saving Throws until the end of combat. Usable once per long rest.", icon: "🛡️" },
+  "fighter_second_wind": { id: "fighter_second_wind", name: "Second Wind", type: "active", cost: "extra", description: "Draw on stamina to heal 1d10 + (Level x 2) HP. Usable once per long rest.", icon: "💨", healAmount: "1d10", maxUses: 1, recharge: "long" },
+  "fighter_action_surge": { id: "fighter_action_surge", name: "Action Surge", type: "active", cost: "extra", description: "Push yourself beyond normal limits for an additional Main Action this turn. Usable once per long rest.", icon: "🔥", maxUses: 1, recharge: "long" },
+  "fighter_shield_wall": { id: "fighter_shield_wall", name: "Shield Wall", type: "active", cost: "main", description: "Grants +2 AC and +2 to DEX Saving Throws until the end of combat. Usable once per long rest.", icon: "🛡️", maxUses: 1, recharge: "long" },
   "fighter_counter_attack": { id: "fighter_counter_attack", name: "Counter Attack", type: "reaction", cost: "none", description: "When an enemy misses a melee attack against you, immediately make a melee attack against them.", icon: "⚔️" },
-  "fighter_warrior_focus": { id: "fighter_warrior_focus", name: "Warrior's Focus", type: "active", cost: "main", description: "Grants +1d4 + Prof Bonus to Hit Rolls until the end of combat. Usable once per short rest.", icon: "👁️" },
-  "fighter_samurai_focus": { id: "fighter_samurai_focus", name: "Samurai's Focus", type: "active", cost: "main", description: "Your next attack gains Advantage (roll 2d20 and take the higher result). Usable once per long rest.", icon: "🗡️" },
-  "fighter_berserker_rage": { id: "fighter_berserker_rage", name: "Berserker's Rage", type: "active", cost: "main", description: "Gain +1d6 to Melee Damage and Resistance to Physical Damage until end of combat. Usable once per long rest.", icon: "💢" },
+  "fighter_warrior_focus": { id: "fighter_warrior_focus", name: "Warrior's Focus", type: "active", cost: "main", description: "Grants +1d4 + Prof Bonus to Hit Rolls until the end of combat. Usable once per short rest.", icon: "👁️", maxUses: 1, recharge: "short" },
+  "fighter_samurai_focus": { id: "fighter_samurai_focus", name: "Samurai's Focus", type: "active", cost: "main", description: "Your next attack gains Advantage (roll 2d20 and take the higher result). Usable once per long rest.", icon: "🗡️", maxUses: 1, recharge: "long" },
+  "fighter_berserker_rage": { id: "fighter_berserker_rage", name: "Berserker's Rage", type: "active", cost: "main", description: "Gain +1d6 to Melee Damage and Resistance to Physical Damage until end of combat. Usable once per long rest.", icon: "💢", maxUses: 1, recharge: "long" },
 
   // Fighter Subclasses (Lv 3)
   "subclass_archer": { id: "subclass_archer", name: "Archer", type: "passive", cost: "none", description: "+2 to Attack Rolls when using a Bow.", icon: "🏹" },

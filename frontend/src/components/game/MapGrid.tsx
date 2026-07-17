@@ -4,7 +4,7 @@ import { CLASS_CFG } from "../../constants/classes";
 import { CLASS_SPELLS, WIZARD_SPELL_CHOICES } from "../../constants/classes";
 import { SKILL_DICTIONARY } from "../../constants/skills";
 import {
-  COLS, ROWS, CELL, MOVE_SQUARES, SIGHT, DUNGEON_ENTER, DUNGEON_EXIT,
+  getMapCols, getMapRows, CELL, MOVE_SQUARES, SIGHT, DUNGEON_ENTER, DUNGEON_EXIT,
   TOWN_SPECIAL, SANCTUARY_SPECIAL, getTownTile, getDungeonTile, getSanctuaryTile, getTutorialTile
 } from "../../constants/map";
 import { dist } from "../../utils/dice";
@@ -19,8 +19,32 @@ import bQuest from "../../assets/b_quest.png";
 import bInn from "../../assets/b_inn.png";
 import bStatue from "../../assets/b_statue.png";
 import npcSeleniaChibi from "../../assets/npc/npc_g01c.png";
+import monsterSlime from "../../assets/monster_slime.png";
+import monsterWolf from "../../assets/monster_wolf.png";
+import monsterGoblin from "../../assets/monster_goblin.png";
+import monsterVine from "../../assets/monster_vine.png";
+import monsterTreant from "../../assets/monster_treant.png";
+import sacredTree from "../../assets/sacred_tree.png";
+import coverRock from "../../assets/cover_rock.png";
+import coverLog from "../../assets/cover_log.png";
+import effectScratch from "../../assets/effect_scratch.png";
+import effectArrow from "../../assets/effect_arrow.png";
+import effectWhip from "../../assets/effect_whip.png";
+import effectRootslam from "../../assets/effect_rootslam.png";
+import { AmbientSystem } from "./AmbientSystem";
+import { parseWhisperingForest } from "../../maps/whispering_forest";
+
+const wfMap = parseWhisperingForest();
+
+const MONSTER_IMAGES: Record<string, string> = {
+  monster_slime: monsterSlime,
+  monster_wolf: monsterWolf,
+  monster_goblin: monsterGoblin,
+  monster_vine: monsterVine,
+  monster_treant: monsterTreant
+};
 // Compute which grid tiles fall inside a cone pointing from player toward mouse
-function getConeTiles(playerPos: { x: number; y: number }, mouseX: number, mouseY: number, length: number): Set<string> {
+function getConeTiles(playerPos: { x: number; y: number }, mouseX: number, mouseY: number, length: number, cols: number, rows: number): Set<string> {
   const tiles = new Set<string>();
   const px = playerPos.x * CELL + CELL / 2;
   const py = playerPos.y * CELL + CELL / 2;
@@ -30,7 +54,7 @@ function getConeTiles(playerPos: { x: number; y: number }, mouseX: number, mouse
     for (let dx = -length; dx <= length; dx++) {
       if (dx === 0 && dy === 0) continue;
       const tx = playerPos.x + dx, ty = playerPos.y + dy;
-      if (tx < 0 || ty < 0 || tx >= COLS || ty >= ROWS) continue;
+      if (tx < 0 || ty < 0 || tx >= cols || ty >= rows) continue;
       if (Math.sqrt(dx * dx + dy * dy) > length) continue;
       const tileAngle = Math.atan2(ty * CELL + CELL / 2 - py, tx * CELL + CELL / 2 - px);
       let diff = Math.abs(angle - tileAngle);
@@ -41,7 +65,9 @@ function getConeTiles(playerPos: { x: number; y: number }, mouseX: number, mouse
   return tiles;
 }
 
-export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode, selectedSpell, onTileClick, onMonsterClick, onAOECast, effects, dyingMonsters, hitTokenIds, onHealSelf }: MapGridProps) {
+export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode, selectedSpell, onTileClick, onMonsterClick, onAOECast, effects, dyingMonsters, hitTokenIds, onHealSelf, insightVisionTiles }: MapGridProps) {
+  const cols = getMapCols(mode);
+  const rows = getMapRows(mode);
   const pos = char.position;
   const [hoveredMonsterId, setHoveredMonsterId] = useState<string | null>(null);
   const [mouseGrid, setMouseGrid] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -53,7 +79,7 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
       for (let dx = -SIGHT; dx <= SIGHT; dx++) {
         if (Math.abs(dx) + Math.abs(dy) <= SIGHT) {
           const fx = pos.x + dx, fy = pos.y + dy;
-          if (fx >= 0 && fx < COLS && fy >= 0 && fy < ROWS) visible.add(`${fx},${fy}`);
+          if (fx >= 0 && fx < cols && fy >= 0 && fy < rows) visible.add(`${fx},${fy}`);
         }
       }
   }
@@ -65,7 +91,7 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
       for (let dx = -rem; dx <= rem; dx++) {
         if (Math.abs(dx) + Math.abs(dy) <= rem) {
           const tx = pos.x + dx, ty = pos.y + dy;
-          if (tx >= 0 && tx < COLS && ty >= 0 && ty < ROWS) reachable.add(`${tx},${ty}`);
+          if (tx >= 0 && tx < cols && ty >= 0 && ty < rows) reachable.add(`${tx},${ty}`);
         }
       }
   }
@@ -80,7 +106,7 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
       for (let dx = -rs; dx <= rs; dx++) {
         if (Math.abs(dx) + Math.abs(dy) <= rs) {
           const tx = pos.x + dx, ty = pos.y + dy;
-          if (tx >= 0 && tx < COLS && ty >= 0 && ty < ROWS) attackRangeTiles.add(`${tx},${ty}`);
+          if (tx >= 0 && tx < cols && ty >= 0 && ty < rows) attackRangeTiles.add(`${tx},${ty}`);
         }
       }
     }
@@ -96,8 +122,8 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
   const isAoeSpell = selectedSpell && (WIZARD_SPELL_CHOICES.some(s => s.name === selectedSpell) || selectedSpell === "Small Bomb");
   const aoeSpellDef = isAoeSpell ? (WIZARD_SPELL_CHOICES.find(s => s.name === selectedSpell) ?? BOMB_AOE_DEF) : null;
   const mouseGridTile = {
-    x: Math.min(COLS - 1, Math.max(0, Math.floor(mouseGrid.x / CELL))),
-    y: Math.min(ROWS - 1, Math.max(0, Math.floor(mouseGrid.y / CELL))),
+    x: Math.min(cols - 1, Math.max(0, Math.floor(mouseGrid.x / CELL))),
+    y: Math.min(rows - 1, Math.max(0, Math.floor(mouseGrid.y / CELL))),
   };
 
   if (combatMode === "spell" && selectedSpell) {
@@ -114,14 +140,14 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
     if (isAoeSpell && aoeSpellDef) {
       const aoeLen = aoeSpellDef.aoeRadius;
       if (aoeSpellDef.isCone) {
-        const coneTiles = getConeTiles(pos, mouseGrid.x, mouseGrid.y, aoeLen);
+        const coneTiles = getConeTiles(pos, mouseGrid.x, mouseGrid.y, aoeLen, cols, rows);
         coneTiles.forEach(t => aoeTiles.add(t));
       } else {
         for (let dy = -aoeLen; dy <= aoeLen; dy++) {
           for (let dx = -aoeLen; dx <= aoeLen; dx++) {
             if (Math.abs(dx) + Math.abs(dy) <= aoeLen) {
               const tx = mouseGridTile.x + dx, ty = mouseGridTile.y + dy;
-              if (tx >= 0 && tx < COLS && ty >= 0 && ty < ROWS) aoeTiles.add(`${tx},${ty}`);
+              if (tx >= 0 && tx < cols && ty >= 0 && ty < rows) aoeTiles.add(`${tx},${ty}`);
             }
           }
         }
@@ -159,11 +185,11 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
             setMouseGrid({ x: e.clientX - r.left, y: e.clientY - r.top });
           }}
           style={{ 
-            position: "relative", width: COLS * CELL, height: ROWS * CELL, imageRendering: "pixelated",
+            position: "relative", width: cols * CELL, height: rows * CELL, imageRendering: "pixelated",
           }}>
         {/* Tiles */}
-        {Array.from({ length: ROWS }, (_, y) =>
-          Array.from({ length: COLS }, (_, x) => {
+        {Array.from({ length: rows }, (_, y) =>
+          Array.from({ length: cols }, (_, x) => {
             const key = `${x},${y}`;
             const td = mode === "town" ? getTownTile(x, y) : (mode === "sanctuary" ? getSanctuaryTile(x, y) : (mode === "tutorial" ? getTutorialTile(x, y) : getDungeonTile(x, y)));
             let tileBg = td.bg;
@@ -185,6 +211,7 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
             const isDimmed = mode === "dungeon" && !visible.has(key) && fogRevealed.has(key);
             const isReachable = reachable.has(key);
             const isAttackRange = attackRangeTiles.has(key) && mode === "dungeon" && !isFogged;
+            const isInsightVision = insightVisionTiles?.has(key) && !isFogged;
             const isPlayer = x === pos.x && y === pos.y;
 
             let cellBg = special?.color ? special.color + "50" : tileBg;
@@ -204,31 +231,32 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
                 }}
                 style={{
                   position: "absolute", left: x * CELL, top: y * CELL, width: CELL, height: CELL,
-                  background: isFogged ? "#000" : cellBg,
+                  backgroundColor: isFogged ? "#000" : cellBg,
                   backgroundImage: !isFogged && tileImg !== "none" ? tileImg : "none",
-                  backgroundSize: type === "fence" ? "38px 38px" : "380px 380px",
+                  backgroundSize: type === "fence" ? `${CELL}px ${CELL}px` : `${CELL * 10}px ${CELL * 10}px`,
                   backgroundPosition: `-${x * CELL}px -${y * CELL}px`,
                   opacity: isDimmed ? 0.4 : 1,
                   cursor: td.isWall || isFogged ? "default" : isAoeCursor ? "crosshair" : "pointer",
                   outline: isReachable ? `2px solid ${C.gold}` : isAttackRange ? `1px solid ${C.blue}50` : "none",
                   outlineOffset: "-2px",
                   boxShadow: isReachable ? `inset 0 0 8px ${C.gold}20` : isAttackRange ? `inset 0 0 12px ${C.blue}30` : "none",
-                  transform: type === "fence" && (x === 0 || x === COLS - 1) ? "rotate(90deg)" : "none",
+                  transform: type === "fence" && (x === 0 || x === cols - 1) ? "rotate(90deg)" : "none",
                 }}>
+                {isInsightVision && <div style={{ position: "absolute", inset: 0, background: "rgba(255, 0, 0, 0.25)", pointerEvents: "none" }} />}
                 {isAttackRange && <div style={{ position: "absolute", inset: 0, background: `${C.blue}15`, pointerEvents: "none" }} />}
                 <div style={{ position: "absolute", inset: 0, border: mode === "town" ? "none" : "1px solid rgba(0,0,0,0.25)" }} />
 
                 {special && !isFogged && ["8,6", "9,6", "20,6", "21,6", "14,14", "15,14", "4,11", "22,19", "23,19", "24,19"].includes(key) && (
                   <div style={{ 
                     position: "absolute", inset: 2, display: "flex", alignItems: "center", justifyContent: "center", 
-                    fontSize: 20, background: "rgba(0,0,0,0.5)", border: `2px solid ${special.color}`, 
+                    fontSize: CELL * 0.6, background: "rgba(0,0,0,0.5)", border: `2px solid ${special.color}`, 
                     borderRadius: 6, opacity: 0.9, boxShadow: `0 0 8px ${special.color}`, zIndex: 6
                   }}>
                     {special.icon}
                   </div>
                 )}
-                {isExit && !isFogged && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>🚪</div>}
-                {isEntrance && !isFogged && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, opacity: 0.5 }}>⬇️</div>}
+                {isExit && !isFogged && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: CELL * 0.5 }}>🚪</div>}
+                {isEntrance && !isFogged && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: CELL * 0.4, opacity: 0.5 }}>⬇️</div>}
                 {isReachable && !isPlayer && <div style={{ position: "absolute", inset: 0, background: `${C.gold}12` }} />}
                 {isAoeCursor && !isFogged && (() => {
                   const monHere = monsters.find(m => m.hp > 0 && m.position.x === x && m.position.y === y);
@@ -247,6 +275,8 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
           })
         )}
 
+        {mode === "dungeon" && <AmbientSystem width={cols * CELL} height={rows * CELL} />}
+
         {/* Building / Character Overlays */}
         {mode === "town" && (
           <>
@@ -254,6 +284,17 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
             <img src={bShop} style={{ position: "absolute", left: 2 * CELL, top: 15 * CELL, width: 17 * CELL, height: 5 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "cover", borderRadius: "12px" }} alt="Shop" />
             <img src={bQuest} style={{ position: "absolute", left: 18 * CELL, top: 1 * CELL, width: 11 * CELL, height: 5 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "cover", borderRadius: "12px" }} alt="Quest Guild" />
             <img src={bStatue} style={{ position: "absolute", left: 1 * CELL, top: 10 * CELL, width: 3 * CELL, height: 3 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain", transform: "rotate(180deg)" }} alt="Statue" />
+          </>
+        )}
+        {mode === "dungeon" && (
+          <>
+            {wfMap.rocks.map((r, i) => (
+              <img key={`rock-${i}`} src={coverRock} style={{ position: "absolute", left: r.x * CELL, top: r.y * CELL, width: CELL, height: CELL, pointerEvents: "none", zIndex: 4, objectFit: "contain" }} alt="Rock" />
+            ))}
+            {wfMap.logs.map((l, i) => (
+              <img key={`log-${i}`} src={coverLog} style={{ position: "absolute", left: l.x * CELL, top: l.y * CELL, width: CELL, height: CELL, pointerEvents: "none", zIndex: 4, objectFit: "contain" }} alt="Log" />
+            ))}
+            <img src={sacredTree} style={{ position: "absolute", left: (wfMap.landmark.x - 2.5) * CELL, top: (wfMap.landmark.y - 3) * CELL, width: 6 * CELL, height: 6 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain" }} alt="Sacred Tree" />
           </>
         )}
         {mode === "sanctuary" && (
@@ -298,7 +339,7 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
                 position: "absolute",
                 left: m.position.x * CELL + 3, top: m.position.y * CELL + 3,
                 width: CELL - 6, height: CELL - 6,
-                fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: CELL * 0.5, display: "flex", alignItems: "center", justifyContent: "center",
                 animation: "dnd-dissolve 0.9s ease-out forwards",
                 pointerEvents: "none",
               }}>🪵</div>
@@ -319,10 +360,10 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
                 display: "flex", alignItems: "center", justifyContent: "center",
                 cursor: isTargetable ? "crosshair" : "default",
                 boxShadow: isTargetable ? `0 0 10px ${C.red}` : "none",
-                fontSize: 16, imageRendering: "pixelated",
+                fontSize: CELL * 0.5, imageRendering: "pixelated",
                 animation: isShaking ? "dnd-shake 0.35s ease-in-out" : undefined,
               }}>
-              🪵
+              {m.image ? <img src={MONSTER_IMAGES[m.image]} style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "50%" }} alt={m.name} /> : "🪵"}
               <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 3, background: "#0a0a0a" }}>
                 <div style={{ height: "100%", width: `${(m.hp / m.maxHp) * 100}%`, background: C.red }} />
               </div>
@@ -356,7 +397,7 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
             border: `2px solid ${CLASS_CFG[char.class].color}`,
             boxShadow: `0 0 10px ${CLASS_CFG[char.class].color}70`,
             display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 18, zIndex: 10, overflow: "visible",
+            fontSize: CELL * 0.6, zIndex: 10, overflow: "visible",
             transition: "transform 0.15s linear",
             animation: hitTokenIds?.has(char.id) ? "dnd-shake 0.35s ease-in-out" : undefined,
             cursor: isHealSpell ? "pointer" : "default",
@@ -402,11 +443,37 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
           }
           if (e.type === "scratch") {
             return (
-              <svg key={e.id} style={{ position: "absolute", left: ex - 22, top: ey - 22, width: 44, height: 44, pointerEvents: "none", zIndex: 50, animation: "dnd-slash 0.45s ease-out forwards" }} viewBox="0 0 44 44">
-                <line x1="4" y1="14" x2="22" y2="4" stroke="#c8a060" strokeWidth="2.5" strokeLinecap="round" />
-                <line x1="8" y1="22" x2="30" y2="10" stroke="#c8a060" strokeWidth="2" strokeLinecap="round" />
-                <line x1="12" y1="32" x2="38" y2="20" stroke="#8b6030" strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
+              <img key={e.id} src={effectScratch} style={{ position: "absolute", left: ex - 30, top: ey - 30, width: 60, height: 60, pointerEvents: "none", zIndex: 50, animation: "dnd-slash 0.35s ease-out forwards", objectFit: "contain" }} alt="Scratch" />
+            );
+          }
+          if (e.type === "arrow") {
+            const fromX = (e.targetX ?? e.gridX - 1) * CELL + CELL / 2;
+            const fromY = (e.targetY ?? e.gridY) * CELL + CELL / 2;
+            const dx = ex - fromX;
+            const dy = ey - fromY;
+            const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+            return (
+              <div key={e.id} style={{
+                position: "absolute", pointerEvents: "none", zIndex: 55, left: fromX - 20, top: fromY - 20, width: 40, height: 40
+              }}>
+                <style>{`
+                  @keyframes arrow-fly-${e.id} {
+                    0% { transform: translate(0, 0); opacity: 1; }
+                    100% { transform: translate(${dx}px, ${dy}px); opacity: 0; }
+                  }
+                `}</style>
+                <img src={effectArrow} style={{ width: "100%", height: "100%", objectFit: "contain", transform: `rotate(${angle + 45}deg)`, animation: `arrow-fly-${e.id} 0.35s linear forwards` }} alt="Arrow" />
+              </div>
+            );
+          }
+          if (e.type === "whip") {
+            return (
+              <img key={e.id} src={effectWhip} style={{ position: "absolute", left: ex - 40, top: ey - 40, width: 80, height: 80, pointerEvents: "none", zIndex: 50, animation: "dnd-slash 0.4s ease-out forwards", objectFit: "contain" }} alt="Whip" />
+            );
+          }
+          if (e.type === "rootslam") {
+            return (
+              <img key={e.id} src={effectRootslam} style={{ position: "absolute", left: ex - 100, top: ey - 100, width: 200, height: 200, pointerEvents: "none", zIndex: 50, animation: "dnd-fireball 0.7s ease-out forwards", objectFit: "contain" }} alt="Root Slam" />
             );
           }
           if (e.type === "fire_bolt") {

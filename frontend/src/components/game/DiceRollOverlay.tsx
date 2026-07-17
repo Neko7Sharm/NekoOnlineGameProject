@@ -15,6 +15,7 @@ export function DiceRollOverlay({ rolls }: { rolls: DiceRollDisplay[] }) {
     hit:    { bg: "linear-gradient(135deg, rgba(20,50,100,0.95), rgba(10,20,50,0.95))", border: C.blue,     col: C.blue,     label: "HIT ROLL" },
     save:   { bg: "linear-gradient(135deg, rgba(20,80,30,0.95), rgba(10,30,15,0.95))", border: "#4cdb70",  col: "#4cdb70",  label: "SAVE ROLL" },
     damage: { bg: "linear-gradient(135deg, rgba(100,20,10,0.95), rgba(40,10,5,0.95))", border: "#ff3333",  col: "#ffaa33",  label: "DAMAGE" },
+    skill:  { bg: "linear-gradient(135deg, rgba(60,20,100,0.95), rgba(30,10,50,0.95))", border: "#b366ff",  col: "#d9a6ff",  label: "SKILL CHECK" },
   };
 
   return (
@@ -36,36 +37,70 @@ export function DiceRollOverlay({ rolls }: { rolls: DiceRollDisplay[] }) {
         {rolls.map(r => {
           const c = COLORS[r.type];
           const spinning = r.phase === "rolling";
-          const dispVal = spinning ? ((tick * 13 + r.max * 7) % r.max) + 1 : r.value;
-          return (
-            <div key={r.id} style={{
-              background: c.bg,
-              borderLeft: `6px solid ${c.border}`,
-              borderRight: `6px solid ${c.border}`,
-              padding: "16px 28px", textAlign: "center", minWidth: 100,
-              clipPath: "polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%)",
-              animation: spinning ? "dnd-dice-roll 0.4s cubic-bezier(0.2,0,0,1) forwards" : "dnd-dice-slam 0.5s cubic-bezier(0.1,0.9,0.2,1) forwards",
-              position: "relative",
-              transform: "skewX(-5deg)",
-            }}>
-              <div style={{ fontFamily: PX, fontSize: 11, color: "#fff", letterSpacing: 2, marginBottom: 6, opacity: 0.9, textShadow: "1px 1px 0 rgba(0,0,0,0.8)" }}>{c.label}</div>
+          
+          const renderDiceBlock = (val: number, isDiscarded: boolean, isAdvRoll: boolean) => {
+            const dispVal = spinning ? ((tick * 13 + r.max * (isAdvRoll ? 11 : 7)) % r.max) + 1 : val;
+            
+            return (
               <div style={{
-                fontFamily: PX, fontSize: spinning ? 32 : 46, color: spinning ? "#fff" : c.col, lineHeight: 1,
-                filter: spinning ? "blur(1px)" : "none",
-                transition: "filter 0.1s, font-size 0.2s",
-                animation: spinning ? "dnd-dice-nums 0.1s linear infinite" : "none",
-                textShadow: spinning ? "none" : `2px 2px 0 rgba(0,0,0,0.8), 0 0 25px ${c.border}`,
-              }}>{dispVal}</div>
-              {r.phase === "done" && r.mod !== 0 && (
-                <div style={{ fontFamily: PX, fontSize: 12, color: "#fff", marginTop: 8, textShadow: "1px 1px 0 rgba(0,0,0,0.8)" }}>
-                  {r.mod > 0 ? `+${r.mod}` : r.mod} = <span style={{ color: c.border, fontSize: 18 }}>{r.total}</span>
+                background: isDiscarded && !spinning ? "linear-gradient(135deg, rgba(30,30,30,0.95), rgba(10,10,10,0.95))" : c.bg,
+                borderLeft: `6px solid ${isDiscarded && !spinning ? "#555" : c.border}`,
+                borderRight: `6px solid ${isDiscarded && !spinning ? "#555" : c.border}`,
+                padding: "16px 28px", textAlign: "center", minWidth: 100,
+                clipPath: "polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%)",
+                animation: spinning ? "dnd-dice-roll 0.4s cubic-bezier(0.2,0,0,1) forwards" : "dnd-dice-slam 0.5s cubic-bezier(0.1,0.9,0.2,1) forwards",
+                position: "relative",
+                transform: "skewX(-5deg)",
+                opacity: isDiscarded && !spinning ? 0.6 : 1,
+                filter: isDiscarded && !spinning ? "grayscale(100%)" : "none",
+                transition: "opacity 0.3s, filter 0.3s"
+              }}>
+                <div style={{ fontFamily: PX, fontSize: 11, color: "#fff", letterSpacing: 2, marginBottom: 6, opacity: 0.9, textShadow: "1px 1px 0 rgba(0,0,0,0.8)" }}>
+                  {isAdvRoll ? (r.advType === "adv" ? "ADVANTAGE" : "DISADVANTAGE") : c.label}
                 </div>
-              )}
-              {r.phase === "done" && r.mod === 0 && (
-                <div style={{ fontFamily: PX, fontSize: 10, color: "rgba(255,255,255,0.7)", marginTop: 8 }}>{r.label}</div>
-              )}
-            </div>
-          );
+                
+                <div style={{ position: "relative" }}>
+                  <div style={{
+                    fontFamily: PX, fontSize: spinning ? 32 : 46, color: spinning ? "#fff" : (isDiscarded ? "#888" : c.col), lineHeight: 1,
+                    filter: spinning ? "blur(1px)" : "none",
+                    transition: "filter 0.1s, font-size 0.2s",
+                    animation: spinning ? "dnd-dice-nums 0.1s linear infinite" : "none",
+                    textShadow: spinning ? "none" : (isDiscarded ? "none" : `2px 2px 0 rgba(0,0,0,0.8), 0 0 25px ${c.border}`),
+                  }}>{dispVal}</div>
+                  
+                  {isDiscarded && !spinning && (
+                    <div style={{ position: "absolute", top: "50%", left: -10, right: -10, height: 4, background: "#ff3333", transform: "translateY(-50%) rotate(-10deg)", boxShadow: "0 0 10px rgba(255,0,0,0.8)" }} />
+                  )}
+                </div>
+
+                {!isDiscarded && r.phase === "done" && r.mod !== 0 && (
+                  <div style={{ fontFamily: PX, fontSize: 12, color: "#fff", marginTop: 8, textShadow: "1px 1px 0 rgba(0,0,0,0.8)" }}>
+                    {r.mod > 0 ? `+${r.mod}` : r.mod} = <span style={{ color: c.border, fontSize: 18 }}>{r.total}</span>
+                  </div>
+                )}
+                {!isDiscarded && r.phase === "done" && r.mod === 0 && (
+                  <div style={{ fontFamily: PX, fontSize: 10, color: "rgba(255,255,255,0.7)", marginTop: 8 }}>{r.label}</div>
+                )}
+              </div>
+            );
+          };
+
+          if (r.advValues && r.advType) {
+            const v1 = r.advValues[0];
+            const v2 = r.advValues[1];
+            let discardIndex = 0;
+            if (r.advType === "adv") discardIndex = v1 < v2 ? 0 : 1;
+            if (r.advType === "dis") discardIndex = v1 > v2 ? 0 : 1;
+            
+            return (
+              <div key={r.id} style={{ display: "flex", gap: 10 }}>
+                {renderDiceBlock(v1, discardIndex === 0, true)}
+                {renderDiceBlock(v2, discardIndex === 1, true)}
+              </div>
+            );
+          }
+
+          return <div key={r.id}>{renderDiceBlock(r.value, false, false)}</div>;
         })}
       </div>
     </>

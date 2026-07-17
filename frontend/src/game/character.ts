@@ -76,14 +76,14 @@ export function genQuests(n = 10): Quest[] {
     const t = QUEST_TEMPLATES[Math.floor(Math.random() * QUEST_TEMPLATES.length)];
     if (t.gather) {
       quests.push({
-        id: gid(), title: t.title, description: t.desc.replace("{n}", String(t.n)),
-        gatherTarget: { itemName: t.gather, count: t.n },
+        id: gid(), title: t.title, description: t.desc,
+        gatherTarget: { itemName: t.gather, count: 5 },
         reward: { exp: t.exp, gold: t.gold },
       });
-    } else {
+    } else if (t.killTarget) {
       quests.push({
-        id: gid(), title: t.title, description: t.desc.replace("{n}", String(t.n)),
-        killTarget: { monster: "Wooden Dummy", count: t.n, current: 0 },
+        id: gid(), title: t.title, description: t.desc,
+        killTarget: { monster: t.killTarget.monster, count: t.killTarget.count, current: 0 },
         reward: { exp: t.exp, gold: t.gold },
       });
     }

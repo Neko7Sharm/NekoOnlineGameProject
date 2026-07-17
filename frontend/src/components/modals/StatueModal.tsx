@@ -201,11 +201,16 @@ export function StatueModal({
     });
   }
 
+  const totalStatChanges = Object.values(statChanges).reduce((a, b) => a + b, 0);
+  const availablePoints = (char.statusPoints || 0) - totalStatChanges;
+
   function handleStatChange(stat: keyof Stats, delta: number) {
     const newChange = statChanges[stat] + delta;
     const absoluteStat = char.stats[stat] + newChange;
     // Limit to prevent stat from dropping below 8
     if (absoluteStat >= 8) {
+      if (delta > 0 && availablePoints <= 0) return;
+
       setStatChanges((prev) => ({ ...prev, [stat]: newChange }));
       setTempStats((prev) => ({
         ...prev,
@@ -233,6 +238,7 @@ export function StatueModal({
       const updatedChar = {
         ...char,
         stats: tempStats,
+        statusPoints: availablePoints
       };
       onUpdateStats(updatedChar);
     });
@@ -885,7 +891,8 @@ export function StatueModal({
                   textAlign: "center",
                 }}
               >
-                STAT ADJUSTMENT (DEMO)
+                STAT ADJUSTMENT 
+                <div style={{ color: sacred4, marginTop: 4, fontSize: 10 }}>POINTS LEFT: {availablePoints}</div>
               </div>
 
               <div
@@ -920,7 +927,7 @@ export function StatueModal({
                     </span>
                     <button
                       onClick={() => handleStatChange(stat, -1)}
-                      disabled={statChanges[stat] <= -8}
+                      disabled={tempStats[stat] <= 8}
                       style={{
                         width: 24,
                         height: 24,
@@ -928,8 +935,8 @@ export function StatueModal({
                         border: `1px solid ${sacred1}`,
                         color: cream,
                         cursor:
-                          statChanges[stat] <= -8 ? "not-allowed" : "pointer",
-                        opacity: statChanges[stat] <= -8 ? 0.5 : 1,
+                          tempStats[stat] <= 8 ? "not-allowed" : "pointer",
+                        opacity: tempStats[stat] <= 8 ? 0.5 : 1,
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
@@ -951,7 +958,7 @@ export function StatueModal({
                     </span>
                     <button
                       onClick={() => handleStatChange(stat, 1)}
-                      disabled={statChanges[stat] >= 8}
+                      disabled={availablePoints <= 0}
                       style={{
                         width: 24,
                         height: 24,
@@ -959,8 +966,8 @@ export function StatueModal({
                         border: `1px solid ${sacred1}`,
                         color: cream,
                         cursor:
-                          statChanges[stat] >= 8 ? "not-allowed" : "pointer",
-                        opacity: statChanges[stat] >= 8 ? 0.5 : 1,
+                          availablePoints <= 0 ? "not-allowed" : "pointer",
+                        opacity: availablePoints <= 0 ? 0.5 : 1,
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
