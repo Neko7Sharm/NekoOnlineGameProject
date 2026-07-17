@@ -31,3 +31,43 @@ export const BRANCH_ITEM: Omit<Item, "id"> = {
   name: "Branch", type: "consumable", value: 1, material: true,
   description: "Rough wooden branch from a training dummy. Used as crafting material.",
 };
+
+export const MONSTER_DROPS: Omit<Item, "id">[] = [
+  // Slime
+  { name: "Slime Gel", type: "consumable", value: 2, material: true, rarity: "common", tags: ["Gel", "Water"], description: "Jiggly substance used in alchemy." },
+  { name: "Slime Core", type: "consumable", value: 8, material: true, rarity: "uncommon", tags: ["Core", "Magic"], description: "A faintly glowing core." },
+  { name: "Sticky Residue", type: "consumable", value: 5, material: true, rarity: "uncommon", tags: ["Resin"], description: "Very sticky, good for crafting." },
+  { name: "Pure Slime Core", type: "consumable", value: 25, material: true, rarity: "rare", tags: ["Core", "Rare"], description: "A perfectly clear slime core." },
+  { name: "Rusty Dagger", type: "weapon", hands: 1, damage: "1d4-1", damageType: "piercing", properties: ["light"], range: 5, value: 1, rarity: "common", description: "Old and rusted dagger." },
+  // Wolf
+  { name: "Wolf Fang", type: "consumable", value: 3, material: true, rarity: "common", tags: ["Beast", "Bone"], description: "Sharp fang." },
+  { name: "Wolf Fur", type: "consumable", value: 3, material: true, rarity: "common", tags: ["Beast", "Fur"], description: "Warm wolf fur." },
+  { name: "Tough Leather", type: "consumable", value: 10, material: true, rarity: "uncommon", tags: ["Leather"], description: "Durable leather piece." },
+  { name: "Sharp Claw", type: "consumable", value: 8, material: true, rarity: "uncommon", tags: ["Beast"], description: "A very sharp claw." },
+  { name: "Alpha Fang", type: "consumable", value: 30, material: true, rarity: "rare", tags: ["Beast", "Rare"], description: "Fang from an alpha wolf." },
+  { name: "Leather Boots", type: "armor", ac: 1, value: 15, rarity: "uncommon", description: "Basic leather boots. (+1 AC)" }, // Treating as armor for now
+  // Vine
+  { name: "Vine Fiber", type: "consumable", value: 2, material: true, rarity: "common", tags: ["Nature", "Fiber"], description: "Strong fiber." },
+  { name: "Green Sap", type: "consumable", value: 5, material: true, rarity: "uncommon", tags: ["Nature", "Resin"], description: "Sticky green sap." },
+  { name: "Living Vine", type: "consumable", value: 10, material: true, rarity: "uncommon", tags: ["Nature"], description: "A vine that still twitches." },
+  { name: "Ancient Vine", type: "consumable", value: 40, material: true, rarity: "rare", tags: ["Nature", "Rare"], description: "Thick, ancient vine." },
+  // Goblin
+  { name: "Broken Arrow", type: "consumable", value: 1, material: true, rarity: "common", tags: ["Wood"], description: "Unusable arrow." },
+  { name: "Goblin Ear", type: "consumable", value: 2, material: true, rarity: "common", tags: ["Humanoid"], description: "Proof of a goblin kill." },
+  { name: "Scout Cloak", type: "armor", ac: 1, value: 20, rarity: "uncommon", tags: ["Cloth"], description: "Camouflaged cloak. (+1 AC)" },
+  { name: "Scout Badge", type: "consumable", value: 50, material: true, rarity: "rare", tags: ["Rare"], description: "Proof of defeating an elite scout." },
+  { name: "Hunter Bow", type: "weapon", hands: 2, damage: "1d6", damageType: "piercing", properties: ["two-handed", "loading"], range: 60, value: 20, rarity: "uncommon", description: "A decent hunting bow." },
+  // Treant
+  { name: "Ancient Bark", type: "consumable", value: 15, material: true, rarity: "boss_material", tags: ["Wood"], description: "Extremely tough bark." },
+  { name: "Treant Heartwood", type: "consumable", value: 35, material: true, rarity: "boss_material", tags: ["Wood", "Magic"], description: "Magical wood from the core." },
+  { name: "Nature Crystal", type: "consumable", value: 50, material: true, rarity: "boss_material", tags: ["Crystal"], description: "Concentrated nature magic." },
+  { name: "Treant Core", type: "consumable", value: 80, material: true, rarity: "boss_material", tags: ["Boss Material"], description: "The life force of a Treant." },
+  { name: "Treant Seed", type: "consumable", value: 100, material: true, rarity: "boss_material", tags: ["Seed", "Divine"], description: "A seed pulsating with life." },
+  { name: "Woodland Shield", type: "weapon", hands: 1, range: 0, damage: "0", effect: "guard", value: 60, rarity: "rare", description: "Sturdy wooden shield. Use [EXTRA] to Guard." },
+  // Chests & Secrets
+  { name: "Minor Healing Potion", type: "consumable", healAmount: "1d4+1", effect: "heal", value: 25, rarity: "common", description: "Restores 1d4+1 HP." },
+  { name: "Equipment Enhancement Stone", type: "consumable", value: 150, material: true, rarity: "rare", tags: ["Upgrade"], description: "Used to upgrade equipment." },
+  { name: "Treasure Map Fragment", type: "consumable", value: 20, material: true, rarity: "rare", tags: ["Map"], description: "A piece of a larger treasure map." },
+  { name: "Gold Pouch", type: "consumable", effect: "gold_pouch", value: 50, rarity: "uncommon", description: "A small pouch of gold." },
+  { name: "Selenia's Flower", type: "consumable", value: 0, material: true, rarity: "rare", tags: ["Divine", "Nature"], description: "A glowing, ethereal flower." }
+];

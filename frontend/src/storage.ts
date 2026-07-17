@@ -21,6 +21,8 @@ export function loadState(): GameState {
     ],
     partyChat: [], party: null, // Keep for backward compatibility with older saves if needed
     dungeonMonsters: genMonsters(),
+    dungeonChests: [],
+    dungeonSecrets: [],
     availableQuests: genQuests(10),
     questRefreshAt: Date.now() + 5 * 60 * 1000,
   } as GameState;

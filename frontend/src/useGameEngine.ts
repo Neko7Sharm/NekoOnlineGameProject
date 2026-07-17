@@ -5,7 +5,7 @@ import type {
 import { C } from "./constants/theme";
 import { CLASS_CFG, CLASS_SPELLS, WIZARD_SPELL_CHOICES } from "./constants/classes";
 import { SKILL_DICTIONARY } from "./constants/skills";
-import { SHOP_ITEMS, BRANCH_ITEM } from "./constants/items";
+import { SHOP_ITEMS, STARTING_ITEMS, BRANCH_ITEM, MONSTER_DROPS } from "./constants/items";
 import { NPC_CHAT } from "./constants/quests";
 import {
   getMapCols, getMapRows, MOVE_SQUARES, SIGHT, DUNGEON_ENTER, DUNGEON_EXIT, TOWN_ENTER,
@@ -215,9 +215,56 @@ export function useGameEngine() {
     const drops: Item[] = [];
     dead.forEach(m => {
       baseExp += m.xp;
-      if (Math.random() < 0.4) drops.push({ id: gid(), name: "Healing Potion", type: "consumable", healAmount: "2d4+2", effect: "heal", value: 50, description: "Restores 2d4+2 HP." });
-      if (Math.random() < 0.5) drops.push({ id: gid(), ...BRANCH_ITEM });
-      if (Math.random() < 0.6) updateChar(char.id, ch => ({ gold: ch.gold + 2 + Math.floor(Math.random() * 5) }));
+      
+      const tryDrop = (itemName: string, chance: number) => {
+        if (Math.random() < chance) {
+          const itemDef = MONSTER_DROPS.find(i => i.name === itemName);
+          if (itemDef) drops.push({ id: gid(), ...itemDef });
+        }
+      };
+
+      if (m.name === "Slime") {
+        updateChar(char.id, ch => ({ gold: ch.gold + 3 + Math.floor(Math.random() * 6) })); // 3-8
+        tryDrop("Slime Gel", 0.80);
+        tryDrop("Slime Core", 0.25);
+        tryDrop("Sticky Residue", 0.10);
+        tryDrop("Pure Slime Core", 0.01);
+        tryDrop("Rusty Dagger", 0.005);
+      } else if (m.name === "Wolf") {
+        updateChar(char.id, ch => ({ gold: ch.gold + 5 + Math.floor(Math.random() * 8) })); // 5-12
+        tryDrop("Wolf Fang", 0.75);
+        tryDrop("Wolf Fur", 0.65);
+        tryDrop("Tough Leather", 0.25);
+        tryDrop("Sharp Claw", 0.15);
+        tryDrop("Alpha Fang", 0.02);
+        tryDrop("Leather Boots", 0.01);
+      } else if (m.name === "Walking Vine") {
+        updateChar(char.id, ch => ({ gold: ch.gold + 5 + Math.floor(Math.random() * 6) })); // 5-10
+        tryDrop("Vine Fiber", 0.80);
+        tryDrop("Green Sap", 0.45);
+        tryDrop("Living Vine", 0.12);
+        tryDrop("Ancient Vine", 0.02);
+      } else if (m.name === "Goblin Scout") {
+        updateChar(char.id, ch => ({ gold: ch.gold + 8 + Math.floor(Math.random() * 11) })); // 8-18
+        tryDrop("Broken Arrow", 0.70);
+        tryDrop("Goblin Ear", 0.60);
+        tryDrop("Scout Cloak", 0.06);
+        tryDrop("Scout Badge", 0.02);
+        tryDrop("Hunter Bow", 0.01);
+      } else if (m.name === "Ancient Treant") {
+        updateChar(char.id, ch => ({ gold: ch.gold + 100 + Math.floor(Math.random() * 51) })); // 100-150
+        tryDrop("Ancient Bark", 1.00);
+        tryDrop("Treant Heartwood", 0.70);
+        tryDrop("Nature Crystal", 0.30);
+        tryDrop("Treant Core", 0.10);
+        tryDrop("Treant Seed", 0.05);
+        tryDrop("Woodland Shield", 0.03);
+      } else {
+        // Fallback for tutorial dummy etc
+        if (Math.random() < 0.4) drops.push({ id: gid(), name: "Healing Potion", type: "consumable", healAmount: "2d4+2", effect: "heal", value: 50, description: "Restores 2d4+2 HP." });
+        if (Math.random() < 0.5) drops.push({ id: gid(), ...BRANCH_ITEM });
+        if (Math.random() < 0.6) updateChar(char.id, ch => ({ gold: ch.gold + 2 + Math.floor(Math.random() * 5) }));
+      }
     });
     let updatedAQ = (char.activeQuests || []).map(q => {
       if (q.killTarget) {
@@ -467,7 +514,7 @@ export function useGameEngine() {
       
       let newBuffs = prev.activeBuffs || [];
       if (isPlayerTurnEnding) {
-        newBuffs = newBuffs.filter(b => b !== "rooted" && b !== "extra_attack_used");
+        newBuffs = newBuffs.filter(b => b !== "rooted");
       }
 
       return {
@@ -1241,10 +1288,7 @@ export function useGameEngine() {
     if (!isReaction) {
       if (isOffHand && combat.extraActionUsed) { notify(`Debug: offhand used`); return; }
       if (!isOffHand && combat.actionUsed) {
-        // Allow Extra Attack if they have the buff
-        if (!(char.class === "Fighter" && char.level >= 5 && (combat.activeBuffs || []).includes("extra_attack_used"))) {
-          notify(`Debug: main action used and no extra attack`); return;
-        }
+        notify(`Debug: main action used`); return;
       }
     }
     
@@ -1288,15 +1332,14 @@ export function useGameEngine() {
     const total = roll + mod + char.profBonus + extraHitBonus;
 
     if (!isReaction) {
-      // Extra Attack Logic (Fighter Lv 5)
-      const canExtraAttack = char.class === "Fighter" && char.level >= 5;
-      const isFirstAttackOfAction = !(combat.activeBuffs || []).includes("extra_attack_used");
-
       if (!isOffHand) {
-        if (canExtraAttack && isFirstAttackOfAction) {
-          setCombat(prev => ({ ...prev, activeBuffs: [...(prev.activeBuffs || []), "extra_attack_used"] }));
-        } else {
-          setCombat(prev => ({ ...prev, ...consumeMainAction(prev) }));
+        setCombat(prev => ({ ...prev, ...consumeMainAction(prev) }));
+        
+        // Auto Extra Attack for Fighter Lv 5+
+        if (char.class === "Fighter" && char.level >= 5) {
+          setTimeout(() => {
+            handleAttackMonster(monsterId, false, true);
+          }, 400);
         }
       } else {
         setCombat(prev => ({ ...prev, extraActionUsed: true }));
@@ -1460,14 +1503,10 @@ export function useGameEngine() {
 
   function handleTileClick(x: number, y: number) {
     if (!char || specialDialog) return;
-    if (stealthCasting) {
-      notify("Cannot move while hiding!");
-      return;
-    }
     
     // Prevent spamming movement
     const now = Date.now();
-    const moveDelay = stealthActive ? 400 : 200;
+    const moveDelay = stealthActive ? 300 : 120;
     if (now - moveCooldownRef.current < moveDelay) return;
     moveCooldownRef.current = now;
 
@@ -1557,7 +1596,7 @@ export function useGameEngine() {
         updateChar(char.id, { position: nextPos });
         if (screen === "dungeon") revealFog(nextPos);
         setMovingPath(prev => prev.slice(1));
-      }, 100);
+      }, 70);
       return () => clearTimeout(timer);
     }
   }, [movingPath, combat.active, screen, char?.id]);
@@ -1566,10 +1605,6 @@ export function useGameEngine() {
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if ((screen !== "town" && screen !== "dungeon" && screen !== "sanctuary" && screen !== "tutorial") || !char || specialDialog) return;
-      if (stealthCasting) {
-        notify("Cannot move while hiding!");
-        return;
-      }
 
       let dx = 0, dy = 0;
       if (e.key === "w" || e.key === "W" || e.key === "ArrowUp") dy = -1;
@@ -1580,7 +1615,7 @@ export function useGameEngine() {
       if (dx === 0 && dy === 0) return;
 
       const now = Date.now();
-      const moveDelay = stealthActive ? 400 : 200;
+      const moveDelay = stealthActive ? 300 : 120;
       if (now - moveCooldownRef.current < moveDelay) return;
       moveCooldownRef.current = now;
 
@@ -1740,6 +1775,48 @@ export function useGameEngine() {
       updateChar(char.id, c => ({ inventory: c.inventory.filter(i => i.id !== item.id) }));
     }
   }
+
+  function handleObjectClick(id: string, type: "chest" | "secret") {
+    if (!char) return;
+    if (type === "chest") {
+      const chest = gs.dungeonChests?.find(c => c.id === id);
+      if (chest && !chest.opened) {
+        setGs(prev => ({ ...prev, dungeonChests: prev.dungeonChests.map(c => c.id === id ? { ...c, opened: true } : c) }));
+        const roll = Math.random();
+        let itemName = "Minor Healing Potion";
+        if (roll < 0.35) itemName = "Minor Healing Potion";
+        else if (roll < 0.65) {
+          updateChar(char.id, ch => ({ gold: ch.gold + 50 }));
+          notify(`🎁 Opened chest! Found 50 Gold.`);
+          return;
+        } else if (roll < 0.80) {
+          const equips = ["Rusty Dagger", "Leather Boots", "Hunter Bow", "Scout Cloak"];
+          itemName = equips[Math.floor(Math.random() * equips.length)];
+        } else if (roll < 0.90) {
+          const rares = ["Pure Slime Core", "Alpha Fang", "Ancient Vine", "Scout Badge"];
+          itemName = rares[Math.floor(Math.random() * rares.length)];
+        } else if (roll < 0.95) itemName = "Equipment Enhancement Stone";
+        else itemName = "Treasure Map Fragment";
+        
+        const itemDef = MONSTER_DROPS.find(i => i.name === itemName) || SHOP_ITEMS.find(i => i.name === itemName);
+        if (itemDef) {
+          updateChar(char.id, ch => ({ inventory: [...ch.inventory, { ...itemDef, id: gid() }] }));
+          notify(`🎁 Opened chest! Found ${itemName}.`);
+        }
+      }
+    } else if (type === "secret") {
+      const secret = gs.dungeonSecrets?.find(s => s.id === id);
+      if (secret && !secret.found) {
+        setGs(prev => ({ ...prev, dungeonSecrets: prev.dungeonSecrets.map(s => s.id === id ? { ...s, found: true } : s) }));
+        const itemDef = MONSTER_DROPS.find(i => i.name === "Selenia's Flower");
+        if (itemDef) {
+          updateChar(char.id, ch => ({ inventory: [...ch.inventory, { ...itemDef, id: gid() }] }));
+          notify(`🌸 You found a glowing flower... You feel a gentle warmth.`);
+        }
+      }
+    }
+  }
+
   function handleBuyItem(item: Item) {
     if (!char || char.gold < item.value) return;
     updateChar(char.id, c => ({ gold: c.gold - item.value, inventory: [...c.inventory, { ...item, id: gid() }] }));
@@ -1930,7 +2007,33 @@ export function useGameEngine() {
     if (!char) return; 
     setSeleniaTalkCount(0);updateChar(char.id, { position: DUNGEON_ENTER, currentMap: "dungeon" }); setScreen("dungeon"); setCombat(INIT_COMBAT);
     setFogRevealed(new Set([`${DUNGEON_ENTER.x},${DUNGEON_ENTER.y}`, `${DUNGEON_ENTER.x},${DUNGEON_ENTER.y - 1}`, `${DUNGEON_ENTER.x - 1},${DUNGEON_ENTER.y}`]));
-    setGs(prev => ({ ...prev, dungeonMonsters: parseWhisperingForest().monsters }));
+    
+    const getRandomWalkableTile = () => {
+      let rx, ry;
+      let attempts = 0;
+      do {
+        rx = Math.floor(Math.random() * 50);
+        ry = Math.floor(Math.random() * 40);
+        attempts++;
+      } while (!isWalkable("dungeon", rx, ry) && attempts < 100);
+      return { x: rx, y: ry };
+    };
+
+    const chests = [];
+    if (Math.random() < 0.20) {
+      chests.push({ id: gid(), position: getRandomWalkableTile(), opened: false });
+    }
+    const secrets = [];
+    if (Math.random() < 0.15) {
+      secrets.push({ id: gid(), position: getRandomWalkableTile(), found: false, type: "selenias_flower" });
+    }
+
+    setGs(prev => ({ 
+      ...prev, 
+      dungeonMonsters: parseWhisperingForest().monsters,
+      dungeonChests: chests,
+      dungeonSecrets: secrets
+    }));
     notify("Entered Darkroot Depths. Monsters lurk in the dark...", 3000);
   }
   function enterSanctuary() { if (!char) return; updateChar(char.id, { position: { x: 15, y: 16 }, currentMap: "sanctuary" }); setScreen("sanctuary"); setCombat(INIT_COMBAT); }
@@ -1964,6 +2067,8 @@ export function useGameEngine() {
     }
     setSeleniaTalkCount(prev => prev + 1);
 
+    const hasFlower = char.inventory.some(i => i.name === "Selenia's Flower");
+
     setSeleniaDialogTree({
       start: {
         emotion: greetingEmotion,
@@ -1974,6 +2079,7 @@ export function useGameEngine() {
         emotion: "normal",
         text: "Is there something you'd like to talk about?",
         choices: [
+          ...(hasFlower ? [{ label: "I found this flower for you...", next: "give_flower" }] : []),
           { label: "Learn the basics again", next: "tutorial_ask" },
           { label: "I have a question about the world", next: "questions_menu" },
           { label: "Send a message to the Creator", next: "feedback_ask" },
@@ -1981,6 +2087,22 @@ export function useGameEngine() {
           { label: "I just missed you", next: "miss_you" },
           { label: "Just passing by", next: "accidental" },
           { label: "I should get going", next: () => setSeleniaDialogTree(null) }
+        ]
+      },
+      give_flower: {
+        emotion: "shocked",
+        text: "W-what...? This is... a Moonbloom? Where did you find this? They only grow in places with deep, ancient magic...",
+        next: "give_flower2"
+      },
+      give_flower2: {
+        emotion: "blushing",
+        text: "You really brought this back... just for me? Thank you, Traveler. I... I will treasure it always.",
+        choices: [
+          { label: "You're welcome.", next: () => {
+              updateChar(char.id, ch => ({ inventory: ch.inventory.filter(i => i.name !== "Selenia's Flower") }));
+              setSeleniaDialogTree(null);
+            }
+          }
         ]
       },
       questions_menu: {
@@ -2216,7 +2338,7 @@ export function useGameEngine() {
     updateChar,
     // combat
     startCombat, endCombat, endPlayerTurn, handleSpellSelect, handleCastSpellAtTile,
-    handleCastSpell, handleHealSelf, handleGuard, handleMonsterClick, handleAttackMonster,
+    handleCastSpell, handleHealSelf, handleGuard, handleMonsterClick, handleObjectClick, handleAttackMonster,
     executeBombEffect, handleAOECastFromGrid,
     handleFlee: () => {}, // unused
     handleShortRest, handleLongRest,

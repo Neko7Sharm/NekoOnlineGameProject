@@ -5,7 +5,8 @@ import { CLASS_SPELLS, WIZARD_SPELL_CHOICES } from "../../constants/classes";
 import { SKILL_DICTIONARY } from "../../constants/skills";
 import {
   getMapCols, getMapRows, CELL, MOVE_SQUARES, SIGHT, DUNGEON_ENTER, DUNGEON_EXIT,
-  TOWN_SPECIAL, SANCTUARY_SPECIAL, getTownTile, getDungeonTile, getSanctuaryTile, getTutorialTile
+  TOWN_SPECIAL, SANCTUARY_SPECIAL, getTownTile, getDungeonTile, getSanctuaryTile, getTutorialTile,
+  hasLineOfSight
 } from "../../constants/map";
 import { dist } from "../../utils/dice";
 import type { MapGridProps } from "../../types/game";
@@ -65,7 +66,7 @@ function getConeTiles(playerPos: { x: number; y: number }, mouseX: number, mouse
   return tiles;
 }
 
-export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode, selectedSpell, onTileClick, onMonsterClick, onAOECast, effects, dyingMonsters, hitTokenIds, onHealSelf, insightVisionTiles }: MapGridProps) {
+export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogRevealed, combatMode, selectedSpell, onTileClick, onMonsterClick, onObjectClick, onAOECast, effects, dyingMonsters, hitTokenIds, onHealSelf, insightVisionTiles }: MapGridProps) {
   const cols = getMapCols(mode);
   const rows = getMapRows(mode);
   const pos = char.position;
@@ -79,7 +80,11 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
       for (let dx = -SIGHT; dx <= SIGHT; dx++) {
         if (Math.abs(dx) + Math.abs(dy) <= SIGHT) {
           const fx = pos.x + dx, fy = pos.y + dy;
-          if (fx >= 0 && fx < cols && fy >= 0 && fy < rows) visible.add(`${fx},${fy}`);
+          if (fx >= 0 && fx < cols && fy >= 0 && fy < rows) {
+            if (hasLineOfSight("dungeon", pos.x, pos.y, fx, fy)) {
+              visible.add(`${fx},${fy}`);
+            }
+          }
         }
       }
   }
@@ -288,13 +293,18 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
         )}
         {mode === "dungeon" && (
           <>
-            {wfMap.rocks.map((r, i) => (
-              <img key={`rock-${i}`} src={coverRock} style={{ position: "absolute", left: r.x * CELL, top: r.y * CELL, width: CELL, height: CELL, pointerEvents: "none", zIndex: 4, objectFit: "contain" }} alt="Rock" />
-            ))}
-            {wfMap.logs.map((l, i) => (
-              <img key={`log-${i}`} src={coverLog} style={{ position: "absolute", left: l.x * CELL, top: l.y * CELL, width: CELL, height: CELL, pointerEvents: "none", zIndex: 4, objectFit: "contain" }} alt="Log" />
-            ))}
-            <img src={sacredTree} style={{ position: "absolute", left: (wfMap.landmark.x - 2.5) * CELL, top: (wfMap.landmark.y - 3) * CELL, width: 6 * CELL, height: 6 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain" }} alt="Sacred Tree" />
+            {wfMap.rocks.filter(r => fogRevealed.has(`${r.x},${r.y}`)).map((r, i) => {
+              const isDimmed = !visible.has(`${r.x},${r.y}`);
+              return <img key={`rock-${i}`} src={coverRock} style={{ position: "absolute", left: r.x * CELL, top: r.y * CELL, width: CELL, height: CELL, pointerEvents: "none", zIndex: 4, objectFit: "contain", opacity: isDimmed ? 0.4 : 1 }} alt="Rock" />
+            })}
+            {wfMap.logs.filter(l => fogRevealed.has(`${l.x},${l.y}`)).map((l, i) => {
+              const isDimmed = !visible.has(`${l.x},${l.y}`);
+              return <img key={`log-${i}`} src={coverLog} style={{ position: "absolute", left: l.x * CELL, top: l.y * CELL, width: CELL, height: CELL, pointerEvents: "none", zIndex: 4, objectFit: "contain", opacity: isDimmed ? 0.4 : 1 }} alt="Log" />
+            })}
+            {fogRevealed.has(`${wfMap.landmark.x},${wfMap.landmark.y}`) && (() => {
+              const isDimmed = !visible.has(`${wfMap.landmark.x},${wfMap.landmark.y}`);
+              return <img src={sacredTree} style={{ position: "absolute", left: (wfMap.landmark.x - 2.5) * CELL, top: (wfMap.landmark.y - 3) * CELL, width: 6 * CELL, height: 6 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain", opacity: isDimmed ? 0.4 : 1 }} alt="Sacred Tree" />
+            })()}
           </>
         )}
         {mode === "sanctuary" && (
@@ -387,6 +397,51 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
           );
         })}
 
+        {/* Chests */}
+        {chests?.filter(c => !c.opened && fogRevealed.has(`${c.position.x},${c.position.y}`)).map(c => {
+          const dx = Math.abs(pos.x - c.position.x);
+          const dy = Math.abs(pos.y - c.position.y);
+          const isAdjacent = dx <= 1 && dy <= 1;
+          return (
+            <div key={c.id}
+              onClick={() => { if (isAdjacent && onObjectClick) onObjectClick(c.id, "chest"); }}
+              style={{
+                position: "absolute",
+                left: c.position.x * CELL + 5, top: c.position.y * CELL + 5,
+                width: CELL - 10, height: CELL - 10,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: CELL * 0.6, cursor: isAdjacent ? "pointer" : "default",
+                background: isAdjacent ? "rgba(255,215,0,0.2)" : "transparent",
+                borderRadius: "5px"
+              }}>
+              🎁
+            </div>
+          );
+        })}
+
+        {/* Secrets */}
+        {secrets?.filter(s => !s.found && fogRevealed.has(`${s.position.x},${s.position.y}`)).map(s => {
+          const dx = Math.abs(pos.x - s.position.x);
+          const dy = Math.abs(pos.y - s.position.y);
+          const isAdjacent = dx <= 1 && dy <= 1;
+          return (
+            <div key={s.id}
+              onClick={() => { if (isAdjacent && onObjectClick) onObjectClick(s.id, "secret"); }}
+              style={{
+                position: "absolute",
+                left: s.position.x * CELL + 5, top: s.position.y * CELL + 5,
+                width: CELL - 10, height: CELL - 10,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: CELL * 0.6, cursor: isAdjacent ? "pointer" : "default",
+                background: isAdjacent ? "rgba(255,182,193,0.2)" : "transparent",
+                borderRadius: "50%",
+                textShadow: "0 0 10px #ffb3ff"
+              }}>
+              🌸
+            </div>
+          );
+        })}
+
         {/* Player token */}
         <div onClick={() => isHealSpell && onHealSelf?.()}
           style={{
@@ -398,7 +453,7 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
             boxShadow: `0 0 10px ${CLASS_CFG[char.class].color}70`,
             display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: CELL * 0.6, zIndex: 10, overflow: "visible",
-            transition: "transform 0.15s linear",
+            transition: "transform 0.1s linear",
             animation: hitTokenIds?.has(char.id) ? "dnd-shake 0.35s ease-in-out" : undefined,
             cursor: isHealSpell ? "pointer" : "default",
           }}>
@@ -423,18 +478,18 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
           if (e.type === "miss" || e.type === "number") {
             return (
               <div key={e.id} style={{
-                position: "absolute", left: ex - 20, top: ey - 16,
-                fontFamily: MO, fontSize: e.type === "miss" ? 10 : 13,
+                position: "absolute", left: ex - 24, top: ey - 20,
+                fontFamily: MO, fontSize: e.type === "miss" ? 14 : 20,
                 fontWeight: "bold", pointerEvents: "none", zIndex: 50,
                 color: e.type === "miss" ? C.muted : C.red,
-                textShadow: "1px 1px 0 #000, -1px -1px 0 #000",
+                textShadow: "2px 2px 0 #000, -2px -2px 0 #000",
                 animation: "dnd-float-up 0.8s ease-out forwards",
               }}>{e.value}</div>
             );
           }
           if (e.type === "slash") {
             return (
-              <svg key={e.id} style={{ position: "absolute", left: ex - 22, top: ey - 22, width: 44, height: 44, pointerEvents: "none", zIndex: 50, animation: "dnd-slash 0.45s ease-out forwards" }} viewBox="0 0 44 44">
+              <svg key={e.id} style={{ position: "absolute", left: ex - 40, top: ey - 40, width: 80, height: 80, pointerEvents: "none", zIndex: 50, animation: "dnd-slash 0.45s ease-out forwards" }} viewBox="0 0 44 44">
                 <line x1="8" y1="36" x2="36" y2="8" stroke="white" strokeWidth="3.5" strokeLinecap="round" />
                 <line x1="14" y1="38" x2="42" y2="10" stroke="rgba(255,255,255,0.45)" strokeWidth="2.5" strokeLinecap="round" />
                 <line x1="2" y1="30" x2="30" y2="2" stroke="rgba(255,255,255,0.25)" strokeWidth="2" strokeLinecap="round" />
@@ -443,7 +498,7 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
           }
           if (e.type === "scratch") {
             return (
-              <img key={e.id} src={effectScratch} style={{ position: "absolute", left: ex - 30, top: ey - 30, width: 60, height: 60, pointerEvents: "none", zIndex: 50, animation: "dnd-slash 0.35s ease-out forwards", objectFit: "contain" }} alt="Scratch" />
+              <img key={e.id} src={effectScratch} style={{ position: "absolute", left: ex - 50, top: ey - 50, width: 100, height: 100, pointerEvents: "none", zIndex: 50, animation: "dnd-slash 0.35s ease-out forwards", objectFit: "contain" }} alt="Scratch" />
             );
           }
           if (e.type === "arrow") {
@@ -454,7 +509,7 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
             const angle = Math.atan2(dy, dx) * 180 / Math.PI;
             return (
               <div key={e.id} style={{
-                position: "absolute", pointerEvents: "none", zIndex: 55, left: fromX - 20, top: fromY - 20, width: 40, height: 40
+                position: "absolute", pointerEvents: "none", zIndex: 55, left: fromX - 40, top: fromY - 40, width: 80, height: 80
               }}>
                 <style>{`
                   @keyframes arrow-fly-${e.id} {
@@ -468,22 +523,22 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
           }
           if (e.type === "whip") {
             return (
-              <img key={e.id} src={effectWhip} style={{ position: "absolute", left: ex - 40, top: ey - 40, width: 80, height: 80, pointerEvents: "none", zIndex: 50, animation: "dnd-slash 0.4s ease-out forwards", objectFit: "contain" }} alt="Whip" />
+              <img key={e.id} src={effectWhip} style={{ position: "absolute", left: ex - 70, top: ey - 70, width: 140, height: 140, pointerEvents: "none", zIndex: 50, animation: "dnd-slash 0.4s ease-out forwards", objectFit: "contain" }} alt="Whip" />
             );
           }
           if (e.type === "rootslam") {
             return (
-              <img key={e.id} src={effectRootslam} style={{ position: "absolute", left: ex - 100, top: ey - 100, width: 200, height: 200, pointerEvents: "none", zIndex: 50, animation: "dnd-fireball 0.7s ease-out forwards", objectFit: "contain" }} alt="Root Slam" />
+              <img key={e.id} src={effectRootslam} style={{ position: "absolute", left: ex - 150, top: ey - 150, width: 300, height: 300, pointerEvents: "none", zIndex: 50, animation: "dnd-fireball 0.7s ease-out forwards", objectFit: "contain" }} alt="Root Slam" />
             );
           }
           if (e.type === "fire_bolt") {
             return (
-              <div key={e.id} style={{ position: "absolute", left: ex - 20, top: ey - 20, width: 40, height: 40, borderRadius: "50%", pointerEvents: "none", zIndex: 50, background: "radial-gradient(circle, #fff8e0 0%, #ffcc00 30%, #ff6600 70%, transparent 100%)", animation: "dnd-fireball 0.55s ease-out forwards" }} />
+              <div key={e.id} style={{ position: "absolute", left: ex - 40, top: ey - 40, width: 80, height: 80, borderRadius: "50%", pointerEvents: "none", zIndex: 50, background: "radial-gradient(circle, #fff8e0 0%, #ffcc00 30%, #ff6600 70%, transparent 100%)", animation: "dnd-fireball 0.55s ease-out forwards" }} />
             );
           }
           if (e.type === "magic_missile") {
             return (
-              <svg key={e.id} style={{ position: "absolute", left: ex - 24, top: ey - 24, width: 48, height: 48, pointerEvents: "none", zIndex: 50, animation: "dnd-fireball 0.6s ease-out forwards" }} viewBox="0 0 48 48">
+              <svg key={e.id} style={{ position: "absolute", left: ex - 48, top: ey - 48, width: 96, height: 96, pointerEvents: "none", zIndex: 50, animation: "dnd-fireball 0.6s ease-out forwards" }} viewBox="0 0 48 48">
                 {[0, 60, 120, 180, 240, 300].map((ang, i) => {
                   const r = ang * Math.PI / 180;
                   return <line key={i} x1="24" y1="24" x2={24 + Math.cos(r) * 18} y2={24 + Math.sin(r) * 18} stroke="#88aaff" strokeWidth="2.5" strokeLinecap="round" />;
@@ -494,27 +549,27 @@ export function MapGrid({ mode, char, monsters, combat, fogRevealed, combatMode,
           }
           if (e.type === "sacred_flame") {
             return (
-              <div key={e.id} style={{ position: "absolute", left: ex - 20, top: ey - 20, width: 40, height: 40, borderRadius: "50%", pointerEvents: "none", zIndex: 50, background: "radial-gradient(circle, #fff 0%, #ffee88 40%, #ffaa00 80%, transparent 100%)", boxShadow: "0 0 20px #ffcc00", animation: "dnd-fireball 0.55s ease-out forwards" }} />
+              <div key={e.id} style={{ position: "absolute", left: ex - 40, top: ey - 40, width: 80, height: 80, borderRadius: "50%", pointerEvents: "none", zIndex: 50, background: "radial-gradient(circle, #fff 0%, #ffee88 40%, #ffaa00 80%, transparent 100%)", boxShadow: "0 0 40px #ffcc00", animation: "dnd-fireball 0.55s ease-out forwards" }} />
             );
           }
           if (e.type === "thunder") {
             return (
-              <div key={e.id} style={{ position: "absolute", left: ex - 28, top: ey - 28, width: 56, height: 56, borderRadius: "50%", pointerEvents: "none", zIndex: 50, background: "radial-gradient(circle, rgba(200,220,255,0.9) 0%, rgba(100,160,255,0.6) 50%, transparent 100%)", animation: "dnd-fireball 0.65s ease-out forwards" }} />
+              <div key={e.id} style={{ position: "absolute", left: ex - 55, top: ey - 55, width: 110, height: 110, borderRadius: "50%", pointerEvents: "none", zIndex: 50, background: "radial-gradient(circle, rgba(200,220,255,0.9) 0%, rgba(100,160,255,0.6) 50%, transparent 100%)", animation: "dnd-fireball 0.65s ease-out forwards" }} />
             );
           }
           if (e.type === "smite") {
             return (
-              <div key={e.id} style={{ position: "absolute", left: ex - 20, top: ey - 20, width: 40, height: 40, borderRadius: "50%", pointerEvents: "none", zIndex: 50, background: `radial-gradient(circle, #fff 0%, ${C.purple} 50%, transparent 100%)`, boxShadow: `0 0 20px ${C.purple}`, animation: "dnd-fireball 0.55s ease-out forwards" }} />
+              <div key={e.id} style={{ position: "absolute", left: ex - 40, top: ey - 40, width: 80, height: 80, borderRadius: "50%", pointerEvents: "none", zIndex: 50, background: `radial-gradient(circle, #fff 0%, ${C.purple} 50%, transparent 100%)`, boxShadow: `0 0 40px ${C.purple}`, animation: "dnd-fireball 0.55s ease-out forwards" }} />
             );
           }
           if (e.type === "heal") {
             return (
-              <div key={e.id} style={{ position: "absolute", left: ex - 16, top: ey - 16, fontFamily: MO, fontSize: 14, fontWeight: "bold", color: "#4cdb70", pointerEvents: "none", zIndex: 50, textShadow: "1px 1px 0 #000", animation: "dnd-float-up 1s ease-out forwards" }}>+{e.value}</div>
+              <div key={e.id} style={{ position: "absolute", left: ex - 24, top: ey - 24, fontFamily: MO, fontSize: 20, fontWeight: "bold", color: "#4cdb70", pointerEvents: "none", zIndex: 50, textShadow: "2px 2px 0 #000", animation: "dnd-float-up 1s ease-out forwards" }}>+{e.value}</div>
             );
           }
           if (e.type === "fire_aoe") {
             return (
-              <div key={e.id} style={{ position: "absolute", left: ex - 30, top: ey - 30, width: 60, height: 60, borderRadius: "50%", pointerEvents: "none", zIndex: 50, background: "radial-gradient(circle, rgba(255,200,50,0.8) 0%, rgba(255,80,0,0.6) 60%, transparent 100%)", animation: "dnd-fireball 0.7s ease-out forwards" }} />
+              <div key={e.id} style={{ position: "absolute", left: ex - 60, top: ey - 60, width: 120, height: 120, borderRadius: "50%", pointerEvents: "none", zIndex: 50, background: "radial-gradient(circle, rgba(255,200,50,0.8) 0%, rgba(255,80,0,0.6) 60%, transparent 100%)", animation: "dnd-fireball 0.7s ease-out forwards" }} />
             );
           }
           if (e.type === "sword_swing") {

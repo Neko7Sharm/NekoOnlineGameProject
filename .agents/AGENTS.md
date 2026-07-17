@@ -42,3 +42,15 @@ Selenia is a permanent, central NPC who serves as a guide and a bridge between t
 - **Separation of Concept and Calculation**:
   - **Selenia's Role (Lore & Concepts)**: Selenia is responsible for explaining the "Concepts" (e.g., what a Modifier is, how Armor Class works, the idea behind Hit Rolls) in a friendly, in-universe conversational manner. She teaches the player *how* the world works without overwhelming them with raw math.
   - **Status Screen's Role (Math & Transparency)**: The Status screen (UI/HUD) is responsible for showing the "Actual Numbers" and the exact "Calculation Methods" (e.g., Base HP + Con Mod + Level Bonus). The UI acts as the mathematical truth of the character, providing transparency and detailed breakdowns (via clickable elements or tooltips) for players who want to understand their exact stats and mechanics.
+
+## 8. Progression & Version Themes
+- **v0.5 (Core Gameplay & Combat)**: Focus on making combat and exploration deeply engaging up to the first dungeon's completion (Lv5). Systems include Damage Types (Slashing, Piercing, Bludgeoning, etc.), Weapon Properties (Heavy, Reach, Finesse, etc.), Stealth, Insight, and interactive Cover. The goal is for players to begin planning builds and experimenting with mechanics early on.
+- **v0.6 (Crafting & Exploration)**: Focus on making the world feel alive and giving value to exploration beyond combat. Introduces Gathering, Mining, Logging, Blacksmithing, and Alchemy. Replaces traditional stat progression for non-combat skills with a "Mastery" system that unlocks specific Passives.
+
+## 9. Crafting & Material Systems (v0.6+)
+- **Mastery & Passives**: Gathering and crafting systems use Mastery levels gained through actual usage, which unlock Passives (e.g., Green Thumb) rather than raw stats.
+- **Material Tags**: Materials possess inherent Tags (Healing, Nature, Poison, Magic, etc.) to encourage experimentation in the Alchemy Table's Experiment Mode.
+- **Recipe & Discovery Separation**: 
+  - **Recipe Book**: Tracks specific discovered combinations (Blacksmith, Alchemy) that can be crafted at appropriate stations.
+  - **Material Encyclopedia**: Tracks individual materials the player has discovered, including their Tags, drop sources, and which known recipes they are used in. This reduces cognitive load and allows the material system to scale cleanly without overwhelming the player.
+- **Hidden Content**: Emphasize secret recipes and items (e.g., Selenia's Flower) that are never explicitly stated by the game but must be discovered organically by the player.

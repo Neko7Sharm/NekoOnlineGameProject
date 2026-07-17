@@ -116,9 +116,11 @@ export default function App() {
                }}>
                  <div style={{ position: "relative" }}>
                    <MapGrid mode={screen} char={char} monsters={gs.dungeonMonsters}
+                     chests={gs.dungeonChests} secrets={gs.dungeonSecrets}
                      combat={combat} fogRevealed={fogRevealed} combatMode={combatMode}
                      selectedSpell={selectedSpell ?? undefined}
                      onTileClick={eng.handleTileClick} onMonsterClick={eng.handleMonsterClick}
+                     onObjectClick={eng.handleObjectClick}
                      onAOECast={eng.handleAOECastFromGrid}
                      effects={effects}
                      dyingMonsters={dyingMonsters}

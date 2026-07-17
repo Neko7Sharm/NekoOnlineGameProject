@@ -8,13 +8,13 @@ export const SIGHT = 11; // +5 for morning forest player sight
 
 export function getMapCols(mode: string) {
   if (mode === "sanctuary") return 27;
-  if (mode === "town") return 32;
+  if (mode === "town") return 29;
   return 50;
 }
 
 export function getMapRows(mode: string) {
   if (mode === "sanctuary") return 19;
-  if (mode === "town") return 24;
+  if (mode === "town") return 21;
   return 40;
 }
 
@@ -134,4 +134,42 @@ export function isWalkable(mode: "town" | "dungeon" | "sanctuary" | "tutorial", 
   if (mode === "sanctuary") return !getSanctuaryTile(x, y).isWall;
   if (mode === "tutorial") return !getTutorialTile(x, y).isWall;
   return true;
+}
+
+export function blocksVision(mode: "town" | "dungeon" | "sanctuary" | "tutorial", x: number, y: number): boolean {
+  if (x < 0 || x >= getMapCols(mode) || y < 0 || y >= getMapRows(mode)) return true;
+  if (mode === "town") return getTownTile(x, y).isWall;
+  if (mode === "dungeon") {
+    const tile = getDungeonTile(x, y);
+    return tile.isWall && !tile.isWater; // water doesn't block vision
+  }
+  if (mode === "sanctuary") return getSanctuaryTile(x, y).isWall;
+  if (mode === "tutorial") return getTutorialTile(x, y).isWall;
+  return false;
+}
+
+export function hasLineOfSight(mode: "town" | "dungeon" | "sanctuary" | "tutorial", startX: number, startY: number, targetX: number, targetY: number): boolean {
+  let x0 = startX;
+  let y0 = startY;
+  const x1 = targetX;
+  const y1 = targetY;
+  const dx = Math.abs(x1 - x0);
+  const dy = Math.abs(y1 - y0);
+  const sx = x0 < x1 ? 1 : -1;
+  const sy = y0 < y1 ? 1 : -1;
+  let err = dx - dy;
+
+  while (true) {
+    if (x0 === x1 && y0 === y1) return true;
+    if (blocksVision(mode, x0, y0)) return false; // hit a wall
+    const e2 = 2 * err;
+    if (e2 > -dy) {
+      err -= dy;
+      x0 += sx;
+    }
+    if (e2 < dx) {
+      err += dx;
+      y0 += sy;
+    }
+  }
 }

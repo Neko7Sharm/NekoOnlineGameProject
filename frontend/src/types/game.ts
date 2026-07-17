@@ -26,7 +26,7 @@ export interface Stats {
   str: number; dex: number; con: number; int: number; wis: number; cha: number;
 }
 
-export type ItemRarity = "common" | "uncommon" | "rare" | "epic" | "legendary";
+export type ItemRarity = "common" | "uncommon" | "rare" | "epic" | "legendary" | "boss_material";
 export type DamageType = "slashing" | "piercing" | "bludgeoning" | "fire" | "cold" | "lightning" | "poison" | "necrotic" | "radiant";
 export type WeaponProperty = "light" | "heavy" | "finesse" | "reach" | "versatile" | "thrown" | "loading" | "two-handed";
 
@@ -37,6 +37,7 @@ export interface Item {
   rarity?: ItemRarity;
   ac?: number; healAmount?: string; effect?: string; stat?: keyof Stats; bonus?: number;
   material?: boolean;
+  tags?: string[];
   saveStat?: keyof Stats;
   saveDC?: number;
   aoeRadius?: number;
@@ -160,6 +161,8 @@ export interface GameState {
   partyChat: Array<{ id: string; sender: string; text: string; time: string }>;
   party: Party | null;
   dungeonMonsters: Monster[];
+  dungeonChests: { id: string; position: {x: number, y: number}; opened: boolean }[];
+  dungeonSecrets: { id: string; position: {x: number, y: number}; found: boolean; type: string }[];
   availableQuests: Quest[];
   questRefreshAt: number;
 }
@@ -171,10 +174,13 @@ export interface GameState {
 export interface MapGridProps {
   mode: "town" | "dungeon";
   char: Character; monsters: Monster[];
+  chests?: { id: string; position: {x: number, y: number}; opened: boolean }[];
+  secrets?: { id: string; position: {x: number, y: number}; found: boolean; type: string }[];
   combat: CombatState; fogRevealed: Set<string>;
   combatMode: CombatModeT; selectedSpell?: string;
   onTileClick: (x: number, y: number) => void;
   onMonsterClick: (id: string) => void;
+  onObjectClick?: (id: string, type: "chest" | "secret") => void;
   onAOECast?: (affectedMonsterIds: string[], tileX: number, tileY: number) => void;
   effects: VisualEffect[];
   dyingMonsters?: Set<string>;
