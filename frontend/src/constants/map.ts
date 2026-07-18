@@ -108,13 +108,16 @@ export function getTownTile(x: number, y: number): { bg: string; isWall: boolean
 import { parseWhisperingForest } from "../maps/whispering_forest";
 const wfMap = parseWhisperingForest();
 
-export function getDungeonTile(x: number, y: number): { bg: string; isWall: boolean, isWater?: boolean } {
+export function getDungeonTile(x: number, y: number): { bg: string; isWall: boolean, isWater?: boolean, isLow?: boolean } {
   const cols = getMapCols("dungeon");
   const rows = getMapRows("dungeon");
   if (x < 0 || y < 0 || x >= cols || y >= rows) return { bg: "#050410", isWall: true };
   const key = `${x},${y}`;
-  if (wfMap.obstacles.has(key) && !wfMap.water.has(key)) return { bg: "transparent", isWall: true }; // Trees/Rocks
-  if (wfMap.water.has(key)) return { bg: "#2a4b8d", isWall: true, isWater: true }; // Water blocks movement but not sight
+  if (wfMap.obstacles.has(key)) {
+     if (wfMap.water.has(key)) return { bg: "#2a4b8d", isWall: true, isWater: true }; 
+     return { bg: "transparent", isWall: true, isLow: wfMap.lowObstacles.has(key) };
+  }
+  if (wfMap.water.has(key)) return { bg: "#2a4b8d", isWall: true, isWater: true }; 
   
   // Grass floor
   const shade = (x * 3 + y * 5) % 3;
@@ -153,7 +156,7 @@ export function blocksVision(mode: "town" | "dungeon" | "sanctuary" | "tutorial"
   if (mode === "town") return getTownTile(x, y).isWall;
   if (mode === "dungeon") {
     const tile = getDungeonTile(x, y);
-    return tile.isWall && !tile.isWater; // water doesn't block vision
+    return tile.isWall && !tile.isWater && !tile.isLow; // water and low covers don't block vision
   }
   if (mode === "sanctuary") return getSanctuaryTile(x, y).isWall;
   if (mode === "tutorial") return getTutorialTile(x, y).isWall;

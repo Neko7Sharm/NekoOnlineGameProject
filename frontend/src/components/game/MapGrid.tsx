@@ -28,10 +28,24 @@ import monsterTreant from "../../assets/monster_treant.png";
 import sacredTree from "../../assets/sacred_tree.png";
 import coverRock from "../../assets/cover_rock.png";
 import coverLog from "../../assets/cover_log.png";
+import coverLogH from "../../assets/cover_log_h.png";
+import coverLogV from "../../assets/cover_log_v.png";
 import effectScratch from "../../assets/effect_scratch.png";
 import effectArrow from "../../assets/effect_arrow.png";
 import effectWhip from "../../assets/effect_whip.png";
 import effectRootslam from "../../assets/effect_rootslam.png";
+
+// Longsword Custom Effects
+import lsSlash1 from "../../assets/effect/attackeffect/slash1/1.png";
+import lsSlash2 from "../../assets/effect/attackeffect/slash1/2.png";
+import lsSlash3 from "../../assets/effect/attackeffect/slash1/3.png";
+import lsSlash4 from "../../assets/effect/attackeffect/slash1/4.png";
+
+import lsHit1 from "../../assets/effect/hiteffect/slash1/1.png";
+import lsHit2 from "../../assets/effect/hiteffect/slash1/2.png";
+import lsHit3 from "../../assets/effect/hiteffect/slash1/3.png";
+import lsHit4 from "../../assets/effect/hiteffect/slash1/4.png";
+
 import { AmbientSystem } from "./AmbientSystem";
 import { parseWhisperingForest } from "../../maps/whispering_forest";
 
@@ -185,6 +199,10 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
   return (
     <>
       <style>{`
+        @keyframes anim-frame-1 { 0%, 24.9% { opacity: 1; } 25%, 100% { opacity: 0; } }
+        @keyframes anim-frame-2 { 0%, 24.9% { opacity: 0; } 25%, 49.9% { opacity: 1; } 50%, 100% { opacity: 0; } }
+        @keyframes anim-frame-3 { 0%, 49.9% { opacity: 0; } 50%, 74.9% { opacity: 1; } 75%, 100% { opacity: 0; } }
+        @keyframes anim-frame-4 { 0%, 74.9% { opacity: 0; } 75%, 100% { opacity: 1; } }
         @keyframes dnd-slash { 0%{opacity:0;transform:scale(0.3) rotate(-25deg)} 30%{opacity:1;transform:scale(1) rotate(-25deg)} 100%{opacity:0;transform:scale(1.6) rotate(-25deg)} }
         @keyframes dnd-float-up { 0%{opacity:1;transform:translateY(0)} 60%{opacity:1;transform:translateY(-22px)} 100%{opacity:0;transform:translateY(-44px)} }
         @keyframes dnd-fireball { 0%{opacity:0;transform:scale(0)} 35%{opacity:1;transform:scale(1.1)} 100%{opacity:0;transform:scale(2)} }
@@ -315,7 +333,10 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
             })}
             {wfMap.logs.filter(l => fogRevealed.has(`${l.x},${l.y}`)).map((l, i) => {
               const isDimmed = !visible.has(`${l.x},${l.y}`);
-              return <img key={`log-${i}`} src={coverLog} style={{ position: "absolute", left: l.x * CELL, top: l.y * CELL, width: CELL, height: CELL, pointerEvents: "none", zIndex: 4, objectFit: "contain", opacity: isDimmed ? 0.4 : 1 }} alt="Log" />
+              const src = l.type === "H" ? coverLogH : l.type === "V" ? coverLogV : coverLog;
+              const w = l.type === "H" ? 2 * CELL : CELL;
+              const h = l.type === "V" ? 2 * CELL : CELL;
+              return <img key={`log-${i}`} src={src} style={{ position: "absolute", left: l.x * CELL, top: l.y * CELL, width: w, height: h, pointerEvents: "none", zIndex: 4, objectFit: "fill", opacity: isDimmed ? 0.4 : 1 }} alt="Log" />
             })}
             {fogRevealed.has(`${wfMap.landmark.x},${wfMap.landmark.y}`) && (() => {
               const isDimmed = !visible.has(`${wfMap.landmark.x},${wfMap.landmark.y}`);
@@ -346,11 +367,11 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
           </>
         )}
 
-        {/* Monster tokens */}
         {monsters.filter(m => m.hp > 0).map(m => {
           const key = `${m.position.x},${m.position.y}`;
+          const isEngagedInCombat = combat.active && (combat.engagedMonsterIds || []).includes(m.id);
           if (mode === "town") return null;
-          if (mode === "dungeon" && !visible.has(key)) return null;
+          if (mode === "dungeon" && !visible.has(key) && !isEngagedInCombat) return null;
           const isAttackable = attackableM.has(m.id);
           const isSpellable = spellableM.has(m.id);
           const isAoeTarget = aoeHitMonsters.has(m.id);
@@ -375,7 +396,9 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
                 fontSize: CELL * 0.5, display: "flex", alignItems: "center", justifyContent: "center",
                 animation: "dnd-dissolve 0.9s ease-out forwards",
                 pointerEvents: "none",
-              }}>🪵</div>
+              }}>
+                {m.image ? <img src={MONSTER_IMAGES[m.image]} style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "50%" }} alt={m.name} /> : "💀"}
+              </div>
             );
           }
 
@@ -510,18 +533,62 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
               }}>{e.value}</div>
             );
           }
-          if (e.type === "slash") {
+          if (e.type === "slash" || e.type === "scratch" || e.type === "whip" || e.type === "sword_swing") {
+            // User requested to remove all generic melee attack effects for now to prepare for new custom animations
+            return null;
+          }
+
+          if (e.type === "ls_slash") {
+            // Calculate angle if there's a target
+            let angle = 0;
+            let cx = ex;
+            let cy = ey;
+            if (e.targetX !== undefined && e.targetY !== undefined) {
+              const fromX = e.targetX * CELL + CELL / 2;
+              const fromY = e.targetY * CELL + CELL / 2;
+              const dx = ex - fromX;
+              const dy = ey - fromY;
+              angle = Math.atan2(dy, dx) * 180 / Math.PI;
+              // Center the slash between player and monster
+              cx = fromX + dx * 0.55;
+              cy = fromY + dy * 0.55;
+            }
+            const animStyle: React.CSSProperties = { position: "absolute", width: "100%", height: "100%", objectFit: "contain", opacity: 0 };
             return (
-              <svg key={e.id} style={{ position: "absolute", left: ex - 40, top: ey - 40, width: 80, height: 80, pointerEvents: "none", zIndex: 50, animation: "dnd-slash 0.45s ease-out forwards" }} viewBox="0 0 44 44">
-                <line x1="8" y1="36" x2="36" y2="8" stroke="white" strokeWidth="3.5" strokeLinecap="round" />
-                <line x1="14" y1="38" x2="42" y2="10" stroke="rgba(255,255,255,0.45)" strokeWidth="2.5" strokeLinecap="round" />
-                <line x1="2" y1="30" x2="30" y2="2" stroke="rgba(255,255,255,0.25)" strokeWidth="2" strokeLinecap="round" />
-              </svg>
+              <div key={e.id} style={{
+                position: "absolute", pointerEvents: "none", zIndex: 60, left: cx - 160, top: cy - 160, width: 320, height: 320,
+                transform: `rotate(${angle}deg) scaleY(${e.flip ? -1 : 1}) scale(${e.scale || 1})`,
+                mixBlendMode: "screen"
+              }}>
+                <img src={lsSlash1} style={{ ...animStyle, animation: "anim-frame-1 0.25s linear forwards" }} />
+                <img src={lsSlash2} style={{ ...animStyle, animation: "anim-frame-2 0.25s linear forwards" }} />
+                <img src={lsSlash3} style={{ ...animStyle, animation: "anim-frame-3 0.25s linear forwards" }} />
+                <img src={lsSlash4} style={{ ...animStyle, animation: "anim-frame-4 0.25s linear forwards" }} />
+              </div>
             );
           }
-          if (e.type === "scratch") {
+
+          if (e.type === "ls_hit") {
+            let angle = 0;
+            if (e.targetX !== undefined && e.targetY !== undefined) {
+              const fromX = e.targetX * CELL + CELL / 2;
+              const fromY = e.targetY * CELL + CELL / 2;
+              const dx = ex - fromX;
+              const dy = ey - fromY;
+              angle = Math.atan2(dy, dx) * 180 / Math.PI;
+            }
+            const animStyle: React.CSSProperties = { position: "absolute", width: "100%", height: "100%", objectFit: "contain", opacity: 0 };
             return (
-              <img key={e.id} src={effectScratch} style={{ position: "absolute", left: ex - 50, top: ey - 50, width: 100, height: 100, pointerEvents: "none", zIndex: 50, animation: "dnd-slash 0.35s ease-out forwards", objectFit: "contain" }} alt="Scratch" />
+              <div key={e.id} style={{
+                position: "absolute", pointerEvents: "none", zIndex: 65, left: ex - 75, top: ey - 75, width: 150, height: 150,
+                transform: `rotate(${angle}deg) scaleY(${e.flip ? -1 : 1}) scale(${e.scale || 1})`,
+                mixBlendMode: "screen"
+              }}>
+                <img src={lsHit1} style={{ ...animStyle, animation: "anim-frame-1 0.2s linear forwards" }} />
+                <img src={lsHit2} style={{ ...animStyle, animation: "anim-frame-2 0.2s linear forwards" }} />
+                <img src={lsHit3} style={{ ...animStyle, animation: "anim-frame-3 0.2s linear forwards" }} />
+                <img src={lsHit4} style={{ ...animStyle, animation: "anim-frame-4 0.2s linear forwards" }} />
+              </div>
             );
           }
           if (e.type === "arrow") {
@@ -542,11 +609,6 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
                 `}</style>
                 <img src={effectArrow} style={{ width: "100%", height: "100%", objectFit: "contain", transform: `rotate(${angle + 45}deg)`, animation: `arrow-fly-${e.id} 0.35s linear forwards` }} alt="Arrow" />
               </div>
-            );
-          }
-          if (e.type === "whip") {
-            return (
-              <img key={e.id} src={effectWhip} style={{ position: "absolute", left: ex - 70, top: ey - 70, width: 140, height: 140, pointerEvents: "none", zIndex: 50, animation: "dnd-slash 0.4s ease-out forwards", objectFit: "contain" }} alt="Whip" />
             );
           }
           if (e.type === "rootslam") {

@@ -77,7 +77,13 @@ export interface Monster {
   position: { x: number; y: number }; damage: string; range: number;
   attackMod: number; initiative: number; xp: number; sightRange: number; alerted: boolean;
   insightDC?: number;
-  state?: "idle" | "suspicious" | "alert" | "combat";
+  // --- New AI State & Vision ---
+  personality?: "aggressive" | "cautious" | "territorial" | "cowardly" | "boss";
+  aiState?: "idle" | "patrol" | "investigate" | "alert" | "combat" | "search" | "return";
+  facing?: "N" | "E" | "S" | "W";
+  visionType?: "360" | "180" | "cone" | "short_360";
+  lastSeenCharPos?: { x: number; y: number } | null;
+  // -----------------------------
   stealth?: number;
   image?: string;
   size?: number; // 1 for 1x1 (default), 3 for 3x3 (center-anchored)
@@ -126,10 +132,12 @@ export interface SkillDef {
 
 export interface VisualEffect {
   id: string;
-  type: "slash" | "scratch" | "fire_bolt" | "magic_missile" | "sacred_flame" | "thunder" | "fire_aoe" | "smite" | "heal" | "miss" | "number" | "sword_swing" | "arrow" | "whip" | "rootslam";
+  type: "slash" | "scratch" | "fire_bolt" | "magic_missile" | "sacred_flame" | "thunder" | "fire_aoe" | "smite" | "heal" | "miss" | "number" | "sword_swing" | "arrow" | "whip" | "rootslam" | "ls_slash" | "ls_hit";
   targetX?: number; targetY?: number;
   gridX: number; gridY: number;
   value?: string;
+  flip?: boolean;
+  scale?: number;
 }
 
 export interface DiceRollDisplay {

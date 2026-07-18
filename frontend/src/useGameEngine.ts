@@ -17,8 +17,7 @@ import { genMonsters, genQuests } from "./game/character";
 import { parseWhisperingForest } from "./maps/whispering_forest";
 const wfMap = parseWhisperingForest();
 
-// Bresenham's Line Algorithm for Line of Sight
-export function checkLineOfSight(x0: number, y0: number, x1: number, y1: number, obstacles: Set<string>): boolean {
+export function checkLineOfSight(x0: number, y0: number, x1: number, y1: number, obstacles: Set<string>, covers?: Set<string>, ignoreCover: boolean = false): boolean {
   let dx = Math.abs(x1 - x0);
   let dy = Math.abs(y1 - y0);
   let sx = (x0 < x1) ? 1 : -1;
@@ -27,12 +26,84 @@ export function checkLineOfSight(x0: number, y0: number, x1: number, y1: number,
 
   while(true) {
     if (x0 === x1 && y0 === y1) return true; // Reached target
-    if (obstacles.has(`${x0},${y0}`)) return false; // Blocked by obstacle
+    if (obstacles.has(`${x0},${y0}`) && !wfMap.lowObstacles.has(`${x0},${y0}`)) return false; // Blocked by wall
+    if (!ignoreCover && covers && covers.has(`${x0},${y0}`)) return false; // Blocked by cover (unless ignored)
     
     let e2 = 2 * err;
     if (e2 > -dy) { err -= dy; x0 += sx; }
     if (e2 < dx) { err += dx; y0 += sy; }
   }
+}
+
+// ── HYBRID FOV VISION CHECK ──
+export function checkMonsterVision(
+  monster: import("./types/game").Monster,
+  targetX: number, targetY: number,
+  obstacles: Set<string>, covers: Set<string>,
+  stealthMode: boolean = false
+): boolean {
+  // 1. Line of Sight check (Cover blocks vision during exploration)
+  if (!checkLineOfSight(monster.position.x, monster.position.y, targetX, targetY, obstacles, covers, false)) {
+    return false;
+  }
+  
+  const dist = Math.max(Math.abs(monster.position.x - targetX), Math.abs(monster.position.y - targetY));
+  
+  // 2. Range check
+  const vType = monster.visionType || "360";
+  let maxRange = monster.sightRange;
+  if (vType === "short_360") maxRange = Math.min(3, maxRange);
+  if (dist > maxRange) return false;
+
+  // 3. Directional/Cone check
+  const dx = targetX - monster.position.x;
+  const dy = targetY - monster.position.y;
+  
+  // They can always sense you if you're right next to them (1 tile 360 vision)
+  if (dist <= 1 && !stealthMode) return true;
+  if (dist <= 1 && stealthMode) {
+     // If stealthed, maybe give a chance? For now, let's say they still see you if you're right next to them
+     // unless you are perfectly hidden. Let's just return true.
+     return true;
+  }
+  
+  // Angle relative to monster. 0 is Right(E), PI/2 is Down(S), PI is Left(W), -PI/2 is Up(N).
+  const angleToTarget = Math.atan2(dy, dx); 
+  
+  let facingAngle = 0;
+  switch (monster.facing || "S") {
+    case "N": facingAngle = -Math.PI/2; break;
+    case "E": facingAngle = 0; break;
+    case "S": facingAngle = Math.PI/2; break;
+    case "W": facingAngle = Math.PI; break;
+  }
+  
+  // Normalize angle diff to [-PI, PI]
+  let angleDiff = angleToTarget - facingAngle;
+  while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+  while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+  angleDiff = Math.abs(angleDiff);
+
+  let inVision = false;
+  let isPeripheral = false;
+
+  if (vType === "360" || vType === "short_360") {
+    inVision = true;
+  } else if (vType === "180") { // 180 degrees (PI radians) => +/- 90 deg (PI/2)
+    if (angleDiff <= Math.PI / 2 + 0.1) inVision = true;
+    if (angleDiff > Math.PI / 4 && angleDiff <= Math.PI / 2 + 0.1) isPeripheral = true;
+  } else if (vType === "cone" || vType === "90") { // 90 degrees => +/- 45 deg (PI/4)
+    if (angleDiff <= Math.PI / 4 + 0.1) inVision = true;
+    if (angleDiff > Math.PI / 8 && angleDiff <= Math.PI / 4 + 0.1) isPeripheral = true;
+  }
+
+  if (!inVision) return false;
+
+  // 4. Stealth check interaction
+  // We no longer arbitrarily reduce vision range here. The actual stealth roll
+  // happens in the AI loop when seesPlayer is true.
+
+  return true;
 }
 
 const INIT_COMBAT: CombatState = {
@@ -106,6 +177,9 @@ export function useGameEngine() {
   // Exploration System States
   const [insightCooldown, setInsightCooldown] = useState<number>(0);
   const [insightVisionTiles, setInsightVisionTiles] = useState<Set<string>>(new Set());
+  const insightRevealedIdsRef = useRef<Set<string>>(new Set());
+  const lsAttackFlipRef = useRef<boolean>(false);
+  const insightActiveUntilRef = useRef<number>(0);
   const [stealthActive, setStealthActive] = useState(false);
   const stealthedMonstersRef = useRef<Set<string>>(new Set());
   // Synchronous gate so tutorials never fire twice even when React state hasn't flushed yet
@@ -115,6 +189,8 @@ export function useGameEngine() {
   const monsterTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const char = activeCharId ? gs.characters[activeCharId] : null;
+  const charRef = useRef<Character | null>(char);
+  useEffect(() => { charRef.current = char; }, [char]);
 
   useEffect(() => { persist(gs); }, [gs]);
 
@@ -407,93 +483,6 @@ export function useGameEngine() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gs.dungeonMonsters, combat.active]);
 
-  // Out of combat exploration tick
-  useEffect(() => {
-    if (screen !== "dungeon" || combat.active || !char) return;
-    clearTimeout(monsterTimerRef.current);
-    monsterTimerRef.current = setTimeout(() => {
-      let shouldStartCombat = false;
-      let combatMonsters: string[] = [];
-      let newMonsters = gs.dungeonMonsters.map(m => ({ ...m }));
-      let stealthBroken = false;
-
-      newMonsters.forEach(m => {
-        if (m.hp <= 0) return;
-        const sight = m.state === "alert" ? m.sightRange + 3 : m.sightRange;
-        const d = distToEntity(char.position, m.position, m.size);
-        const hasLoS = checkLineOfSight(m.position.x, m.position.y, char.position.x, char.position.y, wfMap.obstacles);
-
-        if (d <= sight && hasLoS) {
-          // Player is in sight
-          let detected = true;
-          if (stealthActive) {
-            if (stealthedMonstersRef.current.has(m.id)) {
-              detected = false; // Player is hidden
-            } else {
-              const dexMod = getMod(char.stats.dex);
-              const roll = d20();
-              const total = roll + dexMod;
-              const perceptionRoll = d20() + Math.floor((m.insightDC ?? 10) / 2);
-              if (total >= perceptionRoll) {
-                detected = false;
-                stealthedMonstersRef.current.add(m.id);
-                addDiceRoll({ type: "skill", value: roll, total, mod: dexMod, max: 20, label: `Stealth vs ${m.name}` });
-                notify(`🥷 Evaded ${m.name}! (Stealth ${total} vs Perception ${perceptionRoll})`);
-              } else {
-                stealthBroken = true;
-                addDiceRoll({ type: "skill", value: roll, total, mod: dexMod, max: 20, label: `Stealth Failed` });
-                notify(`⚠️ ${m.name} spotted you! (Perception ${perceptionRoll} vs Stealth ${total})`);
-              }
-            }
-          }
-
-          if (detected) {
-            if (stealthBroken || m.state === "alert") {
-              if (m.state !== "alert") notify(`❗️ ${m.name} spots you!`);
-              m.state = "alert";
-              m.lastKnownPos = { ...char.position };
-              shouldStartCombat = true;
-              combatMonsters.push(m.id);
-            } else {
-              m.state = "alert";
-              m.lastKnownPos = { ...char.position };
-              notify(`❗️ ${m.name} is alerted!`);
-            }
-          }
-        } else if (m.state === "alert" && m.lastKnownPos) {
-          // Move towards last known pos
-          if (m.position.x === m.lastKnownPos.x && m.position.y === m.lastKnownPos.y) {
-            m.state = "idle"; // Reached spot, nothing there
-            notify(`❓ ${m.name} lost track of you.`);
-          } else {
-            const dx = m.lastKnownPos.x - m.position.x;
-            const dy = m.lastKnownPos.y - m.position.y;
-            const sx = Math.abs(dx) >= Math.abs(dy) ? Math.sign(dx) : 0;
-            const sy = Math.abs(dy) > Math.abs(dx) ? Math.sign(dy) : 0;
-            const nx = m.position.x + sx;
-            const ny = m.position.y + sy;
-            if (isWalkable("dungeon", nx, ny)) {
-              m.position = { x: nx, y: ny };
-            }
-          }
-        }
-      });
-
-      if (stealthBroken) {
-        setStealthActive(false);
-        stealthedMonstersRef.current.clear();
-      }
-      
-      // Update monster positions
-      if (JSON.stringify(newMonsters) !== JSON.stringify(gs.dungeonMonsters)) {
-        setGs(prev => ({ ...prev, dungeonMonsters: newMonsters }));
-      }
-
-      if (shouldStartCombat) {
-        startCombat(combatMonsters);
-      }
-    }, 400); // slightly slower tick
-  }, [char?.position, screen, combat.active, gs.dungeonMonsters, startCombat, stealthActive, addDiceRoll]);
 
   // New monsters joining
   useEffect(() => {
@@ -718,30 +707,85 @@ export function useGameEngine() {
           newMonsters[mIdx].bossSkillsUsed = bState;
       }
 
-      if (!bossSkillUsedThisTurn && monster.name !== "Walking Vine") {
-          for (let i = 0; i < steps; i++) {
-              const d = distToEntity(char.position, newPos, monster.size);
-              if (monster.name === "Goblin Scout" && d <= 2) {
-                  // Kite away
+      if (!bossSkillUsedThisTurn) {
+          if (monster.personality === "territorial") {
+              // Territorial: Does not move, just waits for player to enter range
+          } else if (monster.personality === "cautious") {
+              // Cautious: Find cover that has LoS to player. If HP < 40%, try to move away.
+              let hpPercent = monster.hp / monster.maxHp;
+              if (hpPercent < 0.4 && d <= 3) {
+                  // Retreat
                   const dx = newPos.x - char.position.x;
                   const dy = newPos.y - char.position.y;
                   const sx = Math.abs(dx) >= Math.abs(dy) ? Math.sign(dx) : 0;
                   const sy = Math.abs(dy) > Math.abs(dx) ? Math.sign(dy) : 0;
-                  let nx = newPos.x + sx;
-                  let ny = newPos.y + sy;
-                  if (isWalkable("dungeon", nx, ny)) {
-                      newPos = { x: nx, y: ny };
-                  } else break;
-              } else if (d > maxDist || (d <= maxDist && !checkLineOfSight(newPos.x, newPos.y, char.position.x, char.position.y, wfMap.obstacles))) {
-                  // Chase
-                  // Slime: Random Wander if no line of sight, but if in combat it should probably chase slowly.
-                  // For now, standard chase.
+                  for (let i = 0; i < steps; i++) {
+                      let nx = newPos.x + sx;
+                      let ny = newPos.y + sy;
+                      if (isWalkable("dungeon", nx, ny)) newPos = { x: nx, y: ny };
+                      else break;
+                  }
+              } else {
+                  // Find cover in range that has LoS to player
+                  let bestCoverPos = null;
+                  let minD = 999;
+                  for(let dy = -steps; dy <= steps; dy++) {
+                      for(let dx = -steps; dx <= steps; dx++) {
+                          if (Math.abs(dx) + Math.abs(dy) <= steps) {
+                              const tx = newPos.x + dx;
+                              const ty = newPos.y + dy;
+                              if (isWalkable("dungeon", tx, ty)) {
+                                  if (wfMap.covers.has(`${tx},${ty}`)) {
+                                      if (checkLineOfSight(tx, ty, char.position.x, char.position.y, wfMap.obstacles)) {
+                                          const dToChar = distToEntity(char.position, {x:tx,y:ty}, monster.size);
+                                          if (dToChar <= maxDist && dToChar < minD) {
+                                              minD = dToChar;
+                                              bestCoverPos = {x:tx, y:ty};
+                                          }
+                                      }
+                                  }
+                              }
+                          }
+                      }
+                  }
+                  if (bestCoverPos) {
+                      newPos = bestCoverPos;
+                  } else {
+                      // Fallback: Chase if no cover found
+                      for (let i = 0; i < steps; i++) {
+                          const d = distToEntity(char.position, newPos, monster.size);
+                          if (d <= maxDist && checkLineOfSight(newPos.x, newPos.y, char.position.x, char.position.y, wfMap.obstacles)) break;
+                          const dx = char.position.x - newPos.x;
+                          const dy = char.position.y - newPos.y;
+                          const sx = Math.abs(dx) >= Math.abs(dy) ? Math.sign(dx) : 0;
+                          const sy = Math.abs(dy) > Math.abs(dx) ? Math.sign(dy) : 0;
+                          let nx = newPos.x + sx;
+                          let ny = newPos.y + sy;
+                          if (isWalkable("dungeon", nx, ny)) newPos = { x: nx, y: ny };
+                          else break;
+                      }
+                  }
+              }
+          } else {
+              // Aggressive / Default: Chase directly
+              for (let i = 0; i < steps; i++) {
+                  const d = distToEntity(char.position, newPos, monster.size);
+                  if (d <= maxDist && checkLineOfSight(newPos.x, newPos.y, char.position.x, char.position.y, wfMap.obstacles)) break;
+                  
+                  // Simple A* towards player would be better, but we use dumb chase for aggressive
                   const dx = char.position.x - newPos.x;
                   const dy = char.position.y - newPos.y;
-                  const sx = Math.abs(dx) >= Math.abs(dy) ? Math.sign(dx) : 0;
-                  const sy = Math.abs(dy) > Math.abs(dx) ? Math.sign(dy) : 0;
+                  let sx = 0, sy = 0;
+                  
+                  if (Math.abs(dx) > Math.abs(dy)) {
+                      sx = Math.sign(dx);
+                  } else {
+                      sy = Math.sign(dy);
+                  }
+                  
                   let nx = newPos.x + sx;
                   let ny = newPos.y + sy;
+                  
                   if (isWalkable("dungeon", nx, ny)) {
                       newPos = { x: nx, y: ny };
                   } else {
@@ -754,10 +798,9 @@ export function useGameEngine() {
                           break;
                       }
                   }
-              } else {
-                  break; // Reached range and LoS
               }
           }
+          
           if (newPos.x !== monster.position.x || newPos.y !== monster.position.y) {
               newLog.push(`${monster.name} moves.`);
           }
@@ -768,7 +811,7 @@ export function useGameEngine() {
       setGs(prev => ({ ...prev, dungeonMonsters: newMonsters }));
 
       const nd = distToEntity(char.position, newPos, monster.size);
-      const hasLineOfSight = checkLineOfSight(newPos.x, newPos.y, char.position.x, char.position.y, wfMap.obstacles);
+      const hasLineOfSight = checkLineOfSight(newPos.x, newPos.y, char.position.x, char.position.y, wfMap.obstacles, wfMap.covers, false);
       if (nd <= Math.ceil((monster.range ?? 5) / 5) && hasLineOfSight) {
         let atkRoll1 = d20();
         let atkRoll2 = d20();
@@ -976,22 +1019,22 @@ export function useGameEngine() {
     addDiceRoll({ type: "skill", value: roll, total, mod: wisMod, max: 20, label: "Insight Check" });
     
     let successCount = 0;
+    const revealedIds = new Set<string>();
     const newTiles = new Set<string>();
     gs.dungeonMonsters.forEach(m => {
       if (m.hp > 0 && distToEntity(char.position, m.position, m.size) <= 15) {
         if (total >= (m.insightDC ?? 10)) {
           successCount++;
-          // Calc vision area for this monster
-          const range = m.state === "alert" ? m.sightRange + 3 : m.sightRange;
+          revealedIds.add(m.id);
+          // Calc initial vision
+          const range = m.aiState === "alert" ? m.sightRange + 3 : m.sightRange;
           for (let dy = -range; dy <= range; dy++) {
             for (let dx = -range; dx <= range; dx++) {
-              if (Math.abs(dx) + Math.abs(dy) <= range) {
                 const vx = m.position.x + dx;
                 const vy = m.position.y + dy;
-                if (checkLineOfSight(m.position.x, m.position.y, vx, vy, wfMap.obstacles)) {
+                if (checkMonsterVision(m, vx, vy, wfMap.obstacles, wfMap.covers)) {
                   newTiles.add(`${vx},${vy}`);
                 }
-              }
             }
           }
         }
@@ -1000,12 +1043,14 @@ export function useGameEngine() {
 
     if (successCount > 0) {
       notify("Insight check successful!");
+      insightRevealedIdsRef.current = revealedIds;
+      insightActiveUntilRef.current = now + 30000;
       setInsightVisionTiles(newTiles);
-      setTimeout(() => setInsightVisionTiles(new Set()), 15000); // 15s duration
+      // The real-time AI loop will take over updating it, and clear it when time expires
     } else {
       notify("You fail to read the surroundings.");
     }
-    setInsightCooldown(now + 120000); // 120s cooldown
+    setInsightCooldown(now + 60000); // 60s cooldown
   }, [char, combat.active, screen, insightCooldown, gs.dungeonMonsters, notify, addDiceRoll]);
 
   const handleStealth = useCallback(() => {
@@ -1480,7 +1525,7 @@ export function useGameEngine() {
     const seen = char.tutorialsSeen || [];
     const alreadySeenAttackTut = tutorialsSeenRef.current.has("tut_before_first_attack") || seen.includes("tut_before_first_attack");
     if (!skipTutorial && !alreadySeenAttackTut) {
-      triggerContextualTutorial("tut_before_first_attack", {
+      const triggered = triggerContextualTutorial("tut_before_first_attack", {
         start: {
           emotion: "gentle",
           text: "Wait just a moment, Traveler! Before your first battle, there's something I'd like to show you.",
@@ -1510,7 +1555,7 @@ export function useGameEngine() {
           }}]
         }
       });
-      return;
+      if (triggered) return;
     }
     
     const weapon = isOffHand ? char.equipment.offHand : char.equipment.mainHand;
@@ -1562,7 +1607,7 @@ export function useGameEngine() {
         if (char.class === "Fighter" && char.level >= 5) {
           setTimeout(() => {
             handleAttackMonster(monsterId, false, true);
-          }, 400);
+          }, 500);
         }
       } else {
         setCombat(prev => ({ ...prev, extraActionUsed: true }));
@@ -1588,8 +1633,15 @@ export function useGameEngine() {
       advValues: hasSamuraiFocus ? [roll1, roll2] : undefined,
       advType: hasSamuraiFocus ? "adv" : undefined
     });
-    if (weapon.name === "Longsword") {
-      addEffect({ type: "sword_swing", gridX: monster.position.x, gridY: monster.position.y, targetX: char.position.x, targetY: char.position.y });
+    let currentFlip = false;
+    let effectScale = 1;
+    if (weapon.properties?.includes("heavy") || weapon.properties?.includes("two-handed")) effectScale = 1.3;
+    else if (weapon.properties?.includes("light")) effectScale = 0.7;
+
+    if (weapon.damageType === "slashing") {
+      currentFlip = lsAttackFlipRef.current;
+      lsAttackFlipRef.current = !currentFlip;
+      addEffect({ type: "ls_slash", gridX: monster.position.x, gridY: monster.position.y, targetX: char.position.x, targetY: char.position.y, flip: currentFlip, scale: effectScale });
     } else if (isRanged) {
       addEffect({ type: "arrow", gridX: char.position.x, gridY: char.position.y, targetX: monster.position.x, targetY: monster.position.y });
       setTimeout(() => addEffect({ type: "slash", gridX: monster.position.x, gridY: monster.position.y }), 320);
@@ -1692,9 +1744,13 @@ export function useGameEngine() {
           }
 
           setTimeout(() => {
-            addEffect({ type: "slash", gridX: monster.position.x, gridY: monster.position.y });
+            if (weapon.damageType === "slashing") {
+              addEffect({ type: "ls_hit", gridX: monster.position.x, gridY: monster.position.y, targetX: char.position.x, targetY: char.position.y, flip: currentFlip, scale: effectScale });
+            } else {
+              // addEffect({ type: "slash", gridX: monster.position.x, gridY: monster.position.y });
+            }
             addHit(monsterId);
-          }, 180);
+          }, 100);
 
           if (newHp <= 0) {
             setDyingMonsters(prev => new Set([...prev, monsterId]));
@@ -2681,6 +2737,161 @@ export function useGameEngine() {
     }, 100);
     return true;
   }, [char, updateChar]);
+
+  // ── REAL-TIME EXPLORATION AI ──
+  useEffect(() => {
+    if (screen !== "dungeon" || combat.active) return;
+    
+    const interval = setInterval(() => {
+      const currentChar = charRef.current;
+      if (!currentChar || currentChar.hp <= 0) return;
+
+      setGs(prev => {
+        const newMonsters = [...prev.dungeonMonsters];
+        let alertTriggered = false;
+        let engagingMonsters: string[] = [];
+
+        for (let i = 0; i < newMonsters.length; i++) {
+          const m = newMonsters[i];
+          if (m.hp <= 0) continue;
+
+          // Stealth clearing if too far
+          if (stealthedMonstersRef.current.has(m.id)) {
+            const d = distToEntity(currentChar.position, m.position, m.size);
+            if (d > 20) stealthedMonstersRef.current.delete(m.id);
+          }
+
+          // 1. Vision Check
+          const seesPlayer = checkMonsterVision(m, currentChar.position.x, currentChar.position.y, wfMap.obstacles, wfMap.covers, stealthActive || stealthCasting);
+          
+          if (seesPlayer && m.aiState !== "alert" && !stealthCasting) {
+             let detected = true;
+             if (stealthActive) {
+                if (stealthedMonstersRef.current.has(m.id)) {
+                   detected = false;
+                } else {
+                   const dexMod = getMod(currentChar.stats.dex);
+                   const roll = d20();
+                   const total = roll + dexMod;
+                   const perceptionRoll = d20() + Math.floor((m.insightDC ?? 10) / 2);
+                   
+                   if (total >= perceptionRoll) {
+                      detected = false;
+                      stealthedMonstersRef.current.add(m.id);
+                      addDiceRoll({ type: "skill", value: roll, total, mod: dexMod, max: 20, label: `Stealth vs ${m.name}` });
+                      notify(`🥷 Evaded ${m.name}! (Stealth ${total} vs Perception ${perceptionRoll})`);
+                   } else {
+                      setStealthActive(false);
+                      stealthedMonstersRef.current.clear();
+                      addDiceRoll({ type: "skill", value: roll, total, mod: dexMod, max: 20, label: `Stealth Failed` });
+                      notify(`⚠️ ${m.name} spotted you! (Perception ${perceptionRoll} vs Stealth ${total})`);
+                   }
+                }
+             }
+
+             if (detected) {
+                // Spot player! Go to Alert state.
+                newMonsters[i] = { ...m, aiState: "alert", alerted: true, lastSeenCharPos: { ...currentChar.position } };
+                if (!stealthActive) notify(`⚠️ ${m.name} spotted you!`);
+                continue; // Wait one tick
+             }
+          }
+
+          if (m.aiState === "alert") {
+             // Already alert, now entering combat
+             alertTriggered = true;
+             engagingMonsters.push(m.id);
+             continue;
+          }
+
+          // 2. Exploration Movement / Behavior
+          if (!seesPlayer || (seesPlayer && stealthActive && stealthedMonstersRef.current.has(m.id))) {
+             // Idle Behavior
+             if (m.personality === "aggressive" && (m.name === "Slime" || m.name === "Wolf")) {
+                // Slimes and Wolves just wander randomly occasionally
+                if (Math.random() < 0.4) {
+                   const dirs: import("./types/game").Monster["facing"][] = ["N", "E", "S", "W"];
+                   const newFacing = dirs[Math.floor(Math.random()*dirs.length)];
+                   
+                   // Move 1 step randomly
+                   const adjs = [{dx:0, dy:-1, f:"N"}, {dx:1, dy:0, f:"E"}, {dx:0, dy:1, f:"S"}, {dx:-1, dy:0, f:"W"}];
+                   const move = adjs[Math.floor(Math.random() * 4)];
+                   const nx = m.position.x + move.dx;
+                   const ny = m.position.y + move.dy;
+                   if (isWalkable("dungeon", nx, ny) && !newMonsters.some(other => other.id !== m.id && other.hp > 0 && other.position.x === nx && other.position.y === ny)) {
+                     newMonsters[i] = { ...m, position: { x: nx, y: ny }, facing: move.f as import("./types/game").Monster["facing"] };
+                   } else {
+                     newMonsters[i] = { ...m, facing: newFacing };
+                   }
+                }
+             } else if (m.personality === "cautious" && m.name === "Goblin Scout") {
+                // Goblin Scout patrols / looks around
+                if (Math.random() < 0.3) {
+                   // Just turn head
+                   const dirs: import("./types/game").Monster["facing"][] = ["N", "E", "S", "W"];
+                   newMonsters[i] = { ...m, facing: dirs[Math.floor(Math.random()*dirs.length)] };
+                } else if (Math.random() < 0.5) {
+                   // Move forward in facing direction
+                   let dx=0, dy=0;
+                   if (m.facing === "N") dy = -1;
+                   if (m.facing === "E") dx = 1;
+                   if (m.facing === "S") dy = 1;
+                   if (m.facing === "W") dx = -1;
+                   const nx = m.position.x + dx;
+                   const ny = m.position.y + dy;
+                   if (isWalkable("dungeon", nx, ny) && !newMonsters.some(other => other.id !== m.id && other.hp > 0 && other.position.x === nx && other.position.y === ny)) {
+                     newMonsters[i] = { ...m, position: { x: nx, y: ny } };
+                   } else {
+                     // Hit wall, turn around
+                     const opposite: Record<string, import("./types/game").Monster["facing"]> = { "N":"S", "S":"N", "E":"W", "W":"E" };
+                     newMonsters[i] = { ...m, facing: opposite[m.facing || "S"] };
+                   }
+                }
+             }
+             // Vine (Territorial) and Boss stay still
+          }
+        }
+        
+        // --- Real-time Insight Vision Update ---
+        const now = Date.now();
+        if (insightRevealedIdsRef.current.size > 0) {
+          if (now < insightActiveUntilRef.current) {
+            const rtTiles = new Set<string>();
+            newMonsters.forEach(m => {
+              if (insightRevealedIdsRef.current.has(m.id) && m.hp > 0) {
+                const range = m.aiState === "alert" ? m.sightRange + 3 : m.sightRange;
+                for (let dy = -range; dy <= range; dy++) {
+                  for (let dx = -range; dx <= range; dx++) {
+                      const vx = m.position.x + dx;
+                      const vy = m.position.y + dy;
+                      if (checkMonsterVision(m, vx, vy, wfMap.obstacles, wfMap.covers)) {
+                        rtTiles.add(`${vx},${vy}`);
+                      }
+                  }
+                }
+              }
+            });
+            setInsightVisionTiles(rtTiles);
+          } else {
+            insightRevealedIdsRef.current.clear();
+            setInsightVisionTiles(new Set());
+          }
+        }
+        
+        if (alertTriggered && engagingMonsters.length > 0) {
+           // We can't safely call startCombat directly from inside setGs reducer, 
+           // so we use a setTimeout trick to schedule it outside the render cycle.
+           setTimeout(() => {
+             startCombat(engagingMonsters);
+           }, 0);
+        }
+
+        return { ...prev, dungeonMonsters: newMonsters };
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [screen, combat.active, stealthActive, stealthCasting, startCombat, notify, addDiceRoll]);
 
   const handleLongRest = useCallback(() => {
     if (!char) return;
