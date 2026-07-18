@@ -7,6 +7,7 @@ import { useGameEngine } from "../useGameEngine";
 import { HpBar } from "../components/ui/HpBar";
 import { GoldBadge } from "../components/ui/GoldBadge";
 import { AnimeDialog } from "../components/ui/AnimeDialog";
+import { CheckModal } from "../components/game/CheckModal";
 import { AuthScreen } from "../components/screens/AuthScreen";
 import { CharSelectScreen } from "../components/screens/CharSelectScreen";
 import { CharCreateScreen } from "../components/screens/CharCreateScreen";
@@ -91,13 +92,16 @@ export default function App() {
           </div>
         </div>
 
+        {/* Wrapper: relative container for map + combat overlay (CombatPanel must be OUTSIDE overflow:hidden) */}
+        <div style={{ position: "relative", flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+
         {/* Map area - Camera Follow Mode */}
         <div
           onWheel={(e) => {
             if (e.deltaY < 0) setZoom(z => Math.min(3.0, z + 0.1));
             else setZoom(z => Math.max(0.15, z - 0.1));
           }}
-          style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", position: "relative", background: screen === "dungeon" ? "#040310" : screen === "sanctuary" ? "#ffffff" : "#080e04" }}>
+          style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", position: "relative", minHeight: 0, background: screen === "dungeon" ? "#040310" : screen === "sanctuary" ? "#ffffff" : "#080e04" }}>
           {(() => {
              const mapScale = eng.zoom;
              const mapCols = getMapCols(screen);
@@ -131,33 +135,6 @@ export default function App() {
                </div>
              );
           })()}
-
-          {/* Combat panel */}
-          {combat.active && (
-            <CombatPanel combat={combat} char={char} monsters={gs.dungeonMonsters}
-              combatMode={combatMode} setCombatMode={setCombatMode}
-              selectedSpell={selectedSpell ?? undefined}
-              onEndTurn={eng.endPlayerTurn} onSelectSpell={eng.handleSpellSelect} onUseItem={eng.handleUseItem}
-              onGuard={eng.handleGuard}
-              onFlee={() => {
-                // Check if any alive monster can still see the player (within sightRange)
-                const aliveEngaged = gs.dungeonMonsters.filter(m =>
-                  m.hp > 0 && combat.engagedMonsterIds.includes(m.id)
-                );
-                const stillSeen = aliveEngaged.some(m =>
-                  Math.abs(char.position.x - m.position.x) + Math.abs(char.position.y - m.position.y) <= m.sightRange
-                );
-                if (stillSeen) {
-                  eng.notify("⚠️ Enemy can still see you! Move further away first!");
-                } else {
-                  eng.setCombat(eng.INIT_COMBAT);
-                  setCombatMode("none");
-                  eng.setSelectedSpell(null);
-                  eng.notify("🏃 Fled from combat!");
-                }
-              }}
-            />
-          )}
 
           {/* Short Rest */}
           {(screen === "dungeon" || screen === "town") && !combat.active && char && (
@@ -263,7 +240,35 @@ export default function App() {
               🚪 Reach north exit · Avoid monsters or fight!
             </div>
           )}
-        </div>
+        </div>{/* end map div */}
+
+        {/* Combat panel — outside overflow:hidden so it won't be clipped */}
+        {combat.active && (
+          <CombatPanel combat={combat} char={char} monsters={gs.dungeonMonsters}
+            combatMode={combatMode} setCombatMode={setCombatMode}
+            selectedSpell={selectedSpell ?? undefined}
+            onEndTurn={eng.endPlayerTurn} onSelectSpell={eng.handleSpellSelect} onUseItem={eng.handleUseItem}
+            onGuard={eng.handleGuard}
+            onFlee={() => {
+              const aliveEngaged = gs.dungeonMonsters.filter(m =>
+                m.hp > 0 && combat.engagedMonsterIds.includes(m.id)
+              );
+              const stillSeen = aliveEngaged.some(m =>
+                Math.abs(char.position.x - m.position.x) + Math.abs(char.position.y - m.position.y) <= m.sightRange
+              );
+              if (stillSeen) {
+                eng.notify("⚠️ Enemy can still see you! Move further away first!");
+              } else {
+                eng.setCombat(eng.INIT_COMBAT);
+                setCombatMode("none");
+                eng.setSelectedSpell(null);
+                eng.notify("🏃 Fled from combat!");
+              }
+            }}
+          />
+        )}
+
+        </div>{/* end map+combat wrapper */}
 
         {/* HUD */}
         <BottomHUD char={char} hudTab={hudTab} setHudTab={setHudTab} hudOpen={hudOpen} setHudOpen={setHudOpen}
@@ -281,7 +286,7 @@ export default function App() {
         {/* ========================================== */}
         
         {/* 1. Prompt Yes/No (ใช้ AnimeDialog แบบเดียวกับ Shop) */}
-        {specialDialog && !specialDialog.confirmed && (
+        {specialDialog && !specialDialog.confirmed && specialDialog.tile.type !== "check" && (
           <AnimeDialog
             icon={specialDialog.tile.icon}
             title={specialDialog.tile.label.toUpperCase()}
@@ -297,6 +302,17 @@ export default function App() {
               }
             }}
             onNo={() => eng.setSpecialDialog(null)}
+          />
+        )}
+        
+        {/* 1.5 Check Modal for skill checks */}
+        {specialDialog && specialDialog.tile.type === "check" && char && (
+          <CheckModal
+            char={char}
+            tile={specialDialog.tile}
+            onClose={() => eng.setSpecialDialog(null)}
+            onSuccess={(txt) => { eng.handleCheckResult(true, specialDialog.tile); }}
+            onFail={(txt) => { eng.handleCheckResult(false, specialDialog.tile); }}
           />
         )}
 
@@ -470,9 +486,39 @@ export default function App() {
         {eng.seleniaPopup && (
           <SeleniaPopup emotion={eng.seleniaPopup.emotion} text={eng.seleniaPopup.text} />
         )}
+        
+        {/* 7. Skill Obtained Popup */}
+        {eng.skillObtained && (
+          <div style={{
+            position: "fixed", bottom: 24, right: 24, zIndex: 9999,
+            background: "linear-gradient(135deg, rgba(20,15,40,0.95), rgba(10,5,20,0.95))",
+            border: `2px solid ${C.gold}`, borderRadius: 8, padding: "16px 20px",
+            boxShadow: `0 8px 32px rgba(0,0,0,0.5), 0 0 15px ${C.gold}44`,
+            display: "flex", gap: 16, alignItems: "center",
+            animation: "skill-obtain-in 0.5s cubic-bezier(0.34, 1.25, 0.64, 1) forwards, skill-obtain-out 0.5s ease-in 4.5s forwards",
+            cursor: "pointer"
+          }} onClick={() => eng.setSkillObtained(null)}>
+            <style>{`
+              @keyframes skill-obtain-in { 0% { transform: translateX(120%) scale(0.9); opacity: 0; } 100% { transform: translateX(0) scale(1); opacity: 1; } }
+              @keyframes skill-obtain-out { 0% { transform: translateX(0); opacity: 1; } 100% { transform: translateX(120%); opacity: 0; } }
+            `}</style>
+            <div style={{
+              width: 48, height: 48, borderRadius: "50%", background: "radial-gradient(circle, #ffe680 0%, #a47012 100%)",
+              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, boxShadow: "0 0 12px #ffe680"
+            }}>
+              {eng.skillObtained.icon}
+            </div>
+            <div>
+              <div style={{ fontFamily: PX, fontSize: 8, color: C.gold, letterSpacing: 1, marginBottom: 4 }}>NEW SKILL OBTAINED!</div>
+              <div style={{ fontFamily: PX, fontSize: 13, color: "#fff", textShadow: "1px 1px 0 #000" }}>{eng.skillObtained.name}</div>
+              <div style={{ fontFamily: MO, fontSize: 10, color: C.muted, marginTop: 4 }}>{eng.skillObtained.desc}</div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
+
 
   return null;
 }

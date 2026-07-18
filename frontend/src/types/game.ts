@@ -58,12 +58,14 @@ export interface Character {
   skillUsages?: Record<string, number>; // Usage count for per-skill slots
   spellSlots?: { used: number; max: number };
   spellChoice?: string;
+  tutorialsSeen?: string[];
   customSkills?: string[];
   inventory: Item[]; equipment: Equipment;
   position: { x: number; y: number }; currentMap: "town" | "dungeon" | "sanctuary" | "tutorial";
   statusPoints: number;
   lastShortRestTime?: number;
   tutorialCompleted?: boolean;
+  tutorialReplayCount?: number;
   tutorialDeaths?: number;
   lastLoginTime?: number;
   lastSeenVersion?: string;
@@ -78,6 +80,7 @@ export interface Monster {
   state?: "idle" | "suspicious" | "alert" | "combat";
   stealth?: number;
   image?: string;
+  size?: number; // 1 for 1x1 (default), 3 for 3x3 (center-anchored)
   speed?: number;
   damageType?: string;
   resistances?: string[];
@@ -98,6 +101,7 @@ export interface CombatState {
   log: string[]; engagedMonsterIds: string[];
   guardAmount?: number;
   activeBuffs: string[];
+  warnings?: { x: number; y: number; type: string; level?: number }[];
 }
 
 export type SkillType = "active" | "passive" | "reaction";

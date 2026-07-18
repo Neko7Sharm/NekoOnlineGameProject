@@ -7,6 +7,7 @@ import type { CharClass, Item, Stats } from "../types/game";
 export const CLASS_CFG: Record<CharClass, {
   color: string; icon: string; desc: string;
   hpBase: number; acBase: number; stats: Stats;
+  recommendedSkills: string[];
   skills: string[]; saves: string[];
   gameSkills: string[];
   spellMax?: number;
@@ -18,6 +19,7 @@ export const CLASS_CFG: Record<CharClass, {
     desc: "Master of martial combat. Second Wind restores HP once per short rest.",
     hpBase: 12, acBase: 16,
     stats: { str: 16, dex: 13, con: 15, int: 8, wis: 12, cha: 10 },
+    recommendedSkills: ["Athletics", "Intimidation", "Perception", "Survival"],
     skills: ["Athletics", "Intimidation"], saves: ["Strength", "Constitution"],
     gameSkills: [],
     weapon: { name: "Longsword", type: "weapon", hands: 1, damage: "1d8", damageType: "slashing", properties: ["versatile"], range: 5, value: 15, description: "A versatile blade. 1d8+STR slashing, 1 tile reach." },
@@ -28,6 +30,7 @@ export const CLASS_CFG: Record<CharClass, {
     desc: "Divine spellcaster with healing magic and heavy armor proficiency.",
     hpBase: 10, acBase: 14,
     stats: { str: 13, dex: 10, con: 14, int: 12, wis: 16, cha: 15 },
+    recommendedSkills: ["Medicine", "Insight", "History", "Persuasion"],
     skills: ["Medicine", "Religion"], saves: ["Wisdom", "Charisma"],
     gameSkills: ["cleric_divine_domain", "cleric_healing_word"],
     spellMax: 2,
@@ -39,6 +42,7 @@ export const CLASS_CFG: Record<CharClass, {
     desc: "Sacred oath-bound warrior with divine smite and heavy armor.",
     hpBase: 12, acBase: 18,
     stats: { str: 15, dex: 10, con: 14, int: 8, wis: 12, cha: 15 },
+    recommendedSkills: ["Persuasion", "Athletics", "Insight", "Intimidation"],
     skills: ["Persuasion", "Athletics"], saves: ["Wisdom", "Charisma"],
     gameSkills: ["paladin_aura_of_protection", "paladin_divine_smite", "paladin_shield_block"],
     spellMax: 2,
@@ -50,6 +54,7 @@ export const CLASS_CFG: Record<CharClass, {
     desc: "Wilderness warrior with archery mastery and Favored Enemy tracking.",
     hpBase: 10, acBase: 14,
     stats: { str: 12, dex: 16, con: 13, int: 10, wis: 14, cha: 8 },
+    recommendedSkills: ["Survival", "Perception", "Stealth", "Acrobatics"],
     skills: ["Survival", "Perception"], saves: ["Strength", "Dexterity"],
     gameSkills: ["ranger_hunters_mark", "ranger_nimble_escape"],
     weapon: { name: "Shortbow", type: "weapon", hands: 2, damage: "1d6", damageType: "piercing", properties: ["two-handed"], range: 30, value: 25, description: "Nimble hunting bow. 1d6+DEX piercing, 6 tiles range." },
@@ -61,6 +66,7 @@ export const CLASS_CFG: Record<CharClass, {
     desc: "Arcane scholar with a spellbook of powerful ranged spells.",
     hpBase: 6, acBase: 12,
     stats: { str: 8, dex: 14, con: 13, int: 17, wis: 12, cha: 10 },
+    recommendedSkills: ["Arcana", "Investigation", "History", "Insight"],
     skills: ["Arcana", "Investigation"], saves: ["Intelligence", "Wisdom"],
     gameSkills: ["wizard_arcane_recovery", "wizard_shield_spell"],
     spellMax: 2,

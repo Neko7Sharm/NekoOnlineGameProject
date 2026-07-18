@@ -97,6 +97,18 @@ export function CombatPanel({ combat, char, monsters, combatMode, setCombatMode,
         .cp-left-btn:active { transform: translateX(2px); }
         .cp-right-btn { transition: transform 0.12s, filter 0.12s; cursor: pointer; }
         .cp-right-btn:hover { transform: translateX(-5px); filter: brightness(1.25); }
+        .cp-sub-scroll {
+          max-height: 210px;
+          overflow-y: auto;
+          overflow-x: hidden;
+          display: flex;
+          flex-direction: column;
+          gap: 3px;
+        }
+        .cp-sub-scroll::-webkit-scrollbar { width: 3px; }
+        .cp-sub-scroll::-webkit-scrollbar-track { background: transparent; }
+        .cp-sub-scroll::-webkit-scrollbar-thumb { background: rgba(180,138,255,0.3); border-radius: 2px; }
+        .cp-sub-scroll::-webkit-scrollbar-thumb:hover { background: rgba(180,138,255,0.6); }
         .cp-right-btn:active { transform: translateX(-2px); }
       `}</style>
 
@@ -153,9 +165,19 @@ export function CombatPanel({ combat, char, monsters, combatMode, setCombatMode,
               ...leftCard(220),
               padding: "8px 12px", background: "rgba(5,4,14,0.92)", maxHeight: 140, overflowY: "auto",
             }}>
-              {combat.log.slice(-12).reverse().map((l, i) => (
-                <div key={i} style={{ fontFamily: "Nunito, sans-serif", fontSize: 10, color: i === 0 ? "rgba(255,255,255,0.8)" : "rgba(255,255,255,0.4)", lineHeight: 1.5, marginBottom: 2 }}>{l}</div>
-              ))}
+              {combat.log.slice(-12).reverse().map((l, i) => {
+                const isCrit = l.includes("⭐");
+                return (
+                  <div key={i} style={{ 
+                    fontFamily: "Nunito, sans-serif", 
+                    fontSize: 10, 
+                    color: isCrit ? "#ffd700" : (i === 0 ? "rgba(255,255,255,0.8)" : "rgba(255,255,255,0.4)"), 
+                    textShadow: isCrit ? "0 0 5px #ffaa00" : "none",
+                    lineHeight: 1.5, 
+                    marginBottom: 2 
+                  }}>{l}</div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -163,7 +185,7 @@ export function CombatPanel({ combat, char, monsters, combatMode, setCombatMode,
 
       {/* ══ RIGHT PANEL ══ */}
       {isPlayer && (
-        <div style={{ position: "absolute", right: 4, top: 4, zIndex: 20, display: "flex", flexDirection: "column", gap: 3, width: 190, filter: `drop-shadow(0 4px 8px rgba(0,0,0,0.8)) drop-shadow(0 0 12px ${turnColor}aa)` }}>
+        <div style={{ position: "absolute", right: 0, top: 4, zIndex: 20, display: "flex", flexDirection: "column", gap: 3, width: 200, filter: `drop-shadow(0 4px 8px rgba(0,0,0,0.8)) drop-shadow(0 0 12px ${turnColor}aa)` }}>
 
           <div style={{ ...rightCard(0), padding: "8px 12px", background: "rgba(10,10,25,0.9)", display: "flex", flexDirection: "column", gap: 4 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -225,93 +247,152 @@ export function CombatPanel({ combat, char, monsters, combatMode, setCombatMode,
           {/* ATTACK sub-panel */}
           {actionTab === "attack" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {char.equipment.mainHand && (
-                <div style={{ ...rightCard(220), padding: "9px 14px 9px 20px", background: "linear-gradient(260deg, rgba(60,10,10,0.95), rgba(30,5,5,0.95))" }}>
-                  <button className="cp-right-btn"
-                    onClick={() => !isMainActionExhausted && setCombatMode(combatMode === "attack" ? "none" : "attack")}
-                    disabled={isMainActionExhausted}
-                    onMouseEnter={(e) => setHoverHitMod({ x: e.clientX, y: e.clientY, weapon: char.equipment.mainHand })}
-                    onMouseMove={(e) => setHoverHitMod({ x: e.clientX, y: e.clientY, weapon: char.equipment.mainHand })}
-                    onMouseLeave={() => setHoverHitMod(null)}
-                    style={{
-                      background: "none", border: "none", width: "100%", padding: 0, cursor: isMainActionExhausted ? "not-allowed" : "pointer",
-                      color: isMainActionExhausted ? "rgba(255,255,255,0.2)" : combatMode === "attack" ? C.red : "rgba(255,255,255,0.85)",
-                      fontFamily: PX, fontSize: 9, letterSpacing: 1,
-                      display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, textAlign: "right",
-                      opacity: isMainActionExhausted ? 0.5 : 1
-                    }}>
-                    
-                    {(() => {
-                      const hitInfo = getWeaponHitBonus(char, char.equipment.mainHand!);
-                      return (
-                        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
-                            <span style={{ fontFamily: MO, fontSize: 10, color: C.blue }}>{formatMod(hitInfo.total)} to Hit</span>
-                            <span style={{ fontFamily: MO, fontSize: 9, color: C.red + "99" }}>{char.equipment.mainHand.damage}</span>
-                            <span>⚔ {char.equipment.mainHand.name.slice(0, 14)}</span>
-                          </div>
-                        </div>
-                      );
-                    })()}
+              <style>{`
+                @keyframes atk-select-glow {
+                  0%,100% { box-shadow: 0 0 12px ${C.red}60, inset 0 0 8px ${C.red}10; }
+                  50%      { box-shadow: 0 0 22px ${C.red}aa, inset 0 0 12px ${C.red}20; }
+                }
+                .atk-weapon-card {
+                  position: relative; cursor: pointer;
+                  transition: filter 0.14s, transform 0.14s;
+                  border: none; padding: 0; background: none; width: 100%; text-align: left;
+                }
+                .atk-weapon-card:not(:disabled):hover { filter: brightness(1.18); transform: translateX(-3px); }
+                .atk-weapon-card:not(:disabled):active { transform: translateX(-1px) scale(0.98); }
+                .atk-weapon-card:disabled { cursor: not-allowed; }
+              `}</style>
 
-                  </button>
-                </div>
-              )}
-              {char.equipment.offHand && char.equipment.offHand.type === "weapon" && (
-                <div style={{ ...rightCard(260), padding: "9px 14px 9px 20px", background: "linear-gradient(260deg, rgba(50,20,10,0.95), rgba(25,10,5,0.95))" }}>
-                  <button className="cp-right-btn"
-                    onClick={() => {
-                      if (char.equipment.offHand?.effect === "guard") {
-                        if (!combat.extraActionUsed) onGuard();
-                      } else {
-                        if (!combat.extraActionUsed) setCombatMode(combatMode === "attack_offhand" ? "none" : "attack_offhand");
-                      }
-                    }}
-                    disabled={combat.extraActionUsed}
-                    onMouseEnter={(e) => {
-                      if (char.equipment.offHand?.effect !== "guard") {
-                        setHoverHitMod({ x: e.clientX, y: e.clientY, weapon: char.equipment.offHand });
-                      }
-                    }}
-                    onMouseMove={(e) => {
-                      if (char.equipment.offHand?.effect !== "guard") {
-                        setHoverHitMod({ x: e.clientX, y: e.clientY, weapon: char.equipment.offHand });
-                      }
-                    }}
+              {/* ── MAIN HAND ─────────────────── */}
+              {char.equipment.mainHand && (() => {
+                const mh = char.equipment.mainHand!;
+                const hitInfo = getWeaponHitBonus(char, mh);
+                const isActive = combatMode === "attack";
+                const isDisabled = isMainActionExhausted;
+                return (
+                  <button className="atk-weapon-card cp-right-btn"
+                    onClick={() => !isDisabled && setCombatMode(isActive ? "none" : "attack")}
+                    disabled={isDisabled}
+                    onMouseEnter={(e) => setHoverHitMod({ x: e.clientX, y: e.clientY, weapon: mh })}
+                    onMouseMove={(e) => setHoverHitMod({ x: e.clientX, y: e.clientY, weapon: mh })}
                     onMouseLeave={() => setHoverHitMod(null)}
-                    style={{
-                      background: "none", border: "none", width: "100%", padding: 0, cursor: combat.extraActionUsed ? "not-allowed" : "pointer",
-                      color: combat.extraActionUsed ? "rgba(255,255,255,0.2)" : combatMode === "attack_offhand" ? C.gold : "rgba(255,255,255,0.85)",
-                      fontFamily: PX, fontSize: 9, letterSpacing: 1,
-                      display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, textAlign: "right",
-                      opacity: combat.extraActionUsed ? 0.5 : 1
+                  >
+                    <div style={{
+                      ...rightCard(220),
+                      padding: "7px 16px 7px 18px",
+                      background: isActive
+                        ? `linear-gradient(260deg, ${C.red}cc, rgba(80,10,10,0.95))`
+                        : isDisabled
+                          ? "linear-gradient(260deg, rgba(35,10,10,0.6), rgba(18,5,5,0.6))"
+                          : "linear-gradient(260deg, rgba(70,16,16,0.92), rgba(30,6,6,0.92))",
+                      animation: isActive ? "cp-from-right 0.35s cubic-bezier(0.2,0,0,1) 220ms both, atk-select-glow 1.6s ease-in-out infinite" : undefined,
+                      opacity: isDisabled ? 0.45 : 1,
                     }}>
-                    <span style={{ fontFamily: PX, fontSize: 6, color: C.gold, marginRight: "auto" }}>[EXTRA]</span>
-                    {char.equipment.offHand.effect === "guard" ? (
-                      <span style={{ fontFamily: MO, fontSize: 9, color: C.gold + "99" }}>🛡️ Guard</span>
-                    ) : (
-                      (() => {
-                        const hitInfo = getWeaponHitBonus(char, char.equipment.offHand!);
-                        return (
-                          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
-                              <span style={{ fontFamily: MO, fontSize: 10, color: C.blue }}>{formatMod(hitInfo.total)} to Hit</span>
-                              <span style={{ fontFamily: MO, fontSize: 9, color: C.gold + "99" }}>{char.equipment.offHand.damage}</span>
-                              <span>🗡️ {char.equipment.offHand.name.slice(0, 12)}</span>
-                            </div>
-                          </div>
-                        );
-                      })()
-                    )}
+                      {/* Single compact row */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end", overflow: "visible" }}>
+                        <span style={{
+                          fontFamily: "Press Start 2P, monospace", fontSize: 5,
+                          color: isActive ? "#fff" : "#ff8a80",
+                          background: isActive ? `${C.red}50` : "rgba(255,80,80,0.12)",
+                          border: `1px solid ${isActive ? C.red : "rgba(255,80,80,0.3)"}`,
+                          padding: "1px 4px", flexShrink: 0,
+                        }}>MAIN</span>
+                        {isDisabled && <span style={{ fontFamily: "Press Start 2P, monospace", fontSize: 5, color: "rgba(255,255,255,0.25)" }}>USED</span>}
+                        {isActive && <span style={{ fontFamily: "Press Start 2P, monospace", fontSize: 5, color: C.red }}>▶ TARGET</span>}
+                        <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 10, color: isDisabled ? "rgba(180,138,255,0.3)" : C.blue, flexShrink: 0 }}>{formatMod(hitInfo.total)}</span>
+                        <span style={{ fontFamily: "Press Start 2P, monospace", fontSize: 5, color: "rgba(255,255,255,0.25)", flexShrink: 0 }}>HIT</span>
+                        <span style={{ color: "rgba(255,255,255,0.2)", fontSize: 8, flexShrink: 0 }}>│</span>
+                        <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 10, color: isDisabled ? "rgba(240,112,112,0.3)" : C.red, flexShrink: 0 }}>{mh.damage ?? "—"}</span>
+                        <span style={{ fontFamily: "Press Start 2P, monospace", fontSize: 5, color: "rgba(255,255,255,0.25)", flexShrink: 0 }}>DMG</span>
+                        <span style={{ color: "rgba(255,255,255,0.2)", fontSize: 8, flexShrink: 0 }}>│</span>
+                        <span style={{
+                          fontFamily: "Press Start 2P, monospace", fontSize: 8,
+                          color: isDisabled ? "rgba(255,255,255,0.2)" : isActive ? "#fff" : "rgba(255,200,200,0.9)",
+                          textDecoration: isDisabled ? "line-through" : "none",
+                          flexShrink: 0, whiteSpace: "nowrap",
+                        }}>⚔ {mh.name}</span>
+                      </div>
+                    </div>
                   </button>
+                );
+              })()}
+
+              {/* ── OFF HAND ──────────────────── */}
+              {char.equipment.offHand && char.equipment.offHand.type === "weapon" && (() => {
+                const oh = char.equipment.offHand!;
+                const isGuard = oh.effect === "guard";
+                const isActive = combatMode === "attack_offhand";
+                const isDisabled = combat.extraActionUsed;
+                const hitInfo = !isGuard ? getWeaponHitBonus(char, oh) : null;
+                return (
+                  <button className="atk-weapon-card cp-right-btn"
+                    onClick={() => {
+                      if (!isDisabled) {
+                        isGuard ? onGuard() : setCombatMode(isActive ? "none" : "attack_offhand");
+                      }
+                    }}
+                    disabled={isDisabled}
+                    onMouseEnter={(e) => !isGuard && setHoverHitMod({ x: e.clientX, y: e.clientY, weapon: oh })}
+                    onMouseMove={(e) => !isGuard && setHoverHitMod({ x: e.clientX, y: e.clientY, weapon: oh })}
+                    onMouseLeave={() => setHoverHitMod(null)}
+                  >
+                    <div style={{
+                      ...rightCard(265),
+                      padding: "7px 16px 7px 18px",
+                      background: isActive
+                        ? `linear-gradient(260deg, ${C.gold}aa, rgba(80,50,5,0.95))`
+                        : isGuard
+                          ? "linear-gradient(260deg, rgba(20,50,80,0.92), rgba(8,20,40,0.92))"
+                          : isDisabled
+                            ? "linear-gradient(260deg, rgba(30,25,5,0.55), rgba(15,12,3,0.55))"
+                            : "linear-gradient(260deg, rgba(60,44,8,0.9), rgba(28,20,4,0.9))",
+                      opacity: isDisabled ? 0.45 : 1,
+                    }}>
+                      {/* Single compact row */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
+                        <span style={{
+                          fontFamily: "Press Start 2P, monospace", fontSize: 5,
+                          color: isDisabled ? "rgba(255,255,255,0.25)" : C.gold,
+                          background: `${C.gold}18`, border: `1px solid ${C.gold}40`,
+                          padding: "1px 4px", flexShrink: 0,
+                        }}>EXTRA</span>
+                        {isDisabled && <span style={{ fontFamily: "Press Start 2P, monospace", fontSize: 5, color: "rgba(255,255,255,0.25)" }}>USED</span>}
+                        {isActive && <span style={{ fontFamily: "Press Start 2P, monospace", fontSize: 5, color: C.gold }}>▶ TARGET</span>}
+                        {isGuard ? (
+                          <span style={{ fontFamily: "Nunito, sans-serif", fontSize: 10, color: "rgba(100,160,255,0.7)" }}>🛡 {oh.name} · Block</span>
+                        ) : (
+                          <>
+                            <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 10, color: isDisabled ? "rgba(180,138,255,0.3)" : C.blue }}>{formatMod(hitInfo!.total)}</span>
+                            <span style={{ fontFamily: "Press Start 2P, monospace", fontSize: 5, color: "rgba(255,255,255,0.25)" }}>HIT</span>
+                            <span style={{ color: "rgba(255,255,255,0.2)", fontSize: 8 }}>│</span>
+                            <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 10, color: isDisabled ? "rgba(240,200,80,0.3)" : C.gold }}>{oh.damage ?? "—"}</span>
+                            <span style={{ fontFamily: "Press Start 2P, monospace", fontSize: 5, color: "rgba(255,255,255,0.25)" }}>DMG</span>
+                            <span style={{ color: "rgba(255,255,255,0.2)", fontSize: 8 }}>│</span>
+                            <span style={{
+                              fontFamily: "Press Start 2P, monospace", fontSize: 8,
+                              color: isDisabled ? "rgba(255,255,255,0.2)" : "rgba(255,230,160,0.9)",
+                              textDecoration: isDisabled ? "line-through" : "none", flexShrink: 0,
+                            }}>🗡 {oh.name}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })()}
+
+              {!char.equipment.mainHand && (
+                <div style={{ ...rightCard(220), padding: "14px 16px", background: "rgba(30,10,10,0.7)", textAlign: "right" }}>
+                  <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 10, color: "rgba(255,255,255,0.2)" }}>No weapon equipped</span>
                 </div>
               )}
             </div>
           )}
 
+
           {/* SKILL sub-panel */}
           {actionTab === "skill" && (
             <div style={{ position: "relative" }}>
+              <div className="cp-sub-scroll">
               {spells.filter(s => s.level === 0 || hasSlots || s.maxUses).map((spell, si) => {
                 const isActive = combatMode === "spell" && selectedSpell === spell.name;
                 const isExtra = !!spell.isBonus;
@@ -351,6 +432,7 @@ export function CombatPanel({ combat, char, monsters, combatMode, setCombatMode,
                   </button>
                 );
               })}
+              </div>
               {!hasSlots && <div style={{ fontFamily: MO, fontSize: 9, color: "rgba(255,80,80,0.7)", padding: "4px 14px", textAlign: "right" }}>No slots left</div>}
               {tooltip && (
                 <div style={{
@@ -370,34 +452,38 @@ export function CombatPanel({ combat, char, monsters, combatMode, setCombatMode,
           {/* ITEM sub-panel */}
           {actionTab === "item" && (
             usableItems.length === 0 ? (
-              <div style={{ ...rightCard(220), padding: "9px 14px", background: "rgba(12,10,28,0.88)", textAlign: "right" }}>
+              <div style={{ ...rightCard(220), padding: "8px 14px", background: "rgba(12,10,28,0.88)", textAlign: "right" }}>
                 <span style={{ fontFamily: MO, fontSize: 10, color: "rgba(255,255,255,0.28)" }}>No items</span>
               </div>
-            ) : usableItems.map((item, ii) => {
-              const isBomb = item.effect === "aoe_bomb";
-              const isExtra = !isBomb; // Potions use extra action, bombs use main
-              const isDisabled = isExtra ? combat.extraActionUsed : isMainActionExhausted;
-              return (
-                <button key={item.id} className="cp-right-btn"
-                  onClick={() => !isDisabled && onUseItem(item)}
-                  disabled={isDisabled}
-                  style={{
-                    ...rightCard(220 + ii * 40),
-                    border: "none", padding: "9px 14px 9px 20px", width: "100%", textAlign: "right",
-                    background: "linear-gradient(260deg, rgba(20,70,20,0.95), rgba(10,35,10,0.95))",
-                    color: isDisabled ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.85)",
-                    fontFamily: PX, fontSize: 9, letterSpacing: 1,
-                    display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8,
-                    marginBottom: 3,
-                    cursor: isDisabled ? "not-allowed" : "pointer",
-                    opacity: isDisabled ? 0.5 : 1
-                  }}>
-                  {isExtra ? <span style={{ fontFamily: PX, fontSize: 6, color: C.gold, marginRight: "auto" }}>[EXTRA]</span> : null}
-                  <span style={{ fontFamily: MO, fontSize: 7, color: C.muted }}>x1</span>
-                  {item.name} 💊
-                </button>
-              );
-            })
+            ) : (
+              <div className="cp-sub-scroll">
+                {usableItems.map((item, ii) => {
+                  const isBomb = item.effect === "aoe_bomb";
+                  const isExtra = !isBomb;
+                  const isDisabled = isExtra ? combat.extraActionUsed : isMainActionExhausted;
+                  return (
+                    <button key={item.id} className="cp-right-btn"
+                      onClick={() => !isDisabled && onUseItem(item)}
+                      disabled={isDisabled}
+                      style={{
+                        ...rightCard(220 + Math.min(ii, 3) * 30),
+                        border: "none", padding: "7px 12px 7px 18px", width: "100%", textAlign: "right",
+                        background: "linear-gradient(260deg, rgba(20,70,20,0.95), rgba(10,35,10,0.95))",
+                        color: isDisabled ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.85)",
+                        fontFamily: PX, fontSize: 8, letterSpacing: 1,
+                        display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 7,
+                        cursor: isDisabled ? "not-allowed" : "pointer",
+                        opacity: isDisabled ? 0.5 : 1,
+                        flexShrink: 0,
+                      }}>
+                      {isExtra ? <span style={{ fontFamily: PX, fontSize: 5, color: C.gold, marginRight: "auto" }}>[E]</span> : null}
+                      <span style={{ fontFamily: MO, fontSize: 7, color: C.muted }}>x1</span>
+                      {item.name} 💊
+                    </button>
+                  );
+                })}
+              </div>
+            )
           )}
 
           {/* END TURN */}

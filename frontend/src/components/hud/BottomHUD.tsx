@@ -7,10 +7,10 @@ import { C, PX, NU, MO, pixelBtn } from "../../constants/theme";
 import { CLASS_SPELLS, WIZARD_SPELL_CHOICES, CLASS_CFG } from "../../constants/classes";
 import { SKILL_DICTIONARY } from "../../constants/skills";
 import iconBlessing from "../../assets/icon/skill/I_01.png";
-import { getMod, getWeaponHitBonus, formatMod } from "../../utils/dice";
+import { getMod, getWeaponHitBonus, formatMod, getVersatileDamage2H, getWeaponStat, calcACBreakdown } from "../../utils/dice";
 import { HpBar } from "../ui/HpBar";
 import { StatBox } from "../ui/StatBox";
-import { ItemMenu } from "../modals/ItemMenu";
+import { ItemMenu, PropertyTag, DamageTypeTag } from "../modals/ItemMenu";
 import type { Character, GameState, Item, Quest, Stats, HudTab } from "../../types/game";
 
 export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTab, setChatTab, globalChat, partyChat, onSendChat, onEquipItem, onUnequipMainHand, onUnequipOffHand, onUnequipArmor, onUnequipAcc, onDropItem, onUseItem, party, onCreateParty, onLeaveParty, activeQuests, onUseSkill, inCombat }: {
@@ -84,11 +84,7 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
   const hpCon = getMod(char.stats.con) * char.level;
   const hpLevelBonus = char.maxHp - hpBase - hpCon;
 
-  const acBase = char.equipment.armor ? (char.equipment.armor.ac || 11) : 10;
-  const addDex = !char.equipment.armor || ["Leather Armor", "Mage Robes"].includes(char.equipment.armor.name);
-  const acDex = addDex ? getMod(char.stats.dex) : 0;
-  const acShield = char.equipment.offHand?.effect === "guard" ? 2 : 0;
-  const acOther = char.ac - acBase - acDex - acShield;
+  const acBD = calcACBreakdown(char);
 
   const hitInfo = char.equipment.mainHand && char.equipment.mainHand.type === "weapon" 
     ? getWeaponHitBonus(char, char.equipment.mainHand)
@@ -96,13 +92,40 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
 
   return (
     <div style={{ background: C.card, borderTop: `2px solid ${C.border}`, flexShrink: 0, fontFamily: NU }}>
+      <style>{`
+        @keyframes hud-fadein {
+          from { opacity: 0; transform: translateY(4px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes hud-collapse {
+          from { height: 188px; opacity: 1; }
+          to   { height: 0px;   opacity: 0; }
+        }
+        .hud-tab-btn {
+          transition: color 0.18s, background 0.18s, border-color 0.18s;
+        }
+        .hud-tab-btn:hover {
+          color: #a0b8ff !important;
+          background: rgba(100,130,255,0.07) !important;
+        }
+        .hud-tab-btn:active {
+          transform: scaleY(0.95);
+        }
+        .hud-collapse-btn {
+          transition: color 0.18s, transform 0.25s ease;
+        }
+        .hud-collapse-btn:hover { color: #a0b8ff !important; }
+      `}</style>
+
       <div style={{ display: "flex", alignItems: "center", borderBottom: `2px solid ${C.border}` }}>
-        <div style={{ display: "flex", flex: 1, overflowX: "auto" }}>
+        <div style={{ display: "flex", flex: 1, overflowX: "auto" }} className="hud-tab-scroll">
           {TABS.map(t => (
             <button key={t.id} onClick={() => { setHudTab(t.id); if (!hudOpen) setHudOpen(true); }}
+              className="hud-tab-btn"
               style={{
                 display: "flex", alignItems: "center", gap: 4, padding: "8px 12px",
-                background: "none", border: "none", cursor: "pointer", flexShrink: 0,
+                background: hudTab === t.id && hudOpen ? "rgba(100,130,255,0.09)" : "none",
+                border: "none", cursor: "pointer", flexShrink: 0,
                 borderBottom: hudTab === t.id && hudOpen ? `2px solid ${C.blue}` : "2px solid transparent",
                 marginBottom: -2,
                 fontFamily: PX, fontSize: 7, letterSpacing: 0.5,
@@ -112,17 +135,26 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
             </button>
           ))}
         </div>
-        <button onClick={() => setHudOpen(p => !p)} style={{ padding: "8px 12px", background: "none", border: "none", cursor: "pointer", color: C.muted }}>
-          {hudOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+        <button
+          className="hud-collapse-btn"
+          onClick={() => setHudOpen(p => !p)}
+          style={{
+            padding: "8px 12px", background: "none", border: "none", cursor: "pointer", color: C.muted,
+            transform: hudOpen ? "rotate(0deg)" : "rotate(180deg)",
+          }}>
+          <ChevronDown className="w-4 h-4" />
         </button>
       </div>
 
-      {hudOpen && (
-        <div style={{ height: 188, overflow: "hidden" }}>
-
-          {/* CHAR */}
+      <div style={{
+        height: hudOpen ? 188 : 0,
+        overflow: "hidden",
+        transition: "height 0.28s cubic-bezier(0.4,0,0.2,1)",
+      }}>
+        {/* Animated content pane — re-mounts on tab change to trigger fade-in */}
+        <div key={hudTab} style={{ height: "100%", animation: "hud-fadein 0.18s ease-out" }}>
           {hudTab === "char" && (
-            <div style={{ height: "100%", padding: "10px 14px", overflowY: "auto", display: "flex", gap: 16 }}>
+            <div style={{ height: "100%", padding: "10px 14px", overflowY: "auto", display: "flex", gap: 16 }} className="hud-scroll">
               <div style={{ width: 120, display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
                 <img src={char.avatar} alt="Avatar" style={{ width: 100, height: 100, objectFit: "cover", border: `2px solid ${C.border}`, borderRadius: 4, background: C.card2 }} />
                 {char.statusPoints > 0 && (
@@ -229,7 +261,7 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
                   </button>
                 ))}
               </div>
-              <div style={{ flex: 1, padding: "8px 10px", overflowY: "auto" }}>
+              <div style={{ flex: 1, padding: "8px 10px", overflowY: "auto" }} className="hud-scroll">
                 {(() => {
                   const filtered = char.inventory.filter(i => {
                     if (invCategory === "usable") return i.type === "consumable" && !i.material;
@@ -330,83 +362,124 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
           )}
 
           {/* EQUIPMENT */}
-          {hudTab === "equip" && (
-            <div style={{ height: "100%", padding: "10px 14px", overflowY: "auto", display: "flex", gap: 14 }}>
-              <div style={{ display: "flex", gap: 14 }}>
-                <div>
-                  <div style={{ fontFamily: PX, fontSize: 7, color: C.muted, marginBottom: 6, letterSpacing: 1 }}>MAIN HAND</div>
-                  <SlotBox item={char.equipment.mainHand} onClick={char.equipment.mainHand ? () => setItemMenu(char.equipment.mainHand!) : undefined} />
-                  {char.equipment.mainHand && (
-                    <div style={{ marginTop: 4 }}>
-                      <div style={{ fontFamily: PX, fontSize: 7, color: C.text }}>{char.equipment.mainHand.name}</div>
-                      <div style={{ fontFamily: MO, fontSize: 9, color: C.muted }}>{(() => {
-                        const w = char.equipment.mainHand;
-                        const isR = (w.range ?? 5) > 5;
-                        const sm = isR ? getMod(char.stats.dex) : getMod(char.stats.str);
-                        return `${w.damage}${sm >= 0 ? "+" : ""}${sm}`;
-                      })()}</div>
-                      <button onClick={onUnequipMainHand} style={{ fontFamily: NU, fontSize: 10, color: C.red + "80", background: "none", border: "none", cursor: "pointer", padding: 0, marginTop: 2 }}>unequip</button>
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <div style={{ fontFamily: PX, fontSize: 7, color: C.muted, marginBottom: 6, letterSpacing: 1 }}>OFF HAND</div>
-                  {char.equipment.mainHand?.hands === 2 ? (
-                    <div style={{ width: 44, height: 44, border: `1px dashed ${C.border}`, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", background: C.card2, opacity: 0.5 }}>
-                      <span style={{ fontFamily: PX, fontSize: 6, color: C.muted, textAlign: "center" }}>(2H<br/>WEAPON)</span>
-                    </div>
-                  ) : (
-                    <>
-                      <SlotBox item={char.equipment.offHand} onClick={char.equipment.offHand ? () => setItemMenu(char.equipment.offHand!) : undefined} />
-                      {char.equipment.offHand && (
-                        <div style={{ marginTop: 4 }}>
-                          <div style={{ fontFamily: PX, fontSize: 7, color: C.text }}>{char.equipment.offHand.name}</div>
-                          <button onClick={onUnequipOffHand} style={{ fontFamily: NU, fontSize: 10, color: C.red + "80", background: "none", border: "none", cursor: "pointer", padding: 0, marginTop: 2 }}>unequip</button>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-              <div style={{ width: 1, background: C.border }} />
-              <div>
-                <div style={{ fontFamily: PX, fontSize: 7, color: C.muted, marginBottom: 6, letterSpacing: 1 }}>ARMOR</div>
-                <SlotBox item={char.equipment.armor} onClick={char.equipment.armor ? () => setItemMenu(char.equipment.armor!) : undefined} />
-                {char.equipment.armor && (
-                  <div style={{ marginTop: 4 }}>
-                    <div style={{ fontFamily: PX, fontSize: 7, color: C.text }}>{char.equipment.armor.name}</div>
-                    <div style={{ fontFamily: MO, fontSize: 9, color: C.blue }}>AC {char.equipment.armor.ac}</div>
-                    <button onClick={onUnequipArmor} style={{ fontFamily: NU, fontSize: 10, color: C.red + "80", background: "none", border: "none", cursor: "pointer", padding: 0, marginTop: 2 }}>unequip</button>
-                  </div>
-                )}
-              </div>
-              <div style={{ width: 1, background: C.border }} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontFamily: PX, fontSize: 7, color: C.muted, marginBottom: 6, letterSpacing: 1 }}>IN BAG</div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {char.inventory.filter(i => i.type === "weapon" || i.type === "armor").map(item => (
-                    <div key={item.id} style={{ position: "relative", cursor: "pointer" }} onClick={() => onEquipItem(item)} title={`Equip ${item.name}`}>
+          {hudTab === "equip" && (() => {
+            const mh = char.equipment.mainHand;
+            const oh = char.equipment.offHand;
+            const ar = char.equipment.armor;
+            const offEmpty = !oh;
+
+            const WeaponInfo = ({ item, label, onUnequip }: { item: NonNullable<typeof mh>; label: string; onUnequip: () => void }) => {
+              const isVers = item.properties?.includes("versatile");
+              const effDmg = isVers && offEmpty && label === "MAIN" ? getVersatileDamage2H(item.damage ?? "1d4") : (item.damage ?? "-");
+              const { mod: sm } = getWeaponStat(char, item);
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 90 }}>
+                  <div style={{ fontFamily: PX, fontSize: 6, color: C.muted, letterSpacing: 1 }}>{label} HAND</div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <div style={{ cursor: "pointer", flexShrink: 0 }} onClick={() => setItemMenu(item)}>
                       <SlotBox item={item} />
-                      {item.type === "weapon" && (
-                        <div style={{ position: "absolute", top: -4, right: -4, background: C.card, border: `1px solid ${C.border}`, borderRadius: 3, padding: "1px 3px", fontFamily: MO, fontSize: 6, color: item.hands === 2 ? C.red : C.gold, zIndex: 2 }}>
-                          {item.hands === 2 ? "2H" : "1H"}
-                        </div>
-                      )}
-                      <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.5)", opacity: 0, transition: "opacity 0.15s", fontFamily: PX, fontSize: 6, color: C.blue, borderRadius: 4, zIndex: 1 }}
-                        onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.opacity = "1"}
-                        onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.opacity = "0"}>
-                        EQUIP
+                    </div>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontFamily: PX, fontSize: 8, color: C.text, marginBottom: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 90 }}>{item.name}</div>
+                      <div style={{ fontFamily: MO, fontSize: 11, color: C.red, marginBottom: 2 }}>
+                        {effDmg}{sm >= 0 ? "+" : ""}{sm}
+                        {isVers && offEmpty && label === "MAIN" && <span style={{ fontFamily: PX, fontSize: 6, color: "#ff9800", marginLeft: 4 }}>2H</span>}
+                      </div>
+                      <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+                        {item.damageType && <DamageTypeTag dt={item.damageType} small />}
+                        {item.properties?.slice(0, 2).map(p => <PropertyTag key={p} prop={p} small />)}
                       </div>
                     </div>
-                  ))}
+                  </div>
+                  <button onClick={onUnequip} style={{ fontFamily: PX, fontSize: 6, color: C.red + "80", background: "none", border: `1px solid ${C.red}25`, cursor: "pointer", padding: "2px 6px", alignSelf: "flex-start", letterSpacing: 0.5, transition: "border-color 0.15s" }}>UNEQUIP</button>
+                </div>
+              );
+            };
+
+            return (
+              <div style={{ height: "100%", padding: "10px 14px", overflowY: "auto", display: "flex", gap: 0, alignItems: "flex-start" }} className="hud-scroll">
+
+                {/* ── Equipped ───────────────────────── */}
+                <div style={{ display: "flex", gap: 14, alignItems: "flex-start", flexShrink: 0 }}>
+
+                  {mh ? <WeaponInfo item={mh} label="MAIN" onUnequip={onUnequipMainHand} /> : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      <div style={{ fontFamily: PX, fontSize: 6, color: C.muted, letterSpacing: 1 }}>MAIN HAND</div>
+                      <SlotBox item={null} />
+                    </div>
+                  )}
+
+                  {mh?.hands === 2 ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      <div style={{ fontFamily: PX, fontSize: 6, color: C.muted, letterSpacing: 1 }}>OFF HAND</div>
+                      <div style={{ width: 44, height: 44, border: `1px dashed ${C.border}40`, display: "flex", alignItems: "center", justifyContent: "center", background: C.card2, opacity: 0.4 }}>
+                        <span style={{ fontFamily: PX, fontSize: 5, color: C.muted }}>2H</span>
+                      </div>
+                    </div>
+                  ) : oh ? <WeaponInfo item={oh} label="OFF" onUnequip={onUnequipOffHand} /> : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      <div style={{ fontFamily: PX, fontSize: 6, color: C.muted, letterSpacing: 1 }}>OFF HAND</div>
+                      <SlotBox item={null} />
+                    </div>
+                  )}
+
+                  {/* Armor */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 80 }}>
+                    <div style={{ fontFamily: PX, fontSize: 6, color: C.muted, letterSpacing: 1 }}>ARMOR</div>
+                    {ar ? (
+                      <>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          <div style={{ cursor: "pointer", flexShrink: 0 }} onClick={() => setItemMenu(ar!)}>
+                            <SlotBox item={ar} />
+                          </div>
+                          <div>
+                            <div style={{ fontFamily: PX, fontSize: 8, color: C.text, marginBottom: 2 }}>{ar.name}</div>
+                            <div style={{ fontFamily: MO, fontSize: 11, color: C.blue }}>AC {ar.ac}</div>
+                          </div>
+                        </div>
+                        <button onClick={onUnequipArmor} style={{ fontFamily: PX, fontSize: 6, color: C.red + "80", background: "none", border: `1px solid ${C.red}25`, cursor: "pointer", padding: "2px 6px", alignSelf: "flex-start", letterSpacing: 0.5 }}>UNEQUIP</button>
+                      </>
+                    ) : <SlotBox item={null} />}
+                  </div>
+                </div>
+
+                {/* Divider */}
+                <div style={{ width: 1, background: C.border, margin: "0 14px", alignSelf: "stretch" }} />
+
+                {/* ── IN BAG ─────────────────────────── */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: PX, fontSize: 6, color: C.muted, letterSpacing: 1, marginBottom: 7 }}>
+                    IN BAG <span style={{ color: C.blue + "80", fontFamily: NU, fontSize: 10 }}>· click to inspect & equip</span>
+                  </div>
+                  <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                    {char.inventory.filter(i => i.type === "weapon" || i.type === "armor").map(item => (
+                      <div key={item.id}
+                        style={{ position: "relative", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "4px 4px 3px", background: C.card2, border: `1px solid ${C.border}`, transition: "border-color 0.15s, background 0.15s" }}
+                        onClick={() => setItemMenu(item)}
+                        onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = C.blue; (e.currentTarget as HTMLDivElement).style.background = C.blue + "10"; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = C.border; (e.currentTarget as HTMLDivElement).style.background = C.card2; }}>
+                        <SlotBox item={item} />
+                        <div style={{ fontFamily: PX, fontSize: 5, color: C.muted, maxWidth: 44, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.name}</div>
+                        {item.type === "weapon" && item.damage !== "0" && (
+                          <div style={{ position: "absolute", top: 2, right: 2, fontFamily: MO, fontSize: 5, color: item.hands === 2 ? "#f06292" : C.gold }}>
+                            {item.hands === 2 ? "2H" : "1H"}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    {char.inventory.filter(i => i.type === "weapon" || i.type === "armor").length === 0 && (
+                      <div style={{ fontFamily: NU, fontSize: 11, color: C.muted + "50", padding: "8px 0", fontStyle: "italic" }}>Empty</div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
+
 
           {/* ACCESSORIES */}
           {hudTab === "acc" && (
-            <div style={{ height: "100%", padding: "10px 14px", overflowY: "auto", display: "flex", gap: 14 }}>
+            <div style={{ height: "100%", padding: "10px 14px", overflowY: "auto", display: "flex", gap: 14 }} className="hud-scroll">
               <div>
                 <div style={{ fontFamily: PX, fontSize: 7, color: C.muted, marginBottom: 6, letterSpacing: 1 }}>JEWELRY (3 SLOTS)</div>
                 <div style={{ display: "flex", gap: 8 }}>
@@ -439,141 +512,123 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
           )}
 
           {/* SKILLS */}
-          {hudTab === "skills" && (
-            <div style={{ height: "100%", padding: "8px 14px", overflowY: "auto" }}>
-              {(() => {
-                const baseSpells = CLASS_SPELLS[char.class] ?? [];
-                const spells = char.class === "Wizard" && char.spellChoice && char.spellChoice !== "Sleep"
-                  ? baseSpells.map(s => s.name === "Sleep"
-                      ? { ...s, name: char.spellChoice!, desc: WIZARD_SPELL_CHOICES.find(w => w.name === char.spellChoice)?.desc ?? s.desc }
-                      : s)
-                  : baseSpells;
+          {hudTab === "skills" && (() => {
+            const baseSpells = CLASS_SPELLS[char.class] ?? [];
+            const spells = char.class === "Wizard" && char.spellChoice && char.spellChoice !== "Sleep"
+              ? baseSpells.map(s => s.name === "Sleep"
+                  ? { ...s, name: char.spellChoice!, desc: WIZARD_SPELL_CHOICES.find(w => w.name === char.spellChoice)?.desc ?? s.desc }
+                  : s)
+              : baseSpells;
 
-                const extraAbilities: Array<{ 
-                  name: string; desc: string; color: string; level: number; type: string; 
-                  icon?: string; isPassive?: boolean; maxUses?: number; used?: number; recharge?: string 
-                }> = [];
-                
-                if (char.tutorialCompleted) {
-                  extraAbilities.push({ 
-                    name: "Blessing of Selenia", 
-                    desc: "Passive. Max HP +5. Permanent +2% EXP from all sources.", 
-                    color: C.gold, 
-                    level: 0, 
-                    type: "passive",
-                    icon: "I_01.png",
-                    isPassive: true
-                  });
-                }
+            type CardEntry = {
+              key: string; name: string; desc: string;
+              typeLabel: string; typeColor: string;
+              icon?: string; isBlessing?: boolean;
+              maxUses?: number; used?: number; recharge?: string;
+              damage?: string; heal?: string; range?: number;
+              saveStat?: string; saveDC?: number; aoe?: boolean; isCone?: boolean;
+            };
 
-                char.gameSkills.forEach(skillId => {
-                  const def = SKILL_DICTIONARY[skillId];
-                  if (def) {
-                    const used = char.skillUsages?.[skillId] || 0;
-                    extraAbilities.push({
-                      name: def.name,
-                      desc: def.description,
-                      color: def.type === "heal" ? "#4cdb70" : (char.class === "Fighter" ? C.red : C.blue),
-                      level: 0,
-                      type: def.type === "passive" ? "passive" : (def.maxUses ? `${def.maxUses}/${def.recharge === "short" ? "Short" : "Long"} Rest` : "cantrip"),
-                      icon: def.icon,
-                      isPassive: def.type === "passive" || def.type === "reaction",
-                      maxUses: def.maxUses,
-                      used: used,
-                      recharge: def.recharge
-                    });
-                  }
-                });
+            const cards: CardEntry[] = [];
 
-                if (spells.length === 0 && extraAbilities.length === 0) return (
-                  <div style={{ color: C.muted, fontFamily: NU, fontSize: 12, textAlign: "center", paddingTop: 30 }}>No skills available.</div>
-                );
+            if (char.tutorialCompleted) {
+              cards.push({
+                key: "blessing", name: "Blessing of Selenia",
+                desc: "Max HP +5. Permanent +2% EXP from all sources.",
+                typeLabel: "PASSIVE", typeColor: C.gold, isBlessing: true,
+              });
+            }
 
-                return (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                    <style>{`
-                      @keyframes skill-expand { 0%{opacity:0;transform:skewX(6deg) scaleY(0.5)} 100%{opacity:1;transform:skewX(0deg) scaleY(1)} }
-                      @keyframes skill-sweep { 0%{background-position:-100% 0} 100%{background-position:200% 0} }
-                    `}</style>
-                    {[...spells, ...extraAbilities].map((spell) => {
-                      const isExpanded = expandedSkill === spell.name;
-                      const isCantrip = spell.level === 0;
-                      const attackType = (spell as { aoe?: boolean }).aoe ? (WIZARD_SPELL_CHOICES.find(w => w.name === spell.name)?.isCone ? "Cone AOE" : "Circle AOE")
-                        : spell.type === "heal" ? "Healing" : "Single Target";
-                      const spellColor = spell.type === "heal" ? "#4cdb70" : isCantrip ? C.blue : C.purple;
+            char.gameSkills.forEach(skillId => {
+              const def = SKILL_DICTIONARY[skillId];
+              if (!def) return;
+              const used = char.skillUsages?.[skillId] || 0;
+              const tColor = def.type === "passive" ? C.blue : def.type === "heal" ? "#4cdb70" : def.type === "reaction" ? "#ba68c8" : C.red;
+              const tLabel = def.type === "passive" ? "PASSIVE" : def.type === "reaction" ? "REACTION"
+                : def.maxUses ? `${def.maxUses - used}/${def.maxUses} · ${def.recharge === "short" ? "SHORT" : "LONG"} REST`
+                : "ACTIVE";
+              cards.push({ key: skillId, name: def.name, desc: def.description, typeLabel: tLabel, typeColor: tColor, icon: def.icon, maxUses: def.maxUses, used, recharge: def.recharge });
+            });
 
-                      return (
-                        <div key={spell.name} style={{ border: `1px solid ${isExpanded ? spellColor : C.border}`, transition: "border-color 0.2s" }}>
-                          <button onClick={() => setExpandedSkill(isExpanded ? null : spell.name)}
-                            style={{
-                              width: "100%", padding: "8px 10px", cursor: "pointer",
-                              background: isExpanded ? spellColor + "18" : C.card2,
-                              display: "flex", alignItems: "center", gap: 8,
-                              border: "none", borderBottom: isExpanded ? `1px solid ${spellColor}30` : "none",
-                              transition: "background 0.2s",
-                            }}>
-                            {spell.name === "Blessing of Selenia" && (
-                              <img src={iconBlessing} alt="Blessing" style={{ width: 14, height: 14, objectFit: "contain", marginRight: 4 }} />
-                            )}
-                            <span style={{ fontFamily: PX, fontSize: 7, color: spellColor, flex: 1, textAlign: "left" }}>{spell.name}</span>
-                            <span style={{ fontFamily: MO, fontSize: 8, color: C.muted }}>
-                              {(spell as any).maxUses ? `${(spell as any).maxUses - ((spell as any).used || 0)}/${(spell as any).maxUses} ` : ""}
-                              {(spell as any).isPassive ? "passive" : (spell as any).type ? (spell as any).type : (isCantrip ? "cantrip" : `lvl ${spell.level}`)}
-                            </span>
-                            <span style={{ fontFamily: MO, fontSize: 9, color: spellColor }}>{isExpanded ? "▲" : "▼"}</span>
-                          </button>
+            spells.forEach(sp => {
+              const isHeal = sp.type === "heal";
+              const tColor = isHeal ? "#4cdb70" : sp.level === 0 ? C.blue : C.purple;
+              const tLabel = sp.level === 0 ? "CANTRIP" : `LEVEL ${sp.level}`;
+              const spAny = sp as any;
+              const aoe = spAny.aoe;
+              const isCone = WIZARD_SPELL_CHOICES.find(w => w.name === sp.name)?.isCone;
+              cards.push({
+                key: sp.name, name: sp.name, desc: sp.desc, typeLabel: tLabel, typeColor: tColor,
+                damage: spAny.damage, heal: spAny.heal, range: spAny.range,
+                saveStat: spAny.saveStat, saveDC: spAny.saveDC, aoe, isCone,
+              });
+            });
 
-                          {isExpanded && (
-                            <div style={{
-                              padding: "10px 12px", background: C.card,
-                              animation: "skill-expand 0.22s ease-out", transformOrigin: "top",
-                            }}>
-                              <div style={{
-                                height: 2, marginBottom: 8,
-                                background: `linear-gradient(90deg, transparent, ${spellColor}, transparent)`,
-                                animation: "skill-sweep 1.5s ease-in-out infinite", backgroundSize: "200% 100%",
-                              }} />
-                              <div style={{ fontFamily: NU, fontSize: 11, color: C.text + "c0", marginBottom: 6, lineHeight: 1.5 }}>{spell.desc}</div>
-                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginBottom: 8 }}>
-                                {(spell as { damage?: string }).damage && (
-                                  <div style={{ fontFamily: MO, fontSize: 9, color: C.red, background: C.card2, padding: "3px 6px" }}>DMG: {(spell as { damage?: string }).damage}</div>
-                                )}
-                                {(spell as { heal?: string }).heal && (
-                                  <div style={{ fontFamily: MO, fontSize: 9, color: "#4cdb70", background: C.card2, padding: "3px 6px" }}>HEAL: {(spell as { heal?: string }).heal}</div>
-                                )}
-                                {(spell as { range?: number }).range !== undefined && (
-                                  <div style={{ fontFamily: MO, fontSize: 9, color: C.blue, background: C.card2, padding: "3px 6px" }}>RANGE: {((spell as { range?: number }).range || 0) / 5} tiles</div>
-                                )}
-                                <div style={{ fontFamily: MO, fontSize: 9, color: C.gold, background: C.card2, padding: "3px 6px" }}>{attackType}</div>
-                                {(spell as { saveStat?: keyof Stats; saveDC?: number }).saveStat && (spell as { saveDC?: number }).saveDC && (
-                                  <div style={{ fontFamily: MO, fontSize: 9, color: C.muted, background: C.card2, padding: "3px 6px", gridColumn: "span 2" }}>
-                                    {(spell as { saveStat?: string }).saveStat?.toUpperCase()} save DC {(spell as { saveDC?: number }).saveDC}
-                                  </div>
-                                )}
-                              </div>
-                              {!inCombat && !(spell as any).isPassive ? (
-                                <button onClick={() => onUseSkill(spell.name)}
-                                  style={{
-                                    width: "100%", padding: "6px", cursor: "pointer",
-                                    background: `linear-gradient(135deg, ${spellColor}30, ${spellColor}18)`,
-                                    border: `2px solid ${spellColor}`, color: spellColor, fontFamily: PX, fontSize: 7,
-                                    boxShadow: `0 0 8px ${spellColor}30`, transition: "box-shadow 0.2s",
-                                  }}>
-                                  ✨ USE SKILL
-                                </button>
-                              ) : (
-                                <div style={{ fontFamily: NU, fontSize: 10, color: C.muted, textAlign: "center", padding: "4px 0" }}>↑ Use via combat panel</div>
-                              )}
-                            </div>
-                          )}
+            if (cards.length === 0) return (
+              <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <div style={{ fontFamily: NU, fontSize: 12, color: C.muted }}>No skills available yet.</div>
+              </div>
+            );
+
+            return (
+              <div style={{ height: "100%", padding: "8px 12px", overflowY: "auto", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, alignContent: "start" }} className="hud-scroll">
+                {cards.map(card => {
+                  const chargesLeft = card.maxUses != null ? card.maxUses - (card.used ?? 0) : null;
+                  const isExhausted = chargesLeft === 0;
+                  return (
+                    <div key={card.key} style={{
+                      padding: "8px 10px", background: C.card2,
+                      border: `1px solid ${isExhausted ? C.border + "40" : card.typeColor + "30"}`,
+                      opacity: isExhausted ? 0.5 : 1,
+                    }}>
+                      {/* Row 1: icon + name + type badge */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
+                        {card.isBlessing && <img src={iconBlessing} alt="" style={{ width: 14, height: 14, objectFit: "contain", flexShrink: 0 }} />}
+                        <span style={{ fontFamily: PX, fontSize: 8, color: card.typeColor, flex: 1, lineHeight: 1.2 }}>{card.name}</span>
+                        <span style={{ fontFamily: PX, fontSize: 6, color: card.typeColor, background: card.typeColor + "18", border: `1px solid ${card.typeColor}30`, padding: "1px 4px", flexShrink: 0 }}>
+                          {card.typeLabel}
+                        </span>
+                      </div>
+
+                      {/* Charge pips */}
+                      {card.maxUses != null && (
+                        <div style={{ display: "flex", gap: 3, marginBottom: 5 }}>
+                          {Array.from({ length: card.maxUses }, (_, i) => (
+                            <div key={i} style={{ width: 7, height: 7, border: `1px solid ${card.typeColor}`, background: i < (chargesLeft ?? 0) ? card.typeColor : "transparent" }} />
+                          ))}
                         </div>
-                      );
-                    })}
-                  </div>
-                );
-              })()}
-            </div>
-          )}
+                      )}
+
+                      {/* Description */}
+                      <div style={{ fontFamily: NU, fontSize: 10, color: C.muted, lineHeight: 1.4, marginBottom: card.damage || card.heal || card.range || card.saveStat ? 5 : 0 }}>
+                        {card.desc}
+                      </div>
+
+                      {/* Stat tags */}
+                      {(card.damage || card.heal || card.range || card.saveStat || card.aoe) && (
+                        <div style={{ display: "flex", gap: 3, flexWrap: "wrap", marginTop: 4 }}>
+                          {card.damage && <span style={{ fontFamily: MO, fontSize: 8, color: C.red, background: C.red + "15", padding: "1px 4px", border: `1px solid ${C.red}25` }}>⚔ {card.damage}</span>}
+                          {card.heal && <span style={{ fontFamily: MO, fontSize: 8, color: "#4cdb70", background: "#4cdb7015", padding: "1px 4px", border: "1px solid #4cdb7025" }}>♥ {card.heal}</span>}
+                          {card.range != null && <span style={{ fontFamily: MO, fontSize: 8, color: "#ba68c8", background: "#ba68c815", padding: "1px 4px", border: "1px solid #ba68c825" }}>📏 {card.range / 5}t</span>}
+                          {card.aoe && <span style={{ fontFamily: PX, fontSize: 7, color: C.gold, background: C.gold + "15", padding: "1px 4px", border: `1px solid ${C.gold}25` }}>{card.isCone ? "CONE" : "AOE"}</span>}
+                          {card.saveStat && card.saveDC && <span style={{ fontFamily: MO, fontSize: 8, color: C.muted, background: C.card, padding: "1px 4px", border: `1px solid ${C.border}` }}>{card.saveStat.toUpperCase()} DC {card.saveDC}</span>}
+                        </div>
+                      )}
+
+                      {/* In-combat note for active skills */}
+                      {!card.isBlessing && card.typeLabel !== "PASSIVE" && inCombat && !isExhausted && (
+                        <div style={{ fontFamily: PX, fontSize: 6, color: C.muted + "80", marginTop: 4, letterSpacing: 0.5 }}>USE VIA COMBAT PANEL</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
+
+
+
 
           {/* CHAT */}
           {hudTab === "chat" && (
@@ -589,7 +644,7 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
                   </button>
                 ))}
               </div>
-              <div ref={chatRef} style={{ flex: 1, overflowY: "auto", padding: "8px 12px", display: "flex", flexDirection: "column", gap: 3 }}>
+              <div ref={chatRef} style={{ flex: 1, overflowY: "auto", padding: "8px 12px", display: "flex", flexDirection: "column", gap: 3 }} className="hud-scroll">
                 {(chatTab === "global" ? globalChat : partyChat).map(msg => (
                   <div key={msg.id} style={{ display: "flex", gap: 6, fontSize: 11, lineHeight: 1.5 }}>
                     <span style={{ fontFamily: MO, fontSize: 9, color: C.muted, flexShrink: 0 }}>{msg.time}</span>
@@ -616,7 +671,7 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
 
           {/* QUEST */}
           {hudTab === "quest" && (
-            <div style={{ height: "100%", padding: "10px 14px", overflowY: "auto" }}>
+            <div style={{ height: "100%", padding: "10px 14px", overflowY: "auto" }} className="hud-scroll">
               <div style={{ fontFamily: PX, fontSize: 7, color: C.muted, marginBottom: 6, letterSpacing: 1 }}>ACTIVE QUESTS</div>
               {activeQuests.length === 0
                 ? <div style={{ fontFamily: NU, fontSize: 11, color: C.muted }}>No quests. Visit the Quest Board in town.</div>
@@ -637,7 +692,7 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
 
           {/* PARTY */}
           {hudTab === "party" && (
-            <div style={{ height: "100%", padding: "10px 14px", overflowY: "auto" }}>
+            <div style={{ height: "100%", padding: "10px 14px", overflowY: "auto" }} className="hud-scroll">
               {party ? (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -667,7 +722,7 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
             </div>
           )}
         </div>
-      )}
+      </div>
 
       {itemMenu && (
         <ItemMenu
@@ -743,31 +798,33 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
                 <div style={{ fontFamily: PX, fontSize: 14, color: C.gold, borderBottom: `1px solid ${C.border}`, paddingBottom: 4, marginBottom: 8 }}>
                   Armor Class
                 </div>
-                <div style={{ fontFamily: MO, fontSize: 24, color: C.text, marginBottom: 12 }}>{char.ac}</div>
-                
+                <div style={{ fontFamily: MO, fontSize: 24, color: C.text, marginBottom: 12 }}>{acBD.total}</div>
+
                 <div style={{ display: "flex", justifyContent: "space-between", fontFamily: NU, fontSize: 13, color: C.text, marginBottom: 4 }}>
-                  <span>{char.equipment.armor?.name || "Base"}</span>
-                  <span style={{ fontFamily: MO, color: C.blue }}>{acBase}</span>
+                  <span>{acBD.armorLabel}</span>
+                  <span style={{ fontFamily: MO, color: C.blue }}>{acBD.armorValue}</span>
                 </div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontFamily: NU, fontSize: 13, color: C.text, marginBottom: 4 }}>
-                  <span>Dexterity Modifier</span>
-                  <span style={{ fontFamily: MO, color: C.blue }}>{formatMod(acDex)}</span>
-                </div>
-                {acShield > 0 && (
+                {acBD.dexLabel && (
                   <div style={{ display: "flex", justifyContent: "space-between", fontFamily: NU, fontSize: 13, color: C.text, marginBottom: 4 }}>
-                    <span>Shield</span>
-                    <span style={{ fontFamily: MO, color: C.blue }}>{formatMod(acShield)}</span>
+                    <span>{acBD.dexLabel}</span>
+                    <span style={{ fontFamily: MO, color: C.blue }}>{formatMod(acBD.dexValue)}</span>
                   </div>
                 )}
-                {acOther > 0 && (
+                {acBD.shieldValue > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", fontFamily: NU, fontSize: 13, color: C.text, marginBottom: 4 }}>
+                    <span>Shield</span>
+                    <span style={{ fontFamily: MO, color: C.blue }}>{formatMod(acBD.shieldValue)}</span>
+                  </div>
+                )}
+                {acBD.otherValue > 0 && (
                   <div style={{ display: "flex", justifyContent: "space-between", fontFamily: NU, fontSize: 13, color: C.text, marginBottom: 4 }}>
                     <span>Other Bonus</span>
-                    <span style={{ fontFamily: MO, color: C.blue }}>{formatMod(acOther)}</span>
+                    <span style={{ fontFamily: MO, color: C.blue }}>{formatMod(acBD.otherValue)}</span>
                   </div>
                 )}
                 <div style={{ display: "flex", justifyContent: "space-between", fontFamily: NU, fontSize: 13, color: C.gold, marginTop: 12, paddingTop: 8, borderTop: `1px dashed ${C.border}` }}>
                   <span>Total</span>
-                  <span style={{ fontFamily: MO }}>{char.ac}</span>
+                  <span style={{ fontFamily: MO }}>{acBD.total}</span>
                 </div>
               </>
             )}

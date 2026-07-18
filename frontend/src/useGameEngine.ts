@@ -3,15 +3,15 @@ import type {
   GameState, Character, Item, CombatState, CombatModeT, VisualEffect, DiceRollDisplay, Screen, Stats, Quest
 } from "./types/game";
 import { C } from "./constants/theme";
-import { CLASS_CFG, CLASS_SPELLS, WIZARD_SPELL_CHOICES } from "./constants/classes";
+import { CLASS_CFG, CLASS_SPELLS, WIZARD_SPELL_CHOICES, PROFICIENCY_LIST } from "./constants/classes";
 import { SKILL_DICTIONARY } from "./constants/skills";
 import { SHOP_ITEMS, STARTING_ITEMS, BRANCH_ITEM, MONSTER_DROPS } from "./constants/items";
 import { NPC_CHAT } from "./constants/quests";
 import {
-  getMapCols, getMapRows, MOVE_SQUARES, SIGHT, DUNGEON_ENTER, DUNGEON_EXIT, TOWN_ENTER,
-  TOWN_SPECIAL, SANCTUARY_SPECIAL, isWalkable
+  getMapRows, getMapCols, TOWN_ENTER, DUNGEON_ENTER, DUNGEON_EXIT,
+  TOWN_SPECIAL, SANCTUARY_SPECIAL, DUNGEON_SPECIAL, isWalkable, SIGHT, MOVE_SQUARES
 } from "./constants/map";
-import { gid, d20, getMod, dist, tnow, rollDice, getSpellcastingMod, calcAC } from "./utils/dice";
+import { gid, d20, getMod, dist, distToEntity, tnow, rollDice, getSpellcastingMod, calcAC, getWeaponStat, getEffectiveDamage } from "./utils/dice";
 import { loadState, persist } from "./storage";
 import { genMonsters, genQuests } from "./game/character";
 import { parseWhisperingForest } from "./maps/whispering_forest";
@@ -36,10 +36,10 @@ export function checkLineOfSight(x0: number, y0: number, x1: number, y1: number,
 }
 
 const INIT_COMBAT: CombatState = {
-  active: false, round: 1, turnOrder: [], currentIndex: 0,
+  active: false, round: 0, turnOrder: [], currentIndex: 0,
   actionUsed: false, extraActionUsed: false, movedSquares: 0,
-  extraMainActions: 0,
-  log: [], engagedMonsterIds: [], activeBuffs: []
+  extraMainActions: 0, log: [], engagedMonsterIds: [], activeBuffs: [],
+  warnings: []
 };
 
 function consumeMainAction(prev: CombatState): Partial<CombatState> {
@@ -83,13 +83,14 @@ export function useGameEngine() {
   const [showShop, setShowShop] = useState(false);
   const [showQuests, setShowQuests] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
+  const [skillObtained, setSkillObtained] = useState<{ id: string; name: string; icon: string; desc: string } | null>(null);
   const [actionText, setActionText] = useState<{ text: string; color: string } | null>(null);
   const [restAnim, setRestAnim] = useState<"short" | "long" | null>(null);
   const [zooms, setZooms] = useState<Record<string, number>>({
     town: 0.4,
     sanctuary: 0.5,
-    dungeon: 1.0,
-    tutorial: 1.0,
+    dungeon: 0.5,
+    tutorial: 0.7,
     worldMap: 1.0
   });
   const zoom = zooms[screen] ?? 1.0;
@@ -107,6 +108,8 @@ export function useGameEngine() {
   const [insightVisionTiles, setInsightVisionTiles] = useState<Set<string>>(new Set());
   const [stealthActive, setStealthActive] = useState(false);
   const stealthedMonstersRef = useRef<Set<string>>(new Set());
+  // Synchronous gate so tutorials never fire twice even when React state hasn't flushed yet
+  const tutorialsSeenRef = useRef<Set<string>>(new Set());
   const [stealthCasting, setStealthCasting] = useState(false);
 
   const monsterTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -114,6 +117,14 @@ export function useGameEngine() {
   const char = activeCharId ? gs.characters[activeCharId] : null;
 
   useEffect(() => { persist(gs); }, [gs]);
+
+  // Sync tutorialsSeenRef from persisted char state on login / char switch
+  useEffect(() => {
+    if (char?.tutorialsSeen) {
+      char.tutorialsSeen.forEach(id => tutorialsSeenRef.current.add(id));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCharId]);
 
   // NPC chat
   useEffect(() => {
@@ -137,6 +148,11 @@ export function useGameEngine() {
   const notify = useCallback((msg: string) => {
     setNotification(msg);
     setTimeout(() => setNotification(null), 3500);
+  }, []);
+
+  const notifySkill = useCallback((id: string, name: string, icon: string, desc: string) => {
+    setSkillObtained({ id, name, icon, desc });
+    setTimeout(() => setSkillObtained(null), 5000);
   }, []);
 
   const addEffect = useCallback((e: Omit<VisualEffect, "id">) => {
@@ -186,7 +202,6 @@ export function useGameEngine() {
     setStealthActive(false);
     stealthedMonstersRef.current.clear();
     setStealthCasting(false);
-    setActionText({ text: "COMBAT START!", color: C.red });
     setTimeout(() => setActionText(null), 1500);
     setBattleStart(true);
     setTimeout(() => setBattleStart(false), 1800);
@@ -323,17 +338,33 @@ export function useGameEngine() {
         if (!alreadyCompleted) {
           setSeleniaDialogTree({
             start: {
+              emotion: "happy",
+              text: "Excellent work, Traveler!",
+              next: "mod2"
+            },
+            mod2: {
+              emotion: "normal",
+              text: "Combat may seem complicated at first, but you'll become stronger with every battle.",
+              next: "mod3"
+            },
+            mod3: {
               emotion: "gentle",
-              text: "From now on, the path ahead is yours to walk...",
+              text: "Whenever you encounter something new, I'll be here to help explain it. So don't be afraid to explore, experiment, and enjoy your adventure.",
+              next: "blessing"
+            },
+            blessing: {
+              emotion: "gentle",
+              text: "Before you go, allow me to bestow a small blessing upon you. May it protect you on your path.",
               next: "farewell"
             },
             farewell: {
-              emotion: "gentle",
-              text: "May the stars guide you through your darkest nights, and may your heart remain steadfast. I will always be watching over you, Traveler.\n(Received Blessing of Selenia)",
+              emotion: "happy",
+              text: "Now... Selestia Horizon is waiting for you. Good luck! ✨",
               next: () => {
                 setSeleniaDialogTree(null);
                 updateChar(char.id, { position: TOWN_ENTER, currentMap: "town" });
                 setScreen("town");
+                notifySkill("selenia_blessing", "Blessing of Selenia", "✨", "Permanent +2% EXP Gain");
               }
             }
           });
@@ -389,7 +420,7 @@ export function useGameEngine() {
       newMonsters.forEach(m => {
         if (m.hp <= 0) return;
         const sight = m.state === "alert" ? m.sightRange + 3 : m.sightRange;
-        const d = dist(char.position, m.position);
+        const d = distToEntity(char.position, m.position, m.size);
         const hasLoS = checkLineOfSight(m.position.x, m.position.y, char.position.x, char.position.y, wfMap.obstacles);
 
         if (d <= sight && hasLoS) {
@@ -469,7 +500,7 @@ export function useGameEngine() {
     if (!combat.active || !char || screen !== "dungeon") return;
     const inSight = gs.dungeonMonsters.filter(m => 
       m.hp > 0 && 
-      dist(char.position, m.position) <= m.sightRange &&
+      distToEntity(char.position, m.position, m.size) <= m.sightRange &&
       checkLineOfSight(m.position.x, m.position.y, char.position.x, char.position.y, wfMap.obstacles)
     );
     const newOnes = inSight.filter(m => !combat.engagedMonsterIds.includes(m.id));
@@ -546,7 +577,7 @@ export function useGameEngine() {
       const newMonsters = gs.dungeonMonsters.map(m => ({ ...m }));
       const mIdx = newMonsters.findIndex(m => m.id === monster.id);
       let charHp = char.hp;
-      const d = dist(monster.position, char.position);
+      const d = distToEntity(char.position, monster.position, monster.size);
       let newPos = { ...monster.position };
       let maxDist = Math.ceil((monster.range ?? 5) / 5);
       let steps = monster.speed ?? 1;
@@ -554,29 +585,142 @@ export function useGameEngine() {
       // Boss Skills check BEFORE movement
       let bossSkillUsedThisTurn = false;
       if (monster.name === "Ancient Treant Sapling") {
-         if (monster.hp < monster.maxHp * 0.4 && !monster.bossSkillsUsed?.["Forest Blessing"]) {
-             newMonsters[mIdx].bossSkillsUsed = { ...newMonsters[mIdx].bossSkillsUsed, "Forest Blessing": 1 };
-             newMonsters[mIdx].hp += 10;
-             newLog.push(`🌿 ${monster.name} casts Forest Blessing! (+10 HP)`);
-             bossSkillUsedThisTurn = true;
-         } else if (combat.round % 3 === 0 && combat.round > 0) {
-             let dexSave = d20() + getMod(char.stats.dex);
-             newLog.push(`🪵 ${monster.name} casts Root Prison!`);
-             if (dexSave < 14) {
-                 // Add Rooted to player
-                 setCombat(prevC => ({ ...prevC, activeBuffs: [...(prevC.activeBuffs || []), "rooted"] }));
-                 newLog.push(`  You are Rooted! (Save ${dexSave} vs DC 14)`);
-                 notify("You have been Rooted!");
-             } else {
-                 newLog.push(`  You avoided the roots! (Save ${dexSave} vs DC 14)`);
-             }
-             bossSkillUsedThisTurn = true;
-         }
+          bossSkillUsedThisTurn = true;
+          const bState = { ...(monster.bossSkillsUsed || {}) };
+          const isPhase2 = (monster.hp / monster.maxHp) <= 0.5;
+          
+          if (isPhase2 && !bState["phase2"]) {
+              newLog.push(`🌲 ${monster.name} uproots itself! It can now move!`);
+              bState["phase2"] = 1;
+              newMonsters[mIdx].speed = 1;
+          }
+
+          if (bState["prep_GroundSlam"]) {
+              newLog.push(`💥 ${monster.name} unleashes Ground Slam!`);
+              const hit = combat.warnings?.some(w => w.x === char.position.x && w.y === char.position.y);
+              if (hit) {
+                  let dmg = rollDice("3d6+4");
+                  charHp -= dmg;
+                  newLog.push(`  You take ${dmg} Bludgeoning damage!`);
+              } else {
+                  newLog.push(`  You avoided the Ground Slam!`);
+              }
+              delete bState["prep_GroundSlam"];
+              setCombat(prev => ({ ...prev, warnings: [] }));
+          } else if (bState["prep_Wrath"]) {
+              newLog.push(`🌪️ ${monster.name} unleashes Wrath of the Ancient Forest!`);
+              const hit = combat.warnings?.some(w => w.x === char.position.x && w.y === char.position.y);
+              if (hit) {
+                  let dmg = rollDice("4d8+5");
+                  charHp -= dmg;
+                  newLog.push(`  You take ${dmg} massive damage!`);
+              } else {
+                  newLog.push(`  You escaped the Wrath!`);
+              }
+              delete bState["prep_Wrath"];
+              setCombat(prev => ({ ...prev, warnings: [] }));
+              newMonsters[mIdx].ac -= 5;
+              bState["wrath_recovery"] = 2;
+          } else {
+              if (bState["wrath_recovery"]) {
+                  bState["wrath_recovery"] -= 1;
+                  if (bState["wrath_recovery"] <= 0) {
+                      delete bState["wrath_recovery"];
+                      newMonsters[mIdx].ac += 5;
+                      newLog.push(`🌲 ${monster.name} recovers its defenses.`);
+                  } else {
+                      newLog.push(`  ${monster.name} is recovering and takes no action.`);
+                  }
+              } else {
+                  const d = distToEntity(char.position, monster.position, monster.size);
+                  
+                  // Proficiency check helper
+                  const checkProf = (skills: string[]) => {
+                      let best = -1;
+                      for (const s of skills) {
+                          if (!char.skills?.includes(s)) continue;
+                          const profDef = PROFICIENCY_LIST.find(p => p.name === s);
+                          if (!profDef) continue;
+                          const score = getMod(char.stats[profDef.stat]) + 2;
+                          if (score > best) best = score;
+                      }
+                      return best === -1 ? 0 : best >= 5 ? 2 : 1;
+                  };
+                  
+                  if (isPhase2 && combat.round >= 6 && !bState["used_Wrath"]) {
+                      const lvl = checkProf(["Arcana", "History", "Nature"]);
+                      if (lvl === 0) newLog.push(`⚠ Something magical is happening...`);
+                      else if (lvl === 1) newLog.push(`⚠ ${monster.name} is gathering massive magical energy!`);
+                      else newLog.push(`⚠ ${monster.name} awakens the forest! (Wrath of Ancient Forest, Range: 9x9)`);
+                      
+                      bState["prep_Wrath"] = 1;
+                      bState["used_Wrath"] = 1;
+                      const warns = [];
+                      for(let dy = -4; dy <= 4; dy++) {
+                          for(let dx = -4; dx <= 4; dx++) {
+                              warns.push({ x: monster.position.x + dx, y: monster.position.y + dy, type: 'wrath', level: lvl });
+                          }
+                      }
+                      setCombat(prev => ({ ...prev, warnings: warns }));
+                  } else if (d <= 1 && d20() > 10) {
+                      newLog.push(`🪵 ${monster.name} uses Root Strike!`);
+                      let atk = d20() + monster.attackMod;
+                      if (atk >= char.ac) {
+                          let dmg = rollDice("1d10+4");
+                          charHp -= dmg;
+                          newLog.push(`  Hits for ${dmg} Physical damage!`);
+                          if (d20() < 10) {
+                              setCombat(prev => ({ ...prev, activeBuffs: [...(prev.activeBuffs||[]), "rooted"] }));
+                              newLog.push(`  You are Rooted!`);
+                              notify("You are Rooted!");
+                          }
+                      } else {
+                          newLog.push(`  Missed!`);
+                      }
+                  } else if ((d <= 2 && Object.keys(bState).filter(k => k.startsWith("prep_")).length === 0) || (isPhase2 && d <= 1 && d20() > 10)) {
+                      const lvl = checkProf(["Perception", "Survival"]);
+                      if (lvl === 0) newLog.push(`⚠ Something feels dangerous...`);
+                      else if (lvl === 1) newLog.push(`⚠ Large physical attack incoming!`);
+                      else newLog.push(`⚠ The ground shakes! (Ground Slam, Range: 5x5)`);
+                      
+                      bState["prep_GroundSlam"] = 1;
+                      const warns = [];
+                      for(let dy = -2; dy <= 2; dy++) {
+                          for(let dx = -2; dx <= 2; dx++) {
+                              warns.push({ x: monster.position.x + dx, y: monster.position.y + dy, type: 'slam', level: lvl });
+                          }
+                      }
+                      setCombat(prev => ({ ...prev, warnings: warns }));
+                  } else if (d > 2 && d <= 6 && d20() > 8) {
+                      newLog.push(`🌿 ${monster.name} uses Vine Lash!`);
+                      let atk = d20() + monster.attackMod;
+                      if (atk >= char.ac) {
+                          let dmg = rollDice("1d8+2");
+                          charHp -= dmg;
+                          newLog.push(`  Hits for ${dmg} damage!`);
+                      } else {
+                          newLog.push(`  Missed!`);
+                      }
+                  } else {
+                      if (isPhase2) {
+                          bossSkillUsedThisTurn = false; // standard AI handles move/attack
+                      } else {
+                          if (combat.round % 3 === 0) {
+                              newLog.push(`🌿 ${monster.name} regenerates 10 HP!`);
+                              newMonsters[mIdx].hp = Math.min(newMonsters[mIdx].maxHp, newMonsters[mIdx].hp + 10);
+                          } else {
+                              newLog.push(`🌲 ${monster.name} watches menacingly.`);
+                          }
+                      }
+                  }
+              }
+          }
+          newMonsters[mIdx].bossSkillsUsed = bState;
       }
 
-      if (!bossSkillUsedThisTurn && monster.name !== "Walking Vine" && monster.name !== "Ancient Treant Sapling") {
+      if (!bossSkillUsedThisTurn && monster.name !== "Walking Vine") {
           for (let i = 0; i < steps; i++) {
-              const d = dist(newPos, char.position);
+              const d = distToEntity(char.position, newPos, monster.size);
               if (monster.name === "Goblin Scout" && d <= 2) {
                   // Kite away
                   const dx = newPos.x - char.position.x;
@@ -623,7 +767,7 @@ export function useGameEngine() {
 
       setGs(prev => ({ ...prev, dungeonMonsters: newMonsters }));
 
-      const nd = dist(newPos, char.position);
+      const nd = distToEntity(char.position, newPos, monster.size);
       const hasLineOfSight = checkLineOfSight(newPos.x, newPos.y, char.position.x, char.position.y, wfMap.obstacles);
       if (nd <= Math.ceil((monster.range ?? 5) / 5) && hasLineOfSight) {
         let atkRoll1 = d20();
@@ -635,7 +779,7 @@ export function useGameEngine() {
         
         let packHunterBonus = 0;
         if (monster.name === "Wolf") {
-            const hasAdjacentWolf = gs.dungeonMonsters.some(m => m.name === "Wolf" && m.id !== monster.id && m.hp > 0 && dist(m.position, char.position) <= 1);
+            const hasAdjacentWolf = gs.dungeonMonsters.some(m => m.name === "Wolf" && m.id !== monster.id && m.hp > 0 && distToEntity(char.position, m.position, m.size) <= 1);
             if (hasAdjacentWolf) packHunterBonus = 2;
         }
         
@@ -661,6 +805,7 @@ export function useGameEngine() {
         if (atkRoll >= char.ac && atkRoll < char.ac + 5 && char.gameSkills?.includes("wizard_shield_spell")) {
           effectiveAC += 5;
           usedShield = true;
+          addEffect({ type: "number", gridX: char.position.x, gridY: char.position.y, value: "REACT!" });
         }
 
         // Shield Wall Buff
@@ -701,6 +846,7 @@ export function useGameEngine() {
               // Reaction: Paladin Shield Block
               if (char.gameSkills?.includes("paladin_shield_block")) {
                 blocked += rollDice("1d10") + getMod(char.stats.str);
+                addEffect({ type: "number", gridX: char.position.x, gridY: char.position.y, value: "REACT!" });
               }
 
               // Berserker Rage Resistance (Halve physical damage)
@@ -798,6 +944,7 @@ export function useGameEngine() {
             setTimeout(() => {
               if (char.gameSkills.includes("fighter_counter_attack") && nd <= 1) {
                 notify("⚔️ Counter Attack!");
+                addEffect({ type: "number", gridX: char.position.x, gridY: char.position.y, value: "REACT!" });
                 handleAttackMonster(monster.id, false, true);
                 setTimeout(doNextTurn, 1500);
               } else {
@@ -831,7 +978,7 @@ export function useGameEngine() {
     let successCount = 0;
     const newTiles = new Set<string>();
     gs.dungeonMonsters.forEach(m => {
-      if (m.hp > 0 && dist(char.position, m.position) <= 15) {
+      if (m.hp > 0 && distToEntity(char.position, m.position, m.size) <= 15) {
         if (total >= (m.insightDC ?? 10)) {
           successCount++;
           // Calc vision area for this monster
@@ -910,7 +1057,7 @@ export function useGameEngine() {
     const log = [...combat.log];
     const diedIds: string[] = [];
     let newMonsters = [...gs.dungeonMonsters];
-    const targets = gs.dungeonMonsters.filter(m => m.hp > 0 && dist(center, m.position) <= aoeSpell.aoeRadius);
+    const targets = gs.dungeonMonsters.filter(m => m.hp > 0 && distToEntity(center, m.position, m.size) <= aoeSpell.aoeRadius);
     if (targets.length === 0) {
       notify(`${spellName} — no targets caught!`);
       setCombat(prev => ({ ...prev, ...consumeMainAction(prev) }));
@@ -1079,7 +1226,7 @@ export function useGameEngine() {
       setCombatMode("none");
       setSelectedSpell(null);
       const aoeRadius = wizAoe.aoeRadius;
-      const targets = gs.dungeonMonsters.filter(m => m.hp > 0 && dist(target.position, m.position) <= aoeRadius);
+      const targets = gs.dungeonMonsters.filter(m => m.hp > 0 && distToEntity(target.position, m.position, m.size) <= aoeRadius);
       let newMonsters = [...gs.dungeonMonsters];
       const diedInAoe: string[] = [];
       targets.forEach(mt => {
@@ -1204,6 +1351,25 @@ export function useGameEngine() {
               if (!combat.active) setTimeout(() => startCombat([target.id]), 600);
             }, 500);
           }
+
+          triggerContextualTutorial("tut_first_save_spell", {
+            start: {
+              emotion: "gentle",
+              text: "Ah, this spell is a little different, Traveler.",
+              next: "mod2"
+            },
+            mod2: {
+              emotion: "normal",
+              text: "Not every spell needs to strike its target directly. Some challenge the enemy to resist your magic instead.",
+              next: "mod3"
+            },
+            mod3: {
+              emotion: "wondering",
+              text: "If they fail to resist, they'll suffer the spell's full effect. If they succeed... they may escape unharmed, or only take part of the damage. You can always check the Battle Log to see what happened!",
+              choices: [{ label: "Continue", next: () => setSeleniaDialogTree(null) }]
+            }
+          });
+
         }, 600);
       } else {
         setActionText({ text: "HIT!", color: C.red });
@@ -1239,6 +1405,25 @@ export function useGameEngine() {
           }
 
           if (!combat.active) setTimeout(() => startCombat([target.id]), 600);
+
+          triggerContextualTutorial("tut_first_spell_attack", {
+            start: {
+              emotion: "happy",
+              text: "Wait a moment, Traveler! Magic may look different from a sword, but it follows many of the same rules.",
+              next: "mod2"
+            },
+            mod2: {
+              emotion: "normal",
+              text: "When you cast a spell that targets an enemy directly, your magical accuracy determines whether it hits. Your magical talent helps guide the spell toward its target.",
+              next: "mod3"
+            },
+            mod3: {
+              emotion: "gentle",
+              text: "If your spell connects, its power is calculated automatically. Different spells may behave in different ways, but don't worry—I’ll explain them as you discover them.",
+              choices: [{ label: "Continue", next: () => setSeleniaDialogTree(null) }]
+            }
+          });
+
         }, 500);
       }
       return;
@@ -1277,19 +1462,55 @@ export function useGameEngine() {
   }, [char, combat.active, combat.extraActionUsed, notify, addEffect]);
 
   const handleMonsterClick = (monsterId: string) => {
-    notify(`Clicked monster ${monsterId} in mode ${combatMode}`);
     if (combatMode === "attack") handleAttackMonster(monsterId, false);
     else if (combatMode === "attack_offhand") handleAttackMonster(monsterId, true);
     else if (combatMode === "spell" && selectedSpell) handleCastSpell(selectedSpell, monsterId);
   };
 
-  function handleAttackMonster(monsterId: string, isOffHand: boolean = false, isReaction: boolean = false) {
+  function handleAttackMonster(monsterId: string, isOffHand: boolean = false, isReaction: boolean = false, skipTutorial: boolean = false) {
     if (!char || !combat.active) { notify(`Debug: char or combat not active`); return; }
     if (!isReaction) {
       if (isOffHand && combat.extraActionUsed) { notify(`Debug: offhand used`); return; }
-      if (!isOffHand && combat.actionUsed) {
+      if (!isOffHand && combat.actionUsed && !combat.extraMainActions) {
         notify(`Debug: main action used`); return;
       }
+    }
+
+    // Intercept for First Attack Tutorial — check ref (sync) OR state (async) so stale state can't re-trigger
+    const seen = char.tutorialsSeen || [];
+    const alreadySeenAttackTut = tutorialsSeenRef.current.has("tut_before_first_attack") || seen.includes("tut_before_first_attack");
+    if (!skipTutorial && !alreadySeenAttackTut) {
+      triggerContextualTutorial("tut_before_first_attack", {
+        start: {
+          emotion: "gentle",
+          text: "Wait just a moment, Traveler! Before your first battle, there's something I'd like to show you.",
+          next: "mod2"
+        },
+        mod2: {
+          emotion: "normal",
+          text: "Whenever you attack an enemy, the outcome isn't based on strength alone. Your abilities, your equipment, and a little bit of luck all come together to decide whether your attack connects.",
+          next: "mod3"
+        },
+        mod3: {
+          emotion: "normal",
+          text: "If your attack hits, your weapon's power will determine how much damage you deal, and your abilities may make it even stronger.",
+          next: "mod4"
+        },
+        mod4: {
+          emotion: "happy",
+          text: "Don't worry about memorizing everything right now. The Battle Log will show you exactly what happened after each action, and I'll be here to guide you whenever you discover something new.",
+          next: "mod5"
+        },
+        mod5: {
+          emotion: "happy",
+          text: "Now then... take a deep breath, and show me your very first attack!",
+          choices: [{ label: "I'm ready!", next: () => { 
+            setSeleniaDialogTree(null); 
+            setTimeout(() => handleAttackMonster(monsterId, isOffHand, isReaction, true), 100);
+          }}]
+        }
+      });
+      return;
     }
     
     const weapon = isOffHand ? char.equipment.offHand : char.equipment.mainHand;
@@ -1309,16 +1530,18 @@ export function useGameEngine() {
     const isFinesse = weapon.properties?.includes("finesse");
     const isTwoHanded = weapon.properties?.includes("two-handed");
     const isLight = weapon.properties?.includes("light");
+    const isVersatile = weapon.properties?.includes("versatile");
     const isMelee = !isRanged;
 
-    let useDex = isRanged || (isFinesse && char.stats.dex > char.stats.str);
-    const mod = getMod(useDex ? char.stats.dex : char.stats.str);
+    // Finesse auto-picks highest stat; ranged uses DEX
+    const { mod } = getWeaponStat(char, weapon);
 
     // Samurai Focus Advantage
     const hasSamuraiFocus = (combat.activeBuffs || []).includes("fighter_samurai_focus");
     let roll1 = d20();
     let roll2 = d20();
     let roll = hasSamuraiFocus ? Math.max(roll1, roll2) : roll1;
+    const isCrit = roll === 20;
 
     // Hit Buffs & Subclass
     let extraHitBonus = 0;
@@ -1373,21 +1596,43 @@ export function useGameEngine() {
     }
 
     setTimeout(() => {
-      const isHit = total >= monster.ac;
+      const isHit = isCrit || total >= monster.ac;
       const isSurprise = !monster.alerted;
-      const logEntry = `${char.name} attacks ${monster.name}${isOffHand ? " (Off-Hand)" : ""}: [${roll}+${mod + char.profBonus}${extraLabel}=${total}] vs AC ${monster.ac}`;
+      const critPrefix = isCrit ? "⭐ CRITICAL HIT! ⭐ " : "";
+      const logEntry = `${critPrefix}${char.name} attacks ${monster.name}${isOffHand ? " (Off-Hand)" : ""}: [${roll}+${mod + char.profBonus}${extraLabel}=${total}] vs AC ${monster.ac}`;
 
       if (isHit) {
         setActionText({ text: isSurprise ? "AMBUSH!" : "HIT!", color: C.blue });
         setTimeout(() => setActionText(null), 1000);
 
         setTimeout(() => {
-          let dieRoll = rollDice(weapon.damage ?? "1d4");
-          let dmgMod = isRanged ? getMod(char.stats.dex) : getMod(char.stats.str);
+          // Versatile: auto 2H damage when off-hand is empty
+          const offHandEmpty = !char.equipment.offHand;
+          const effectiveDamage = getEffectiveDamage(weapon, offHandEmpty && isVersatile);
+          
+          let dieRoll = 0;
+          let dieRollStr = effectiveDamage;
+          if (isCrit) {
+            const match = effectiveDamage.match(/^(\d+)d(\d+)$/);
+            if (match) {
+              const num = parseInt(match[1]) * 2;
+              const faces = match[2];
+              dieRollStr = `${num}d${faces}`;
+              dieRoll = rollDice(dieRollStr);
+            } else {
+              dieRoll = rollDice(effectiveDamage) * 2;
+            }
+          } else {
+            dieRoll = rollDice(effectiveDamage);
+          }
+
+          // dmgMod uses same stat as hit roll (Finesse auto-resolved)
+          const { mod: _dmgModBase } = getWeaponStat(char, weapon);
+          let dmgMod = _dmgModBase;
           
           if (weapon.name === "Shortbow") {
-            const distance = dist(char.position, monster.position);
-            dmgMod -= distance;
+            const distance = distToEntity(char.position, monster.position, monster.size);
+            dmgMod = Math.max(-5, dmgMod - distance);
           }
 
           let extraRawDmg = 0;
@@ -1404,9 +1649,12 @@ export function useGameEngine() {
           const withMod = Math.max(1, dieRoll + dmgMod);
           const baseDmg = (isSurprise ? withMod * 2 : withMod) + extraRawDmg;
 
-          let dmgType = "Piercing";
-          if (weapon.name.includes("sword") || weapon.name.includes("Axe")) dmgType = "Slashing";
-          else if (weapon.name.includes("Hammer") || weapon.name.includes("Club")) dmgType = "Bludgeoning";
+          // Damage type from weapon data (fallback to name heuristic)
+          let dmgType = weapon.damageType ? weapon.damageType.charAt(0).toUpperCase() + weapon.damageType.slice(1) : "Piercing";
+          if (!weapon.damageType) {
+            if (weapon.name.includes("sword") || weapon.name.includes("Axe")) dmgType = "Slashing";
+            else if (weapon.name.includes("Hammer") || weapon.name.includes("Club")) dmgType = "Bludgeoning";
+          }
 
           let resMul = 1;
           let effectText = "";
@@ -1423,7 +1671,7 @@ export function useGameEngine() {
             return { ...prevGs, dungeonMonsters: prevGs.dungeonMonsters.map(mm => mm.id === monsterId ? { ...mm, hp: newHp, alerted: true } : mm) };
           });
 
-          const dmgLabel = `${weapon.damage}${dmgMod >= 0 ? "+" : ""}${dmgMod}${extraUiStr}`;
+          const dmgLabel = `${effectiveDamage}${dmgMod >= 0 ? "+" : ""}${dmgMod}${extraUiStr}${isVersatile && offHandEmpty ? " (2H)" : ""}`;
           addDiceRoll({ type: "damage", value: dieRoll, total: finalDmg, mod: dmgMod, max: dieRoll, label: dmgLabel });
 
           setCombat(prevC => {
@@ -1482,6 +1730,64 @@ export function useGameEngine() {
           }, 800);
         }
       }
+
+      // Trigger Contextual Tutorials after attack resolves
+      if (isCrit) {
+        triggerContextualTutorial("tut_first_crit", {
+          start: {
+            emotion: "happy",
+            text: "Amazing, Traveler! That was a Critical Hit! ✨",
+            next: "mod2"
+          },
+          mod2: {
+            emotion: "normal",
+            text: "Moments like these are rare, but incredibly powerful. When fate smiles upon you, your weapon unleashes far greater damage than usual.",
+            next: "mod3"
+          },
+          mod3: {
+            emotion: "happy",
+            text: "If you ever see that golden flash again... enjoy it! It can completely change the outcome of a battle.",
+            choices: [{ label: "Continue", next: () => setSeleniaDialogTree(null) }]
+          }
+        });
+      } else if (isHit) {
+        triggerContextualTutorial("tut_first_hit", {
+          start: {
+            emotion: "happy",
+            text: "Wonderful! You landed your attack!",
+            next: "mod2"
+          },
+          mod2: {
+            emotion: "normal",
+            text: "Take a look at the Battle Log. It records every important detail—from your attack roll to the damage you dealt. Whenever you're curious about what happened, you'll find the answer there.",
+            next: "mod3"
+          },
+          mod3: {
+            emotion: "gentle",
+            text: "As you continue your journey, you'll naturally learn how each part of combat works.",
+            choices: [{ label: "Continue", next: () => setSeleniaDialogTree(null) }]
+          }
+        });
+      } else {
+        triggerContextualTutorial("tut_first_miss", {
+          start: {
+            emotion: "wondering",
+            text: "Oh! It missed... but don't be discouraged, Traveler.",
+            next: "mod2"
+          },
+          mod2: {
+            emotion: "normal",
+            text: "Even the greatest adventurers can't land every attack. Sometimes your opponent is simply quick enough to avoid the blow.",
+            next: "mod3"
+          },
+          mod3: {
+            emotion: "gentle",
+            text: "Keep trying, and remember—every battle is another chance to learn.",
+            choices: [{ label: "Continue", next: () => setSeleniaDialogTree(null) }]
+          }
+        });
+      }
+
     }, 600);
   }
 
@@ -1581,6 +1887,13 @@ export function useGameEngine() {
             setMovingPath([]);
             return;
           }
+        } else if (screen === "dungeon") {
+          const special = DUNGEON_SPECIAL[`${nextPos.x},${nextPos.y}`];
+          if (special) {
+            setSpecialDialog({ x: nextPos.x, y: nextPos.y, tile: special });
+            setMovingPath([]);
+            return;
+          }
           if (nextPos.x === DUNGEON_ENTER.x && nextPos.y === DUNGEON_ENTER.y) {
             setSpecialDialog({ x: nextPos.x, y: nextPos.y, tile: { label: "Exit Dungeon", type: "exit", icon: "⬆️", prompt: "Leave the dungeon via the entrance?", color: "#1a5a1a" } });
             setMovingPath([]);
@@ -1653,6 +1966,11 @@ export function useGameEngine() {
           return;
         }
       } else if (screen === "dungeon") {
+        const special = DUNGEON_SPECIAL[`${newX},${newY}`];
+        if (special) {
+          setSpecialDialog({ x: newX, y: newY, tile: special });
+          return;
+        }
         if (newX === DUNGEON_ENTER.x && newY === DUNGEON_ENTER.y) {
           setSpecialDialog({ x: newX, y: newY, tile: { label: "Exit Dungeon", type: "exit", icon: "⬆️", prompt: "Leave the dungeon via the entrance?", color: "#1a5a1a" } });
           return;
@@ -1816,13 +2134,37 @@ export function useGameEngine() {
       }
     }
   }
-
   function handleBuyItem(item: Item) {
     if (!char || char.gold < item.value) return;
     updateChar(char.id, c => ({ gold: c.gold - item.value, inventory: [...c.inventory, { ...item, id: gid() }] }));
     notify(`Bought ${item.name} for ${item.value}g`);
     setShopPurchaseAnim(item.name);
     setTimeout(() => setShopPurchaseAnim(null), 1200);
+  }
+
+  function handleCheckResult(success: boolean, tile: any) {
+    if (!char || !specialDialog) return;
+    if (success) {
+      notify(tile.successText || "Check passed!");
+      if (tile.successText?.includes("20g")) {
+        updateChar(char.id, (c: any) => ({ gold: c.gold + 20 }));
+      }
+      if (tile.successText?.includes("Potion")) {
+        updateChar(char.id, (c: any) => ({ inventory: [...c.inventory, { id: gid(), ...SHOP_ITEMS[0] }] }));
+      }
+    } else {
+      notify(tile.failText || "Check failed!");
+      if (tile.failText?.includes("1d4 damage")) {
+        const dmg = rollDice("1d4");
+        updateChar(char.id, (c: any) => ({ hp: Math.max(1, c.hp - dmg) }));
+        notify(`You took ${dmg} damage from the trap!`);
+      }
+      if (tile.failText?.includes("5g")) {
+        updateChar(char.id, (c: any) => ({ gold: c.gold + 5 }));
+      }
+    }
+    setSpecialDialog({ ...specialDialog, confirmed: true });
+    setTimeout(() => { setSpecialDialog(null); }, 1500);
   }
   function handleAcceptQuest(qid: string) {
     if (!char) return;
@@ -2136,33 +2478,76 @@ export function useGameEngine() {
       q_equip: { emotion: "gentle", text: "You can equip a weapon in your Main Hand, a shield or another weapon in your Off Hand, Armor on your body, and magical Accessories. Better gear significantly improves your combat potential!", choices: [{ label: "I have another question", next: "questions_menu" }, { label: "That's all for now", next: "options" }] },
       tutorial_ask: {
         emotion: "wondering",
-        text: "Hm? Why do you want to learn it again?",
+        text: "Why would you like to review the tutorial?",
         choices: [
-          { label: "I forgot everything", next: "forgot_all" },
-          { label: "I just wanted to see you", next: "want_to_see" },
-          { label: "Teach me one more time", next: "tutorial_teach" }
+          { label: "I forgot how combat works.", next: "tut_reason_forgot" },
+          { label: "I want to learn again.", next: "tut_reason_learn" },
+          { label: "I want to see you again.", next: "tut_reason_see" },
+          { label: "Just checking something.", next: "tut_reason_check" },
+          { label: "Never mind.", next: "options" },
         ]
       },
-      forgot_all: {
+      tut_reason_forgot: {
         emotion: "gentle",
         text: "I understand. There's a lot to take in! Let's start over.",
-        next: () => {
-          setSeleniaDialogTree(null);
-          enterTutorial();
-        }
+        next: () => { setSeleniaDialogTree(null); enterTutorial(); }
       },
-      want_to_see: {
+      tut_reason_learn: (() => {
+        const replayCount = char.tutorialReplayCount ?? 0;
+        const hasFlower = char.inventory.some(i => i.name === "Selenia's Flower");
+        if (hasFlower) return {
+          emotion: "gentle",
+          text: "Oh... you're still carrying the flower I gave you. Thank you, Traveler. That makes me happier than you know. Now, shall we review the basics together?",
+          next: "tut_begin_confirm"
+        };
+        if (replayCount >= 10) return {
+          emotion: "blushing",
+          text: "At this rate... I'm starting to think you're coming here to see me more than to review the tutorial. Hehe... I suppose I don't mind. 😊",
+          next: "tut_begin_confirm"
+        };
+        if (replayCount >= 4) return {
+          emotion: "blushing",
+          text: "Traveler... this is becoming a habit, isn't it? Not that I'm complaining. It's always nice spending a little more time together. Now then, let's begin once again!",
+          next: "tut_begin_confirm"
+        };
+        if (char.level >= 5) return {
+          emotion: "happy",
+          text: "You've already grown so much since we first met. Even so, there's nothing wrong with reviewing the fundamentals. Great adventurers never stop learning.",
+          next: "tut_begin_confirm"
+        };
+        if (replayCount === 2) return {
+          emotion: "playful",
+          text: "Back again? Hehe... I don't mind at all. Even experienced adventurers revisit the basics from time to time. Let's make sure you're ready for whatever lies ahead!",
+          next: "tut_begin_confirm"
+        };
+        if (replayCount === 1) return {
+          emotion: "happy",
+          text: "Welcome back, Traveler! Did you forget something, or were you simply hoping to see me again? Hehe... Either way, I'd be happy to go through the basics with you once more. Everyone learns at their own pace.",
+          next: "tut_begin_confirm"
+        };
+        return {
+          emotion: "gentle",
+          text: "Of course! I'll walk you through everything once more.",
+          next: "tut_begin_confirm"
+        };
+      })(),
+      tut_reason_see: {
         emotion: "blushing",
-        text: "...I don't even know what to say to that. But... I'm happy.",
-        next: "options"
+        text: "...Eh? You're going to make me smile, Traveler. Hehe... Very well. I'll gladly accompany you once more.",
+        next: "tut_begin_confirm"
       },
-      tutorial_teach: {
+      tut_reason_check: {
+        emotion: "gentle",
+        text: "Of course. Let's review everything together.",
+        next: "tut_begin_confirm"
+      },
+      tut_begin_confirm: {
         emotion: "happy",
-        text: "Of course! I'll try to explain it a bit more detailed this time.",
-        next: () => {
-          setSeleniaDialogTree(null);
-          enterTutorial();
-        }
+        text: "Shall we begin?",
+        choices: [
+          { label: "Yes, let's go!", next: () => { setSeleniaDialogTree(null); enterTutorial(); } },
+          { label: "Actually, maybe later.", next: "options" }
+        ]
       },
       accidental: {
         emotion: "playful",
@@ -2209,11 +2594,32 @@ export function useGameEngine() {
     });
   }
 
-  function enterTutorial(targetChar?: Character) { 
+  function enterTutorial(targetChar?: Character) {
     const c = targetChar || char;
     if (!c) return; 
     setSeleniaTalkCount(0);
-    updateChar(c.id, { position: { x: 15, y: 15 }, currentMap: "tutorial" }); 
+    
+    // Clear combat-specific tutorial IDs so they fire again on replay
+    const COMBAT_TUTORIAL_IDS = [
+      "tut_before_first_attack",
+      "tut_first_hit",
+      "tut_first_miss",
+      "tut_first_crit",
+      "tut_first_spell_attack",
+      "tut_first_save_spell",
+    ];
+    const clearedSeen = (c.tutorialsSeen || []).filter(id => !COMBAT_TUTORIAL_IDS.includes(id));
+    const newReplayCount = (c.tutorialReplayCount ?? 0) + (c.tutorialCompleted ? 1 : 0);
+    
+    // Clear the synchronous ref too — must mirror the state clear
+    COMBAT_TUTORIAL_IDS.forEach(id => tutorialsSeenRef.current.delete(id));
+    
+    updateChar(c.id, { 
+      position: { x: 15, y: 15 }, 
+      currentMap: "tutorial",
+      tutorialsSeen: clearedSeen,
+      tutorialReplayCount: newReplayCount,
+    });
     setScreen("tutorial"); 
     
     const dummyId = gid();
@@ -2250,31 +2656,31 @@ export function useGameEngine() {
 
     setTimeout(() => showSeleniaPopup("gentle", ["Try walking around using WASD or the arrow keys.", "Take a few steps! The world is yours to explore.", "Don't be shy, take a walk!", "Movement is the first step of any grand adventure."]), 1000);
     setTimeout(() => showSeleniaPopup("happy", ["See? It's not that hard.", "You're getting the hang of it!", "That's it! Just take it one step at a time.", "Perfect! You move quite gracefully."]), 7000);
-    
-    setTimeout(() => {
-      setSeleniaDialogTree({
-        start: {
-          emotion: "gentle",
-          text: "Before you strike, let me explain how your power works. In this world, your attributes give you hidden bonuses called Modifiers.",
-          next: "mod2"
-        },
-        mod2: {
-          emotion: "normal",
-          text: "For instance, if your Strength is 16, you receive a +3 Modifier. This means your strikes are more accurate and hit harder!",
-          next: "mod3"
-        },
-        mod3: {
-          emotion: "happy",
-          text: "So keep growing stronger! Even if fate is unkind to you, your Modifiers will guide your blade true. Now, go hit that dummy!",
-          choices: [
-            { label: "I'm ready!", next: () => setSeleniaDialogTree(null) }
-          ]
-        }
-      });
-    }, 13000);
 
     setTimeout(() => showSeleniaPopup("wondering", ["The menu is very important... Many adventurers forget how to open it on their first day.", "Don't forget to check your menu! It's easy to get lost without it.", "Your equipment and stats are all in the menu. Don't forget about them!", "Some heroes wander for days without ever opening their inventory... don't be one of them."]), 35000);
   }
+
+  const triggerContextualTutorial = useCallback((tutorialId: string, tree: any) => {
+    if (!char) return false;
+    // Only show tutorial dialogs if the player is in the tutorial area
+    if (char.currentMap !== "tutorial") return false;
+    
+    // Synchronous ref check — prevents double-fire before React re-renders
+    if (tutorialsSeenRef.current.has(tutorialId)) return false;
+    const seen = char.tutorialsSeen || [];
+    if (seen.includes(tutorialId)) return false;
+    
+    // Mark synchronously in ref immediately so no second call can slip through
+    tutorialsSeenRef.current.add(tutorialId);
+    // Also persist to character state (async, for next session)
+    updateChar(char.id, { tutorialsSeen: [...seen, tutorialId] });
+    
+    // Defer showing the dialog slightly so the action (e.g. log output) can render first
+    setTimeout(() => {
+      setSeleniaDialogTree(tree);
+    }, 100);
+    return true;
+  }, [char, updateChar]);
 
   const handleLongRest = useCallback(() => {
     if (!char) return;
@@ -2330,6 +2736,7 @@ export function useGameEngine() {
     gs, session, activeCharId, screen, creatingChar, combat, fogRevealed, combatMode,
     effects, dyingMonsters, hitTokenIds, selectedSpell, diceRolls, battleStart,
     hudTab, hudOpen, chatTab, specialDialog, showShop, showQuests, notification,
+    skillObtained,
     actionText, restAnim, zoom, shopPurchaseAnim,
     char,
     // setters
@@ -2355,12 +2762,10 @@ export function useGameEngine() {
     handleSendChat, handleUseSkillFromHUD,
     // navigation
     handleLogin, handleSelectChar, handleCreateChar, handleLogout, handleDeleteChar,
-    enterTown, enterDungeon, enterSanctuary, enterTutorial, handleSpecialYes, handleSpeakWithSelenia,
+    enterTown, enterDungeon, enterSanctuary, enterTutorial, handleSpecialYes, handleSpeakWithSelenia, handleCheckResult,
     // ui helpers
-    notify,
+    notify, notifySkill, setSkillObtained,
     setRestAnim,
-    handleLongRest,
-    handleShortRest,
     handleCancelQuest,
     INIT_COMBAT,
   };

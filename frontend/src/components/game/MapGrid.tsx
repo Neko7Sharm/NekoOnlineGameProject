@@ -8,7 +8,7 @@ import {
   TOWN_SPECIAL, SANCTUARY_SPECIAL, getTownTile, getDungeonTile, getSanctuaryTile, getTutorialTile,
   hasLineOfSight
 } from "../../constants/map";
-import { dist } from "../../utils/dice";
+import { dist, distToEntity } from "../../utils/dice";
 import type { MapGridProps } from "../../types/game";
 import townBg from "../../assets/town_map_bg.png";
 import tileGrass from "../../assets/tile_grass.png";
@@ -104,20 +104,23 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
   const attackableM = new Set<string>();
   const attackRangeTiles = new Set<string>();
   
-  if (combat.active && combatMode === "attack" && char.equipment.mainHand) {
-    const rs = Math.ceil((char.equipment.mainHand.range ?? 5) / 5);
-    // Add all tiles within weapon range to attackRangeTiles
-    for (let dy = -rs; dy <= rs; dy++) {
-      for (let dx = -rs; dx <= rs; dx++) {
-        if (Math.abs(dx) + Math.abs(dy) <= rs) {
-          const tx = pos.x + dx, ty = pos.y + dy;
-          if (tx >= 0 && tx < cols && ty >= 0 && ty < rows) attackRangeTiles.add(`${tx},${ty}`);
+  if (combat.active && (combatMode === "attack" || combatMode === "attack_offhand")) {
+    const weapon = combatMode === "attack_offhand" ? char.equipment.offHand : char.equipment.mainHand;
+    if (weapon) {
+      const rs = Math.ceil((weapon.range ?? 5) / 5);
+      // Add all tiles within weapon range to attackRangeTiles
+      for (let dy = -rs; dy <= rs; dy++) {
+        for (let dx = -rs; dx <= rs; dx++) {
+          if (Math.abs(dx) + Math.abs(dy) <= rs) {
+            const tx = pos.x + dx, ty = pos.y + dy;
+            if (tx >= 0 && tx < cols && ty >= 0 && ty < rows) attackRangeTiles.add(`${tx},${ty}`);
+          }
         }
       }
+      monsters.filter(m => m.hp > 0).forEach(m => { 
+        if (distToEntity(pos, m.position, m.size) <= rs) attackableM.add(m.id); 
+      });
     }
-    monsters.filter(m => m.hp > 0).forEach(m => { 
-      if (dist(pos, m.position) <= rs) attackableM.add(m.id); 
-    });
   }
 
   const spellableM = new Set<string>();
@@ -139,7 +142,7 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
     if (spell) {
       const rangeSquares = Math.ceil((spell.range ?? 5) / 5);
       monsters.filter(m => m.hp > 0).forEach(m => {
-        if (dist(pos, m.position) <= rangeSquares) spellableM.add(m.id);
+        if (distToEntity(pos, m.position, m.size) <= rangeSquares) spellableM.add(m.id);
       });
     }
     if (isAoeSpell && aoeSpellDef) {
@@ -158,7 +161,15 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
         }
       }
       monsters.filter(m => m.hp > 0).forEach(m => {
-        if (aoeTiles.has(`${m.position.x},${m.position.y}`)) aoeHitMonsters.add(m.id);
+        const mSize = m.size ?? 1;
+        const mRadius = Math.floor(mSize / 2);
+        let hit = false;
+        for(let dy = -mRadius; dy <= mRadius; dy++) {
+          for(let dx = -mRadius; dx <= mRadius; dx++) {
+            if (aoeTiles.has(`${m.position.x + dx},${m.position.y + dy}`)) hit = true;
+          }
+        }
+        if (hit) aoeHitMonsters.add(m.id);
       });
     }
   }
@@ -222,13 +233,16 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
             let cellBg = special?.color ? special.color + "50" : tileBg;
             const inCone = aoeTiles.has(key);
             const isAoeCursor = inCone && isAoeSpell && combatMode === "spell";
+            
+            const isWarning = combat.active && combat.warnings?.some(w => w.x === x && w.y === y && w.level === 2) && !isFogged;
+            if (isWarning) cellBg = "rgba(220, 20, 20, 0.45)";
 
             return (
               <div key={key}
                 onClick={() => {
                   if (td.isWall || isFogged) return;
                   if (isAoeCursor) {
-                    const hit = monsters.filter(m => m.hp > 0 && aoeTiles.has(`${m.position.x},${m.position.y}`)).map(m => m.id);
+                    const hit = Array.from(aoeHitMonsters);
                     onAOECast?.(hit, x, y);
                   } else {
                     onTileClick(x, y);
@@ -247,8 +261,10 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
                   boxShadow: isReachable ? `inset 0 0 8px ${C.gold}20` : isAttackRange ? `inset 0 0 12px ${C.blue}30` : "none",
                   transform: type === "fence" && (x === 0 || x === cols - 1) ? "rotate(90deg)" : "none",
                 }}>
-                {isInsightVision && <div style={{ position: "absolute", inset: 0, background: "rgba(255, 0, 0, 0.25)", pointerEvents: "none" }} />}
-                {isAttackRange && <div style={{ position: "absolute", inset: 0, background: `${C.blue}15`, pointerEvents: "none" }} />}
+                  {isInsightVision && <div style={{ position: "absolute", inset: 0, background: "rgba(255, 0, 0, 0.25)", pointerEvents: "none" }} />}
+                  {isWarning && <div style={{ position: "absolute", inset: 0, border: "2px solid rgba(255,50,50,0.8)", animation: "pulse 1.5s infinite" }} />}
+                  {isAoeCursor && <div style={{ position: "absolute", inset: 0, background: "rgba(255,50,50,0.3)", border: `1px solid ${C.red}` }} />}
+                  {isAttackRange && <div style={{ position: "absolute", inset: 0, background: `${C.blue}15`, pointerEvents: "none" }} />}
                 <div style={{ position: "absolute", inset: 0, border: mode === "town" ? "none" : "1px solid rgba(0,0,0,0.25)" }} />
 
                 {special && !isFogged && ["8,6", "9,6", "20,6", "21,6", "14,14", "15,14", "4,11", "22,19", "23,19", "24,19"].includes(key) && (
@@ -343,12 +359,19 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
           const isTargetable = isAttackable || isSpellable || isAoeTarget;
           const isShaking = hitTokenIds?.has(m.id);
 
+          const mSize = m.size ?? 1;
+          const mRadius = Math.floor(mSize / 2);
+          const mLeft = (m.position.x - mRadius) * CELL + 3;
+          const mTop = (m.position.y - mRadius) * CELL + 3;
+          const mWidth = CELL * mSize - 6;
+          const mHeight = CELL * mSize - 6;
+
           if (dyingMonsters?.has(m.id)) {
             return (
               <div key={m.id} style={{
                 position: "absolute",
-                left: m.position.x * CELL + 3, top: m.position.y * CELL + 3,
-                width: CELL - 6, height: CELL - 6,
+                left: mLeft, top: mTop,
+                width: mWidth, height: mHeight,
                 fontSize: CELL * 0.5, display: "flex", alignItems: "center", justifyContent: "center",
                 animation: "dnd-dissolve 0.9s ease-out forwards",
                 pointerEvents: "none",
@@ -363,8 +386,8 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
               onMouseLeave={() => setHoveredMonsterId(null)}
               style={{
                 position: "absolute",
-                left: m.position.x * CELL + 3, top: m.position.y * CELL + 3,
-                width: CELL - 6, height: CELL - 6,
+                left: mLeft, top: mTop,
+                width: mWidth, height: mHeight,
                 background: isCurrentTurn ? "#5a1010" : "#3a0a0a",
                 border: `2px solid ${isTargetable ? C.red : isCurrentTurn ? "#ff8888" : "#8b1a1a"}`,
                 display: "flex", alignItems: "center", justifyContent: "center",

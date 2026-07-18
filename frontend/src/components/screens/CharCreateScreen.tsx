@@ -212,14 +212,21 @@ export function CharCreateScreen({ onCreated, onBack }: { onCreated: (c: Charact
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 20 }}>
               {PROFICIENCY_LIST.map(prof => {
                 const sel = selectedSkills.includes(prof.name);
+                const isRecommended = cls && CLASS_CFG[cls].recommendedSkills.includes(prof.name);
                 return (
                   <button key={prof.name} onClick={() => toggleSkill(prof.name)}
                     style={{
                       padding: "8px 10px", cursor: "pointer", textAlign: "left",
                       background: sel ? C.blue + "18" : C.card2,
-                      border: `2px solid ${sel ? C.blue : C.border}`,
+                      border: `2px solid ${sel ? C.blue : isRecommended ? C.gold + "50" : C.border}`,
                       boxShadow: sel ? `0 0 8px ${C.blue}30` : "none",
+                      position: "relative",
                     }}>
+                    {isRecommended && !sel && (
+                      <div style={{ position: "absolute", top: -6, right: -4, background: C.gold, color: "#000", fontFamily: PX, fontSize: 6, padding: "2px 4px", borderRadius: 4 }}>
+                        REC
+                      </div>
+                    )}
                     <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                       <span style={{ fontFamily: MO, fontSize: 9, color: sel ? C.blue : C.text }}>{prof.name}</span>
                       <span style={{ fontFamily: MO, fontSize: 7, color: "#4cdb70", padding: "1px 4px", background: "#4cdb7015", border: "1px solid #4cdb7040" }}>+1 {prof.stat.toUpperCase()}</span>

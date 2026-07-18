@@ -40,16 +40,28 @@ export const TOWN_SPECIAL: Record<string, { label: string; type: string; icon: s
   // --- ⛪ Selenia Statue ---
   "4,11": { label: "Sacred Shrine", type: "shrine", icon: "⛪", prompt: "Pray at the Statue?", color: "#FFD700" },
 
-  // --- 🚪 Exit ---
+  // --- 🚪 Old Locked Door (Interaction Check) ---
+  "12,10": { label: "Old Cellar Door", type: "check", icon: "🚪", prompt: "The door is heavily padlocked and covered in rust.", color: "#666", requiredSkill: "Investigation", dc: 12, successText: "You found a loose hinge and popped the door open. (Found 20g)", failText: "The lock is too complex. You couldn't open it." },
+
+  // --- 🗺️ Town Exit ---
   "22,19": { label: "Town Exit", type: "exit", icon: "🚪", prompt: "Leave Town and enter the Dungeon?", color: "#4caf50" },
   "23,19": { label: "Town Exit", type: "exit", icon: "🚪", prompt: "Leave Town and enter the Dungeon?", color: "#4caf50" },
   "24,19": { label: "Town Exit", type: "exit", icon: "🚪", prompt: "Leave Town and enter the Dungeon?", color: "#4caf50" }
 };
 
-export const SANCTUARY_SPECIAL: Record<string, { label: string; type: string; icon: string; prompt: string; color: string }> = {
+export const SANCTUARY_SPECIAL: Record<string, { label: string; type: string; icon: string; prompt: string; color: string; requiredSkill?: string; dc?: number; successText?: string; failText?: string }> = {
   "15,8": { label: "Selenia", type: "selenia", icon: "✨", prompt: "Speak with Selenia?", color: "#c492d6" },
   "14,8": { label: "Selenia", type: "selenia", icon: "✨", prompt: "Speak with Selenia?", color: "#c492d6" },
   "16,8": { label: "Selenia", type: "selenia", icon: "✨", prompt: "Speak with Selenia?", color: "#c492d6" },
+};
+
+// Dungeon special tiles
+export const DUNGEON_SPECIAL: Record<string, { label: string; type: string; icon: string; prompt: string; color: string; requiredSkill?: string; dc?: number; successText?: string; failText?: string }> = {
+  // --- 🪤 Vine Trap ---
+  "30,30": { label: "Suspicious Vines", type: "check", icon: "🌿", prompt: "The vines on the floor look strangely arranged...", color: "#2e8b57", requiredSkill: "Perception", dc: 14, successText: "You carefully step over the hidden snare trap.", failText: "You step directly into the snare! (Take 1d4 damage)" },
+  
+  // --- 📦 Old Chest ---
+  "10,12": { label: "Ancient Chest", type: "check", icon: "📦", prompt: "An old chest with Elven markings.", color: "#8B5A2B", requiredSkill: "History", dc: 13, successText: "You recognize the Elven mechanism and safely open it! (Found Potion of Healing)", failText: "You force it open, damaging some contents. (Found 5g)" },
 };
 
 // ─────────────────────────────────────────────────

@@ -15,17 +15,17 @@ import { gid } from "../utils/dice";
 // L = Landmark (Sacred Tree, 4x4 area centered around this point)
 export const MAP_LAYOUT = [
   "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
-  "TTT...................TTTTTTTTTTTTTTTTTTTTTTTTTTTT",
-  "TT.........B...........TTTTTTTTTTT..T...T.T.TTTTTT",
+  "TT.....................TTTTTTTTTTTTTTTTTTTTTTTTTTT",
+  "T......................TTTTTTTTTTT..T...T.T.TTTTTT",
   "T........................TTTTTTTT...1.......TTTTTT",
-  "T........R.......R.......TTTTTTT.......1....TTTTTT",
-  "T..X.....................TTTTTT..............TTTTT",
-  "T........................TTTTTT...F.....T....TTTTT",
-  "TT.........R.............TTTTTT.....T.......TTTTTT",
-  "TTT......................TTTTTTT.......2....TTTTTT",
-  "TTTTT........T......F......TTTTTT..T........TTTTTT",
-  "TTTTTTTTTT.......TTTTTTT...TTTTTTTTTT....TTTTTTTTT",
-  "TTTTTTTTTTT..R...TTTTTTT...TTTTTTTTTT.2..TTTTTTTTT",
+  "T...........B............TTTTTTT.......1....TTTTTT",
+  "T........................TTTTTT..............TTTTT",
+  "T..X.....................TTTTTT...F.....T....TTTTT",
+  "T........................TTTTTT.....T.......TTTTTT",
+  "T..........R.............TTTTTTT.......2....TTTTTT",
+  "TT.........................TTTTTT..T........TTTTTT",
+  "TTTT..........T......F.....TTTTTTTTTT....TTTTTTTTT",
+  "TTTTTTT......R.............TTTTTTTTTT.2..TTTTTTTTT",
   "TTTTTTTTTT......TTTTTTTT...TTTTTTTTTT....TTTTTTTTT",
   "TTTTTTTTTT........TTTTTTT...TTTTTTTTT....TTTTTTTTT",
   "TTTTTTT.............TTTTT...................TTTTTT",
@@ -130,7 +130,8 @@ export function parseWhisperingForest() {
           resistances: ["Piercing"], weaknesses: ["Fire"],
           drops: ["Ancient Bark", "Treant Core", "Wooden Greatshield (Rare)"],
           bossSkillsUsed: {},
-          insightDC: 16, state: "idle", image: "monster_treant"
+          size: 3,
+          insightDC: 16, state: "idle", image: "monster_treant" as const
         });
       }
     }

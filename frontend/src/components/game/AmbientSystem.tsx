@@ -38,10 +38,11 @@ export function AmbientSystem({ width, height }: { width: number; height: number
             newY += Math.cos(Date.now() / 200 + p.id) * 2;
           }
 
-          // Reset if out of bounds
-          if (newY > height || newX > width || newX < 0 || newY < 0) {
-            return spawnParticle(width, height, true);
-          }
+          // Wrap around if out of bounds
+          if (newY > height) newY = -20;
+          if (newY < -30) newY = height;
+          if (newX > width) newX = -20;
+          if (newX < -30) newX = width;
 
           return { ...p, x: newX, y: newY, rotation: newR };
         });

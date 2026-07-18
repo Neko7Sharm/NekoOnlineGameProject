@@ -3,6 +3,7 @@ import { Star, X } from "lucide-react";
 import { C, PX, NU, MO, pixelBtn } from "../../constants/theme";
 import { SHOP_ITEMS } from "../../constants/items";
 import type { Character, Item } from "../../types/game";
+import { PropertyTag, DamageTypeTag } from "../modals/ItemMenu";
 
 import npcShopImg from "../../assets/npc/npc_01.png";
 import npcShopImg2 from "../../assets/npc/npc_02.png";
@@ -264,32 +265,54 @@ export function ShopModal({ char, onBuy, onClose }: { char: Character; onBuy: (i
           ))}
         </div>
 
-        <div style={{
-          flex: 1, overflowY: "auto", padding: "16px 20px",
-          display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12, alignContent: "start",
-          position: "relative", zIndex: 1,
-        }}>
+        <div
+          className="shop-scroll"
+          style={{
+            flex: 1, overflowY: "auto", padding: "14px 20px",
+            display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12, alignContent: "start",
+            position: "relative", zIndex: 1,
+          }}>
           {items.map((item, idx) => (
             <div key={`${tabKey}-${item.id}`} style={{
-              display: "flex", flexDirection: "column", gap: 8, padding: "14px 16px",
+              display: "flex", flexDirection: "column", gap: 8, padding: "12px 14px",
               background: cream, border: `2px solid ${borderW}`,
               boxShadow: `inset 0 1px 0 rgba(255,255,255,0.7), 0 3px 8px rgba(100,50,0,0.12)`,
-              position: "relative", overflow: "hidden",
+              position: "relative",
               animation: `shop-item-in 0.45s cubic-bezier(0.34, 1.25, 0.64, 1) ${idx * 70}ms both`,
             }}>
               <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 4, background: `linear-gradient(90deg, ${wood3}, ${wood4}, ${wood3})` }} />
               <div style={{ paddingTop: 4 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+                {/* Name + stat badges */}
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, flexWrap: "wrap" }}>
                   <span style={{ fontFamily: PX, fontSize: 9, color: wood1 }}>{item.name}</span>
-                  {item.damage && (
-                    <span style={{ fontFamily: MO, fontSize: 9, color: "#7a4010", padding: "1px 6px", background: `${wood5}80`, border: `1px solid ${wood4}` }}>{item.damage}</span>
+                  {item.hands && item.damage !== "0" && (
+                    <span style={{ fontFamily: MO, fontSize: 7, color: item.hands === 2 ? "#c0294a" : wood2, padding: "1px 4px", background: item.hands === 2 ? "#ffd0db" : `${wood5}80`, border: `1px solid ${item.hands === 2 ? "#e07090" : wood4}` }}>
+                      {item.hands}H
+                    </span>
+                  )}
+                  {item.damage && item.damage !== "0" && (
+                    <span style={{ fontFamily: MO, fontSize: 9, color: "#7a4010", padding: "1px 5px", background: `${wood5}80`, border: `1px solid ${wood4}` }}>{item.damage}</span>
                   )}
                   {item.ac && (
-                    <span style={{ fontFamily: MO, fontSize: 9, color: "#305080", padding: "1px 6px", background: "#d8e8f8", border: "1px solid #8ab0d0" }}>AC {item.ac}</span>
+                    <span style={{ fontFamily: MO, fontSize: 9, color: "#305080", padding: "1px 5px", background: "#d8e8f8", border: "1px solid #8ab0d0" }}>AC {item.ac}</span>
+                  )}
+                  {item.healAmount && (
+                    <span style={{ fontFamily: MO, fontSize: 9, color: "#2d6a2d", padding: "1px 5px", background: "#d8f0d8", border: "1px solid #80c080" }}>+{item.healAmount}</span>
+                  )}
+                  {item.range && item.range > 5 && item.damage !== "0" && (
+                    <span style={{ fontFamily: PX, fontSize: 7, color: "#ba68c8", padding: "1px 4px", background: "#f3e8ff", border: "1px solid #d0aaee" }}>📏{item.range / 5}t</span>
                   )}
                 </div>
+                {/* DamageType + Property tags */}
+                {(item.damageType || (item.properties && item.properties.length > 0)) && (
+                  <div style={{ display: "flex", gap: 3, flexWrap: "wrap", marginBottom: 5 }}>
+                    {item.damageType && <DamageTypeTag dt={item.damageType} small />}
+                    {item.properties?.filter(p => p !== "thrown").map(p => <PropertyTag key={p} prop={p} small />)}
+                  </div>
+                )}
                 <div style={{ fontFamily: NU, fontSize: 11, color: "#7a5030", lineHeight: 1.4 }}>{item.description}</div>
               </div>
+              {/* BUY button always at bottom */}
               <button onClick={() => handleBuy(item)} disabled={char.gold < item.value}
                 style={{
                   marginTop: "auto", padding: "7px 0",
