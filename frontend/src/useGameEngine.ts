@@ -1027,7 +1027,7 @@ export function useGameEngine() {
           successCount++;
           revealedIds.add(m.id);
           // Calc initial vision
-          const range = m.aiState === "alert" ? m.sightRange + 3 : m.sightRange;
+          const range = m.sightRange;
           for (let dy = -range; dy <= range; dy++) {
             for (let dx = -range; dx <= range; dx++) {
                 const vx = m.position.x + dx;
@@ -1130,7 +1130,7 @@ export function useGameEngine() {
     setCombat(prev => ({ ...prev, log, ...consumeMainAction(prev) }));
     diedIds.forEach(id => {
       setDyingMonsters(prev => new Set([...prev, id]));
-      setTimeout(() => setDyingMonsters(prev => { const s = new Set(prev); s.delete(id); return s; }), 1000);
+      setTimeout(() => setDyingMonsters(prev => { const s = new Set(prev); s.delete(id); return s; }), 2000);
     });
     setCombatMode("none"); setSelectedSpell(null);
     if (!combat.active && targets.length > 0) {
@@ -1168,7 +1168,7 @@ export function useGameEngine() {
     updateChar(char.id, c => ({ inventory: c.inventory.filter(i => i.id !== bombItemId) }));
     diedIds.forEach(id => {
       setDyingMonsters(prev => new Set([...prev, id]));
-      setTimeout(() => setDyingMonsters(prev => { const s = new Set(prev); s.delete(id); return s; }), 1000);
+      setTimeout(() => setDyingMonsters(prev => { const s = new Set(prev); s.delete(id); return s; }), 2000);
     });
     notify(`💣 Bomb explodes! ${targetIds.length > 0 ? `Hit ${targetIds.length} target(s).` : "No targets hit."}`);
     if (!combat.active && targetIds.length > 0) {
@@ -1301,7 +1301,7 @@ export function useGameEngine() {
       setGs(prev => ({ ...prev, dungeonMonsters: newMonsters }));
       diedInAoe.forEach(id => {
         setDyingMonsters(prev => new Set([...prev, id]));
-        setTimeout(() => setDyingMonsters(prev => { const s = new Set(prev); s.delete(id); return s; }), 1000);
+        setTimeout(() => setDyingMonsters(prev => { const s = new Set(prev); s.delete(id); return s; }), 2000);
       });
     } else if (spellName === "fighter_action_surge") {
       setCombat(prev => ({ 
@@ -1365,11 +1365,9 @@ export function useGameEngine() {
             setTimeout(() => setActionText(null), 1000);
 
             setTimeout(() => {
-              let newHp = 0;
+              const m = gs.dungeonMonsters.find(mm => mm.id === target.id);
+              const newHp = m ? Math.max(0, m.hp - dmg) : 0;
               setGs(prevGs => {
-                const m = prevGs.dungeonMonsters.find(mm => mm.id === target.id);
-                if (!m) return prevGs;
-                newHp = Math.max(0, m.hp - dmg);
                 return { ...prevGs, dungeonMonsters: prevGs.dungeonMonsters.map(mm => mm.id === target.id ? { ...mm, hp: newHp, alerted: true } : mm) };
               });
 
@@ -1382,7 +1380,7 @@ export function useGameEngine() {
 
               if (newHp <= 0) {
                 setDyingMonsters(prev => new Set([...prev, target.id]));
-                setTimeout(() => setDyingMonsters(prev => { const s = new Set(prev); s.delete(target.id); return s; }), 1000);
+                setTimeout(() => setDyingMonsters(prev => { const s = new Set(prev); s.delete(target.id); return s; }), 2000);
               }
 
               if (char.currentMap === "tutorial") {
@@ -1421,11 +1419,9 @@ export function useGameEngine() {
         setTimeout(() => setActionText(null), 1000);
 
         setTimeout(() => {
-          let newHp = 0;
+          const m = gs.dungeonMonsters.find(mm => mm.id === target.id);
+          const newHp = m ? Math.max(0, m.hp - dmg) : 0;
           setGs(prevGs => {
-            const m = prevGs.dungeonMonsters.find(mm => mm.id === target.id);
-            if (!m) return prevGs;
-            newHp = Math.max(0, m.hp - dmg);
             return { ...prevGs, dungeonMonsters: prevGs.dungeonMonsters.map(mm => mm.id === target.id ? { ...mm, hp: newHp, alerted: true } : mm) };
           });
 
@@ -1438,7 +1434,7 @@ export function useGameEngine() {
 
           if (newHp <= 0) {
             setDyingMonsters(prev => new Set([...prev, target.id]));
-            setTimeout(() => setDyingMonsters(prev => { const s = new Set(prev); s.delete(target.id); return s; }), 1000);
+            setTimeout(() => setDyingMonsters(prev => { const s = new Set(prev); s.delete(target.id); return s; }), 2000);
           }
 
           if (char.currentMap === "tutorial") {
@@ -1715,11 +1711,9 @@ export function useGameEngine() {
 
           const finalDmg = Math.floor(baseDmg * resMul);
 
-          let newHp = 0;
+          const m = gs.dungeonMonsters.find(mm => mm.id === monsterId);
+          const newHp = m ? Math.max(0, m.hp - finalDmg) : 0;
           setGs(prevGs => {
-            const m = prevGs.dungeonMonsters.find(mm => mm.id === monsterId);
-            if (!m) return prevGs;
-            newHp = Math.max(0, m.hp - finalDmg);
             return { ...prevGs, dungeonMonsters: prevGs.dungeonMonsters.map(mm => mm.id === monsterId ? { ...mm, hp: newHp, alerted: true } : mm) };
           });
 
@@ -1754,7 +1748,7 @@ export function useGameEngine() {
 
           if (newHp <= 0) {
             setDyingMonsters(prev => new Set([...prev, monsterId]));
-            setTimeout(() => setDyingMonsters(prev => { const s = new Set(prev); s.delete(monsterId); return s; }), 1000);
+            setTimeout(() => setDyingMonsters(prev => { const s = new Set(prev); s.delete(monsterId); return s; }), 2000);
           }
 
           if (char.currentMap === "tutorial") {
@@ -2410,14 +2404,17 @@ export function useGameEngine() {
       let rx, ry;
       let attempts = 0;
       do {
-        rx = Math.floor(Math.random() * 50);
-        ry = Math.floor(Math.random() * 40);
+        rx = Math.floor(Math.random() * 100);
+        ry = Math.floor(Math.random() * 100);
         attempts++;
       } while (!isWalkable("dungeon", rx, ry) && attempts < 100);
       return { x: rx, y: ry };
     };
 
-    const chests = [];
+    const wf = parseWhisperingForest();
+    const chests = [...wf.chests];
+    
+    // Optional random chests
     if (Math.random() < 0.20) {
       chests.push({ id: gid(), position: getRandomWalkableTile(), opened: false });
     }
@@ -2428,8 +2425,9 @@ export function useGameEngine() {
 
     setGs(prev => ({ 
       ...prev, 
-      dungeonMonsters: parseWhisperingForest().monsters,
+      dungeonMonsters: wf.monsters,
       dungeonChests: chests,
+      dungeonObjects: wf.objects as DungeonObject[],
       dungeonSecrets: secrets
     }));
     notify("Entered Darkroot Depths. Monsters lurk in the dark...", 3000);
@@ -2764,7 +2762,7 @@ export function useGameEngine() {
           // 1. Vision Check
           const seesPlayer = checkMonsterVision(m, currentChar.position.x, currentChar.position.y, wfMap.obstacles, wfMap.covers, stealthActive || stealthCasting);
           
-          if (seesPlayer && m.aiState !== "alert" && !stealthCasting) {
+          if (seesPlayer && !stealthCasting) {
              let detected = true;
              if (stealthActive) {
                 if (stealthedMonstersRef.current.has(m.id)) {
@@ -2790,18 +2788,12 @@ export function useGameEngine() {
              }
 
              if (detected) {
-                // Spot player! Go to Alert state.
-                newMonsters[i] = { ...m, aiState: "alert", alerted: true, lastSeenCharPos: { ...currentChar.position } };
+                // Spot player! Enter combat immediately.
+                alertTriggered = true;
+                engagingMonsters.push(m.id);
                 if (!stealthActive) notify(`⚠️ ${m.name} spotted you!`);
-                continue; // Wait one tick
+                continue;
              }
-          }
-
-          if (m.aiState === "alert") {
-             // Already alert, now entering combat
-             alertTriggered = true;
-             engagingMonsters.push(m.id);
-             continue;
           }
 
           // 2. Exploration Movement / Behavior
@@ -2859,7 +2851,7 @@ export function useGameEngine() {
             const rtTiles = new Set<string>();
             newMonsters.forEach(m => {
               if (insightRevealedIdsRef.current.has(m.id) && m.hp > 0) {
-                const range = m.aiState === "alert" ? m.sightRange + 3 : m.sightRange;
+                const range = m.sightRange;
                 for (let dy = -range; dy <= range; dy++) {
                   for (let dx = -range; dx <= range; dx++) {
                       const vx = m.position.x + dx;

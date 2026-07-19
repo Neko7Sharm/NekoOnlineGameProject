@@ -9,19 +9,19 @@ export const SIGHT = 11; // +5 for morning forest player sight
 export function getMapCols(mode: string) {
   if (mode === "sanctuary") return 27;
   if (mode === "town") return 29;
-  return 50;
+  return 100;
 }
 
 export function getMapRows(mode: string) {
   if (mode === "sanctuary") return 19;
   if (mode === "town") return 21;
-  return 40;
+  return 100;
 }
 
 // Entry / exit positions
 export const TOWN_ENTER = { x: 15, y: 10 }; // Start in the middle of the central path
-export const DUNGEON_ENTER = { x: 45, y: 35 }; // Entrance safe zone bottom right
-export const DUNGEON_EXIT = { x: 5, y: 5 }; // Boss room top left
+export const DUNGEON_ENTER = { x: 20, y: 95 }; // Entrance safe zone bottom left
+export const DUNGEON_EXIT = { x: 80, y: 20 }; // Boss room top right
 
 // Town special tiles (Interactive zones moved 1 tile into the path)
 export const TOWN_SPECIAL: Record<string, { label: string; type: string; icon: string; prompt: string; color: string }> = {

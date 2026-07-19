@@ -166,6 +166,13 @@ export interface Party {
   name: string; leaderId: string; memberIds: string[]; questIds: string[];
 }
 
+export interface DungeonObject {
+  id: string;
+  type: "chest" | "ore" | "herb" | "light" | "trap";
+  position: { x: number; y: number };
+  state: "active" | "opened" | "depleted";
+}
+
 export interface GameState {
   accounts: Array<{ username: string; password: string; charIds: string[] }>;
   characters: Record<string, Character>;
@@ -174,6 +181,7 @@ export interface GameState {
   party: Party | null;
   dungeonMonsters: Monster[];
   dungeonChests: { id: string; position: {x: number, y: number}; opened: boolean }[];
+  dungeonObjects?: DungeonObject[];
   dungeonSecrets: { id: string; position: {x: number, y: number}; found: boolean; type: string }[];
   availableQuests: Quest[];
   questRefreshAt: number;
@@ -188,6 +196,7 @@ export interface MapGridProps {
   char: Character; monsters: Monster[];
   chests?: { id: string; position: {x: number, y: number}; opened: boolean }[];
   secrets?: { id: string; position: {x: number, y: number}; found: boolean; type: string }[];
+  glowingTrees?: { x: number, y: number, range: number }[];
   combat: CombatState; fogRevealed: Set<string>;
   combatMode: CombatModeT; selectedSpell?: string;
   onTileClick: (x: number, y: number) => void;

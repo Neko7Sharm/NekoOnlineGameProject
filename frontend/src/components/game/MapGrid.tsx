@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { C, MO } from "../../constants/theme";
 import { CLASS_CFG } from "../../constants/classes";
 import { CLASS_SPELLS, WIZARD_SPELL_CHOICES } from "../../constants/classes";
@@ -40,11 +40,17 @@ import lsSlash1 from "../../assets/effect/attackeffect/slash1/1.png";
 import lsSlash2 from "../../assets/effect/attackeffect/slash1/2.png";
 import lsSlash3 from "../../assets/effect/attackeffect/slash1/3.png";
 import lsSlash4 from "../../assets/effect/attackeffect/slash1/4.png";
+import lsSlash5 from "../../assets/effect/attackeffect/slash1/5.png";
+import lsSlash6 from "../../assets/effect/attackeffect/slash1/6.png";
+import lsSlash7 from "../../assets/effect/attackeffect/slash1/7.png";
 
 import lsHit1 from "../../assets/effect/hiteffect/slash1/1.png";
 import lsHit2 from "../../assets/effect/hiteffect/slash1/2.png";
 import lsHit3 from "../../assets/effect/hiteffect/slash1/3.png";
 import lsHit4 from "../../assets/effect/hiteffect/slash1/4.png";
+import lsHit5 from "../../assets/effect/hiteffect/slash1/5.png";
+import lsHit6 from "../../assets/effect/hiteffect/slash1/6.png";
+import lsHit7 from "../../assets/effect/hiteffect/slash1/7.png";
 
 import { AmbientSystem } from "./AmbientSystem";
 import { parseWhisperingForest } from "../../maps/whispering_forest";
@@ -88,19 +94,64 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
   const [mouseGrid, setMouseGrid] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const gridRef = useRef<HTMLDivElement>(null);
 
+  const treeIlluminatedTiles = useMemo(() => {
+    const sets: Set<string>[] = [];
+    if (wfMap.glowingTrees) {
+      for (const tree of wfMap.glowingTrees) {
+        const treeTiles = new Set<string>();
+        for (let dy = -tree.range; dy <= tree.range; dy++) {
+          for (let dx = -tree.range; dx <= tree.range; dx++) {
+            if (Math.abs(dx) + Math.abs(dy) <= tree.range) {
+               const fx = tree.x + dx, fy = tree.y + dy;
+               if (hasLineOfSight("dungeon", tree.x, tree.y, fx, fy)) {
+                 treeTiles.add(`${fx},${fy}`);
+               }
+            }
+          }
+        }
+        sets.push(treeTiles);
+      }
+    }
+    return sets;
+  }, []);
+
   const visible = new Set<string>();
+  const activeGlowingTrees: number[] = [];
+  const localFogRevealed = new Set(fogRevealed);
+
   if (mode === "dungeon") {
+    const baseVisible = new Set<string>();
     for (let dy = -SIGHT; dy <= SIGHT; dy++)
       for (let dx = -SIGHT; dx <= SIGHT; dx++) {
         if (Math.abs(dx) + Math.abs(dy) <= SIGHT) {
           const fx = pos.x + dx, fy = pos.y + dy;
           if (fx >= 0 && fx < cols && fy >= 0 && fy < rows) {
             if (hasLineOfSight("dungeon", pos.x, pos.y, fx, fy)) {
+              baseVisible.add(`${fx},${fy}`);
               visible.add(`${fx},${fy}`);
             }
           }
         }
       }
+
+    // Glowing trees vision logic
+    for (let i = 0; i < treeIlluminatedTiles.length; i++) {
+       const treeTiles = treeIlluminatedTiles[i];
+       let intersects = false;
+       for (const t of treeTiles) {
+          if (baseVisible.has(t) || localFogRevealed.has(t)) {
+             intersects = true;
+             break;
+          }
+       }
+       if (intersects) {
+          activeGlowingTrees.push(i);
+          for (const t of treeTiles) {
+             visible.add(t);
+             localFogRevealed.add(t); // Keep it revealed
+          }
+       }
+    }
   }
 
   const reachable = new Set<string>();
@@ -203,6 +254,14 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
         @keyframes anim-frame-2 { 0%, 24.9% { opacity: 0; } 25%, 49.9% { opacity: 1; } 50%, 100% { opacity: 0; } }
         @keyframes anim-frame-3 { 0%, 49.9% { opacity: 0; } 50%, 74.9% { opacity: 1; } 75%, 100% { opacity: 0; } }
         @keyframes anim-frame-4 { 0%, 74.9% { opacity: 0; } 75%, 100% { opacity: 1; } }
+
+        @keyframes anim-frame-7-1 { 0%, 14.2% { opacity: 1; } 14.3%, 100% { opacity: 0; } }
+        @keyframes anim-frame-7-2 { 0%, 14.2% { opacity: 0; } 14.3%, 28.5% { opacity: 1; } 28.6%, 100% { opacity: 0; } }
+        @keyframes anim-frame-7-3 { 0%, 28.5% { opacity: 0; } 28.6%, 42.8% { opacity: 1; } 42.9%, 100% { opacity: 0; } }
+        @keyframes anim-frame-7-4 { 0%, 42.8% { opacity: 0; } 42.9%, 57.1% { opacity: 1; } 57.2%, 100% { opacity: 0; } }
+        @keyframes anim-frame-7-5 { 0%, 57.1% { opacity: 0; } 57.2%, 71.4% { opacity: 1; } 71.5%, 100% { opacity: 0; } }
+        @keyframes anim-frame-7-6 { 0%, 71.4% { opacity: 0; } 71.5%, 85.7% { opacity: 1; } 85.8%, 100% { opacity: 0; } }
+        @keyframes anim-frame-7-7 { 0%, 85.7% { opacity: 0; } 85.8%, 100% { opacity: 1; } }
         @keyframes dnd-slash { 0%{opacity:0;transform:scale(0.3) rotate(-25deg)} 30%{opacity:1;transform:scale(1) rotate(-25deg)} 100%{opacity:0;transform:scale(1.6) rotate(-25deg)} }
         @keyframes dnd-float-up { 0%{opacity:1;transform:translateY(0)} 60%{opacity:1;transform:translateY(-22px)} 100%{opacity:0;transform:translateY(-44px)} }
         @keyframes dnd-fireball { 0%{opacity:0;transform:scale(0)} 35%{opacity:1;transform:scale(1.1)} 100%{opacity:0;transform:scale(2)} }
@@ -211,20 +270,38 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
         @keyframes dnd-arrow-fly { 0%{clip-path:inset(0 100% 0 0);opacity:1} 75%{clip-path:inset(0 0% 0 0);opacity:1} 100%{clip-path:inset(0 0% 0 0);opacity:0} }
         @keyframes dnd-dissolve { 0%{opacity:1;filter:none;transform:scale(1)} 30%{opacity:0.8;filter:blur(0px) brightness(2);transform:scale(1.1)} 60%{opacity:0.4;filter:blur(2px) brightness(3);transform:scale(1.3)} 100%{opacity:0;filter:blur(6px) brightness(0);transform:scale(0.2)} }
         @keyframes dnd-aoe-pulse { 0%{opacity:0.3} 100%{opacity:0.7} }
+        @keyframes dnd-slash-sheet { 0% { transform: translateX(0); } 100% { transform: translateX(-100%); } }
       `}</style>
         <div ref={gridRef}
           onMouseMove={e => {
             if (!gridRef.current) return;
+            if (combatMode !== "spell" || !selectedSpell) return;
             const r = gridRef.current.getBoundingClientRect();
             setMouseGrid({ x: e.clientX - r.left, y: e.clientY - r.top });
           }}
           style={{ 
             position: "relative", width: cols * CELL, height: rows * CELL, imageRendering: "pixelated",
+            backgroundColor: "#000"
           }}>
         {/* Tiles */}
-        {Array.from({ length: rows }, (_, y) =>
-          Array.from({ length: cols }, (_, x) => {
-            const key = `${x},${y}`;
+        {(() => {
+          let keysToRender: {x: number, y: number, key: string}[] = [];
+          if (mode === "dungeon") {
+            const setKeys = new Set(localFogRevealed);
+            setKeys.add(`${DUNGEON_ENTER.x},${DUNGEON_ENTER.y}`);
+            setKeys.add(`${DUNGEON_EXIT.x},${DUNGEON_EXIT.y}`);
+            keysToRender = Array.from(setKeys).map(k => {
+              const [sx, sy] = k.split(",");
+              return { x: parseInt(sx), y: parseInt(sy), key: k };
+            });
+          } else {
+            for (let y = 0; y < rows; y++) {
+              for (let x = 0; x < cols; x++) {
+                keysToRender.push({x, y, key: `${x},${y}`});
+              }
+            }
+          }
+          return keysToRender.map(({x, y, key}) => {
             const td = mode === "town" ? getTownTile(x, y) : (mode === "sanctuary" ? getSanctuaryTile(x, y) : (mode === "tutorial" ? getTutorialTile(x, y) : getDungeonTile(x, y)));
             let tileBg = td.bg;
             let special = null;
@@ -241,8 +318,8 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
             
             const isExit = mode === "dungeon" && x === DUNGEON_EXIT.x && y === DUNGEON_EXIT.y;
             const isEntrance = mode === "dungeon" && x === DUNGEON_ENTER.x && y === DUNGEON_ENTER.y;
-            const isFogged = mode === "dungeon" && !visible.has(key) && !fogRevealed.has(key);
-            const isDimmed = mode === "dungeon" && !visible.has(key) && fogRevealed.has(key);
+            const isFogged = mode === "dungeon" && !visible.has(key) && !localFogRevealed.has(key);
+            const isDimmed = mode === "dungeon" && !visible.has(key) && localFogRevealed.has(key);
             const isReachable = reachable.has(key);
             const isAttackRange = attackRangeTiles.has(key) && mode === "dungeon" && !isFogged;
             const isInsightVision = insightVisionTiles?.has(key) && !isFogged;
@@ -254,6 +331,9 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
             
             const isWarning = combat.active && combat.warnings?.some(w => w.x === x && w.y === y && w.level === 2) && !isFogged;
             if (isWarning) cellBg = "rgba(220, 20, 20, 0.45)";
+
+            // Optimization: Skip rendering DOM nodes for tiles that are completely fogged out
+            if (isFogged && !isExit && !isEntrance) return null;
 
             return (
               <div key={key}
@@ -311,8 +391,25 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
                 })()}
               </div>
             );
-          })
-        )}
+          });
+        })()}
+
+        {/* GLOWING TREES */}
+        {mode === "dungeon" && wfMap.glowingTrees?.map((tree, i) => {
+          if (!visible.has(`${tree.x},${tree.y}`) && !localFogRevealed.has(`${tree.x},${tree.y}`)) return null;
+          const cx = tree.x * CELL + CELL/2;
+          const cy = tree.y * CELL + CELL/2;
+          const isActive = activeGlowingTrees.includes(i);
+          return (
+            <div key={`glowingTree-${i}`} style={{
+              position: "absolute", left: cx - CELL*2, top: cy - CELL*3, width: CELL*4, height: CELL*4, pointerEvents: "none", zIndex: 3
+            }}>
+               <img src="/assets/glowing_tree.png" style={{ width: "100%", height: "100%", objectFit: "contain",
+                  filter: isActive ? "drop-shadow(0 0 30px rgba(0, 255, 200, 0.8))" : "none"
+                }} />
+            </div>
+          );
+        })}
 
         {mode === "dungeon" && <AmbientSystem width={cols * CELL} height={rows * CELL} />}
 
@@ -327,18 +424,18 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
         )}
         {mode === "dungeon" && (
           <>
-            {wfMap.rocks.filter(r => fogRevealed.has(`${r.x},${r.y}`)).map((r, i) => {
+            {wfMap.rocks.filter(r => localFogRevealed.has(`${r.x},${r.y}`)).map((r, i) => {
               const isDimmed = !visible.has(`${r.x},${r.y}`);
               return <img key={`rock-${i}`} src={coverRock} style={{ position: "absolute", left: r.x * CELL, top: r.y * CELL, width: CELL, height: CELL, pointerEvents: "none", zIndex: 4, objectFit: "contain", opacity: isDimmed ? 0.4 : 1 }} alt="Rock" />
             })}
-            {wfMap.logs.filter(l => fogRevealed.has(`${l.x},${l.y}`)).map((l, i) => {
+            {wfMap.logs.filter(l => localFogRevealed.has(`${l.x},${l.y}`)).map((l, i) => {
               const isDimmed = !visible.has(`${l.x},${l.y}`);
               const src = l.type === "H" ? coverLogH : l.type === "V" ? coverLogV : coverLog;
               const w = l.type === "H" ? 2 * CELL : CELL;
               const h = l.type === "V" ? 2 * CELL : CELL;
               return <img key={`log-${i}`} src={src} style={{ position: "absolute", left: l.x * CELL, top: l.y * CELL, width: w, height: h, pointerEvents: "none", zIndex: 4, objectFit: "fill", opacity: isDimmed ? 0.4 : 1 }} alt="Log" />
             })}
-            {fogRevealed.has(`${wfMap.landmark.x},${wfMap.landmark.y}`) && (() => {
+            {localFogRevealed.has(`${wfMap.landmark.x},${wfMap.landmark.y}`) && (() => {
               const isDimmed = !visible.has(`${wfMap.landmark.x},${wfMap.landmark.y}`);
               return <img src={sacredTree} style={{ position: "absolute", left: (wfMap.landmark.x - 2.5) * CELL, top: (wfMap.landmark.y - 3) * CELL, width: 6 * CELL, height: 6 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain", opacity: isDimmed ? 0.4 : 1 }} alt="Sacred Tree" />
             })()}
@@ -394,7 +491,7 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
                 left: mLeft, top: mTop,
                 width: mWidth, height: mHeight,
                 fontSize: CELL * 0.5, display: "flex", alignItems: "center", justifyContent: "center",
-                animation: "dnd-dissolve 0.9s ease-out forwards",
+                animation: "dnd-dissolve 0.9s ease-out 1s forwards",
                 pointerEvents: "none",
               }}>
                 {m.image ? <img src={MONSTER_IMAGES[m.image]} style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "50%" }} alt={m.name} /> : "💀"}
@@ -444,7 +541,7 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
         })}
 
         {/* Chests */}
-        {chests?.filter(c => !c.opened && fogRevealed.has(`${c.position.x},${c.position.y}`)).map(c => {
+        {chests?.filter(c => !c.opened && localFogRevealed.has(`${c.position.x},${c.position.y}`)).map(c => {
           const dx = Math.abs(pos.x - c.position.x);
           const dy = Math.abs(pos.y - c.position.y);
           const isAdjacent = dx <= 1 && dy <= 1;
@@ -466,7 +563,7 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
         })}
 
         {/* Secrets */}
-        {secrets?.filter(s => !s.found && fogRevealed.has(`${s.position.x},${s.position.y}`)).map(s => {
+        {secrets?.filter(s => !s.found && localFogRevealed.has(`${s.position.x},${s.position.y}`)).map(s => {
           const dx = Math.abs(pos.x - s.position.x);
           const dy = Math.abs(pos.y - s.position.y);
           const isAdjacent = dx <= 1 && dy <= 1;
@@ -558,12 +655,16 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
               <div key={e.id} style={{
                 position: "absolute", pointerEvents: "none", zIndex: 60, left: cx - 160, top: cy - 160, width: 320, height: 320,
                 transform: `rotate(${angle}deg) scaleY(${e.flip ? -1 : 1}) scale(${e.scale || 1})`,
-                mixBlendMode: "screen"
+                mixBlendMode: "screen",
+                overflow: "hidden"
               }}>
-                <img src={lsSlash1} style={{ ...animStyle, animation: "anim-frame-1 0.25s linear forwards" }} />
-                <img src={lsSlash2} style={{ ...animStyle, animation: "anim-frame-2 0.25s linear forwards" }} />
-                <img src={lsSlash3} style={{ ...animStyle, animation: "anim-frame-3 0.25s linear forwards" }} />
-                <img src={lsSlash4} style={{ ...animStyle, animation: "anim-frame-4 0.25s linear forwards" }} />
+                <img src={lsSlash1} style={{ ...animStyle, animation: "anim-frame-7-1 0.25s linear forwards" }} />
+                <img src={lsSlash2} style={{ ...animStyle, animation: "anim-frame-7-2 0.25s linear forwards" }} />
+                <img src={lsSlash3} style={{ ...animStyle, animation: "anim-frame-7-3 0.25s linear forwards" }} />
+                <img src={lsSlash4} style={{ ...animStyle, animation: "anim-frame-7-4 0.25s linear forwards" }} />
+                <img src={lsSlash5} style={{ ...animStyle, animation: "anim-frame-7-5 0.25s linear forwards" }} />
+                <img src={lsSlash6} style={{ ...animStyle, animation: "anim-frame-7-6 0.25s linear forwards" }} />
+                <img src={lsSlash7} style={{ ...animStyle, animation: "anim-frame-7-7 0.25s linear forwards" }} />
               </div>
             );
           }
@@ -584,10 +685,13 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
                 transform: `rotate(${angle}deg) scaleY(${e.flip ? -1 : 1}) scale(${e.scale || 1})`,
                 mixBlendMode: "screen"
               }}>
-                <img src={lsHit1} style={{ ...animStyle, animation: "anim-frame-1 0.2s linear forwards" }} />
-                <img src={lsHit2} style={{ ...animStyle, animation: "anim-frame-2 0.2s linear forwards" }} />
-                <img src={lsHit3} style={{ ...animStyle, animation: "anim-frame-3 0.2s linear forwards" }} />
-                <img src={lsHit4} style={{ ...animStyle, animation: "anim-frame-4 0.2s linear forwards" }} />
+                <img src={lsHit1} style={{ ...animStyle, animation: "anim-frame-7-1 0.2s linear forwards" }} />
+                <img src={lsHit2} style={{ ...animStyle, animation: "anim-frame-7-2 0.2s linear forwards" }} />
+                <img src={lsHit3} style={{ ...animStyle, animation: "anim-frame-7-3 0.2s linear forwards" }} />
+                <img src={lsHit4} style={{ ...animStyle, animation: "anim-frame-7-4 0.2s linear forwards" }} />
+                <img src={lsHit5} style={{ ...animStyle, animation: "anim-frame-7-5 0.2s linear forwards" }} />
+                <img src={lsHit6} style={{ ...animStyle, animation: "anim-frame-7-6 0.2s linear forwards" }} />
+                <img src={lsHit7} style={{ ...animStyle, animation: "anim-frame-7-7 0.2s linear forwards" }} />
               </div>
             );
           }
