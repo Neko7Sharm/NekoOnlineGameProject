@@ -1,7 +1,7 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const mongoose = require('mongoose');
+const supabase = require('./supabase');
 const cors = require('cors');
 require('dotenv').config();
 
@@ -19,11 +19,7 @@ app.use(express.json());
 
 // Database connection
 const PORT = process.env.PORT || 5000;
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/neko_online_game';
-
-mongoose.connect(MONGO_URI)
-  .then(() => console.log('MongoDB connected'))
-  .catch(err => console.error('MongoDB connection error:', err));
+// We now use Supabase instead of MongoDB
 
 const { router: authRoutes } = require('./routes/auth');
 const characterRoutes = require('./routes/characters');
@@ -43,17 +39,21 @@ app.get('/', (req, res) => {
 
 // Auto-refill quest board every 5 minutes
 setInterval(async () => {
-  const Quest = require('./models/Quest');
   const questTemplates = [
-    { title: 'Pest Control', description: 'Clear out the wooden dummies lurking in the dungeon.', type: 'kill', target: 'WoodenDummy', targetCount: 3, rewardGold: 60, rewardExp: 120 },
-    { title: 'Deep Dive', description: 'Explore the dungeon and slay 5 dummies.', type: 'kill', target: 'WoodenDummy', targetCount: 5, rewardGold: 100, rewardExp: 200 },
-    { title: 'Lumberjack\'s Nightmare', description: 'The dummies are awakening! Kill 2 of them.', type: 'kill', target: 'WoodenDummy', targetCount: 2, rewardGold: 40, rewardExp: 80 },
-    { title: 'The Big Hunt', description: 'A bounty for slaying 8 wooden dummies.', type: 'kill', target: 'WoodenDummy', targetCount: 8, rewardGold: 150, rewardExp: 300 },
+    { title: 'Pest Control', description: 'Clear out the wooden dummies lurking in the dungeon.', type: 'kill', target: 'WoodenDummy', target_count: 3, reward_gold: 60, reward_exp: 120 },
+    { title: 'Deep Dive', description: 'Explore the dungeon and slay 5 dummies.', type: 'kill', target: 'WoodenDummy', target_count: 5, reward_gold: 100, reward_exp: 200 },
+    { title: 'Lumberjack\'s Nightmare', description: 'The dummies are awakening! Kill 2 of them.', type: 'kill', target: 'WoodenDummy', target_count: 2, reward_gold: 40, reward_exp: 80 },
+    { title: 'The Big Hunt', description: 'A bounty for slaying 8 wooden dummies.', type: 'kill', target: 'WoodenDummy', target_count: 8, reward_gold: 150, reward_exp: 300 },
   ];
-  const count = await Quest.countDocuments({ isAvailable: true });
+  
+  const { count, error } = await supabase
+    .from('quests')
+    .select('*', { count: 'exact', head: true })
+    .eq('is_available', true);
+    
   if (count < 10) {
     const template = questTemplates[Math.floor(Math.random() * questTemplates.length)];
-    await Quest.create({ ...template, isAvailable: true });
+    await supabase.from('quests').insert({ ...template, is_available: true });
     io.emit('quest_board_updated');
     console.log('[QUEST] Added 1 new quest to board');
   }

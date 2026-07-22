@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const Character = require('../models/Character');
-const User = require('../models/User');
+const supabase = require('../supabase');
 const { authMiddleware } = require('./auth');
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -16,12 +15,40 @@ const calcFighterHP = (stats) => {
 // Calculate AC (no armor = 10 + DEX mod)
 const calcBaseAC = (stats) => 10 + Math.max(0, statMod(stats.dex));
 
+// Helper to format character with joined items
+const formatCharacterWithItems = (char) => {
+  const items = char.items || [];
+  
+  // Create mapping of item IDs
+  const inventoryIds = Array.isArray(char.inventory) ? char.inventory : [];
+  char.inventory = items.filter(i => inventoryIds.includes(i.id));
+  
+  if (char.equipment) {
+    if (char.equipment.weapon) char.equipment.weapon = items.find(i => i.id === char.equipment.weapon) || null;
+    if (char.equipment.armor) char.equipment.armor = items.find(i => i.id === char.equipment.armor) || null;
+    if (char.equipment.accessory1) char.equipment.accessory1 = items.find(i => i.id === char.equipment.accessory1) || null;
+    if (char.equipment.accessory2) char.equipment.accessory2 = items.find(i => i.id === char.equipment.accessory2) || null;
+    if (char.equipment.accessory3) char.equipment.accessory3 = items.find(i => i.id === char.equipment.accessory3) || null;
+  }
+  
+  delete char.items; // remove raw relationship array
+  return char;
+};
+
 // ── GET all characters for logged-in user ────────────────────────────
 router.get('/', authMiddleware, async (req, res) => {
   try {
-    const characters = await Character.find({ user: req.user.id });
-    res.json(characters);
+    const { data: characters, error } = await supabase
+      .from('characters')
+      .select('*, items(*)')
+      .eq('user_id', req.user.id);
+      
+    if (error) throw error;
+    
+    const formatted = characters.map(formatCharacterWithItems);
+    res.json(formatted);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -34,14 +61,18 @@ router.post('/', authMiddleware, async (req, res) => {
     if (!name || !characterClass) return res.status(400).json({ error: 'Name and class are required' });
 
     // Max 5 characters per account
-    const count = await Character.countDocuments({ user: req.user.id });
+    const { count, error: countError } = await supabase
+      .from('characters')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', req.user.id);
+      
+    if (countError) throw countError;
     if (count >= 5) return res.status(400).json({ error: 'Maximum character limit (5) reached' });
 
     // Validate and build final stats
     let finalStats = { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
 
     if (stats && typeof stats === 'object') {
-      // Validate: total points spent must not exceed 7 (above base 10 each)
       const keys = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
       let pointsSpent = 0;
       for (const k of keys) {
@@ -60,7 +91,7 @@ router.post('/', authMiddleware, async (req, res) => {
       hp = calcFighterHP(finalStats);
       classFeatures = {
         secondWind: { uses: 2, maxUses: 2 },
-        actionSurge: { available: false },  // Unlocked at level 2
+        actionSurge: { available: false },
         tacticalMind: false
       };
     } else if (characterClass === 'Wizard') {
@@ -79,78 +110,109 @@ router.post('/', authMiddleware, async (req, res) => {
 
     hp = Math.max(1, hp);
 
-    // AC: base 10 + DEX mod, defense style adds +1
     let ac = calcBaseAC(finalStats);
     if (characterClass === 'Fighter' && fightingStyle === 'defense') ac += 1;
 
-    const newCharacter = new Character({
-      user: req.user.id,
-      name: name.trim(),
-      class: characterClass,
-      portrait: portrait || '',
-      stats: finalStats,
-      hp: { current: hp, max: hp },
-      ac,
-      fightingStyle: fightingStyle || '',
-      classFeatures,
-      gold: 50
-    });
-
-    let saved = await newCharacter.save();
+    // Insert character
+    const { data: saved, error: charError } = await supabase
+      .from('characters')
+      .insert({
+        user_id: req.user.id,
+        name: name.trim(),
+        class: characterClass,
+        portrait: portrait || '',
+        stats: finalStats,
+        hp: { current: hp, max: hp },
+        ac,
+        fighting_style: fightingStyle || '',
+        class_features: classFeatures,
+        gold: 50,
+        equipment: { weapon: null, armor: null, accessory1: null, accessory2: null, accessory3: null },
+        inventory: [],
+        location: { map: 'town', x: 0, y: 0 }
+      })
+      .select()
+      .single();
+      
+    if (charError) throw charError;
 
     // ── Create Starter Items ──
-    const Item = require('../models/Item');
     let starterItems = [];
 
     if (characterClass === 'Fighter') {
       if (fightingStyle === 'archery') {
-        starterItems.push({ name: 'Longbow', type: 'weapon', subtype: 'bow', damage: '1d8', damageType: 'piercing', range: 150, isRanged: true });
-        starterItems.push({ name: 'Leather Armor', type: 'armor', acBonus: 1 });
+        starterItems.push({ name: 'Longbow', type: 'weapon', subtype: 'bow', damage: '1d8', damage_type: 'piercing', range: 150, is_ranged: true, ac_bonus: 0 });
+        starterItems.push({ name: 'Leather Armor', type: 'armor', subtype: null, damage: null, damage_type: null, is_ranged: false, ac_bonus: 1 });
       } else if (fightingStyle === 'great_weapon_fighting') {
-        starterItems.push({ name: 'Greatsword', type: 'weapon', subtype: 'sword', damage: '2d6', damageType: 'slashing' });
-        starterItems.push({ name: 'Chain Mail', type: 'armor', acBonus: 6 });
+        starterItems.push({ name: 'Greatsword', type: 'weapon', subtype: 'sword', damage: '2d6', damage_type: 'slashing', is_ranged: false, ac_bonus: 0 });
+        starterItems.push({ name: 'Chain Mail', type: 'armor', subtype: null, damage: null, damage_type: null, is_ranged: false, ac_bonus: 6 });
       } else if (fightingStyle === 'two_weapon_fighting') {
-        starterItems.push({ name: 'Shortsword', type: 'weapon', subtype: 'sword', damage: '1d6', damageType: 'piercing' });
-        starterItems.push({ name: 'Shortsword (Off-hand)', type: 'weapon', subtype: 'sword', damage: '1d6', damageType: 'piercing' });
-        starterItems.push({ name: 'Leather Armor', type: 'armor', acBonus: 1 });
+        starterItems.push({ name: 'Shortsword', type: 'weapon', subtype: 'sword', damage: '1d6', damage_type: 'piercing', is_ranged: false, ac_bonus: 0 });
+        starterItems.push({ name: 'Shortsword (Off-hand)', type: 'weapon', subtype: 'sword', damage: '1d6', damage_type: 'piercing', is_ranged: false, ac_bonus: 0 });
+        starterItems.push({ name: 'Leather Armor', type: 'armor', subtype: null, damage: null, damage_type: null, is_ranged: false, ac_bonus: 1 });
       } else {
-        // Defense, Dueling, Protection, or none
-        starterItems.push({ name: 'Longsword', type: 'weapon', subtype: 'sword', damage: '1d8', damageType: 'slashing' });
-        starterItems.push({ name: 'Chain Mail', type: 'armor', acBonus: 6 });
+        starterItems.push({ name: 'Longsword', type: 'weapon', subtype: 'sword', damage: '1d8', damage_type: 'slashing', is_ranged: false, ac_bonus: 0 });
+        starterItems.push({ name: 'Chain Mail', type: 'armor', subtype: null, damage: null, damage_type: null, is_ranged: false, ac_bonus: 6 });
         if (fightingStyle === 'protection' || fightingStyle === 'defense') {
-          starterItems.push({ name: 'Wooden Shield', type: 'accessory', acBonus: 2 });
+          starterItems.push({ name: 'Wooden Shield', type: 'accessory', subtype: null, damage: null, damage_type: null, is_ranged: false, ac_bonus: 2 });
         }
       }
-      starterItems.push({ name: 'Health Potion', type: 'consumable', subtype: 'potion', hpRestore: 10, isStackable: true, quantity: 2 });
+      starterItems.push({ name: 'Health Potion', type: 'consumable', subtype: 'potion', hp_restore: 10, is_stackable: true, quantity: 2, damage: null, damage_type: null, is_ranged: false, ac_bonus: 0 });
     }
+
+    let finalChar = saved;
 
     if (starterItems.length > 0) {
-      const itemsToInsert = starterItems.map(item => ({ ...item, ownedBy: saved._id }));
-      const insertedItems = await Item.insertMany(itemsToInsert);
+      const itemsToInsert = starterItems.map(item => ({ ...item, owned_by: saved.id }));
+      
+      const { data: insertedItems, error: itemsError } = await supabase
+        .from('items')
+        .insert(itemsToInsert)
+        .select();
+        
+      if (itemsError) throw itemsError;
       
       let extraAc = 0;
+      let newEquipment = { ...saved.equipment };
+      let newInventory = [...saved.inventory];
+      
       for (const item of insertedItems) {
-        if (item.type === 'weapon' && !saved.equipment.weapon) {
-          saved.equipment.weapon = item._id;
-        } else if (item.type === 'armor' && !saved.equipment.armor) {
-          saved.equipment.armor = item._id;
-          extraAc += item.acBonus || 0;
-        } else if (item.type === 'accessory' && !saved.equipment.accessory1) {
-          saved.equipment.accessory1 = item._id;
-          extraAc += item.acBonus || 0;
+        if (item.type === 'weapon' && !newEquipment.weapon) {
+          newEquipment.weapon = item.id;
+        } else if (item.type === 'armor' && !newEquipment.armor) {
+          newEquipment.armor = item.id;
+          extraAc += item.ac_bonus || 0;
+        } else if (item.type === 'accessory' && !newEquipment.accessory1) {
+          newEquipment.accessory1 = item.id;
+          extraAc += item.ac_bonus || 0;
         } else {
-          saved.inventory.push(item._id);
+          newInventory.push(item.id);
         }
       }
-      if (extraAc > 0) saved.ac += extraAc;
-      saved = await saved.save();
+      
+      let updatedAc = saved.ac + extraAc;
+      
+      const { data: updatedChar, error: updateError } = await supabase
+        .from('characters')
+        .update({ equipment: newEquipment, inventory: newInventory, ac: updatedAc })
+        .eq('id', saved.id)
+        .select('*, items(*)')
+        .single();
+        
+      if (updateError) throw updateError;
+      finalChar = updatedChar;
+    } else {
+      const { data: updatedChar, error: fetchError } = await supabase
+        .from('characters')
+        .select('*, items(*)')
+        .eq('id', saved.id)
+        .single();
+        
+      if (fetchError) throw fetchError;
+      finalChar = updatedChar;
     }
 
-    await User.findByIdAndUpdate(req.user.id, { $push: { characters: saved._id } });
-    
-    // Populate before returning so frontend sees items
-    const populated = await Character.findById(saved._id).populate('equipment.weapon').populate('equipment.armor').populate('equipment.accessory1').populate('inventory');
-    res.status(201).json(populated);
+    res.status(201).json(formatCharacterWithItems(finalChar));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
@@ -160,10 +222,19 @@ router.post('/', authMiddleware, async (req, res) => {
 // ── GET single character ─────────────────────────────────────────────
 router.get('/:id', authMiddleware, async (req, res) => {
   try {
-    const char = await Character.findOne({ _id: req.params.id, user: req.user.id });
+    const { data: char, error } = await supabase
+      .from('characters')
+      .select('*, items(*)')
+      .eq('id', req.params.id)
+      .eq('user_id', req.user.id)
+      .maybeSingle();
+      
+    if (error) throw error;
     if (!char) return res.status(404).json({ error: 'Not found' });
-    res.json(char);
+    
+    res.json(formatCharacterWithItems(char));
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -171,18 +242,27 @@ router.get('/:id', authMiddleware, async (req, res) => {
 // ── DELETE single character ────────────────────────────────────────────
 router.delete('/:id', authMiddleware, async (req, res) => {
   try {
-    const char = await Character.findOne({ _id: req.params.id, user: req.user.id });
+    const { data: char, error: fetchError } = await supabase
+      .from('characters')
+      .select('id')
+      .eq('id', req.params.id)
+      .eq('user_id', req.user.id)
+      .maybeSingle();
+      
+    if (fetchError) throw fetchError;
     if (!char) return res.status(404).json({ error: 'Not found' });
     
-    // Also delete associated items
-    const Item = require('../models/Item');
-    await Item.deleteMany({ ownedBy: char._id });
-    
-    await Character.deleteOne({ _id: char._id });
-    await User.findByIdAndUpdate(req.user.id, { $pull: { characters: char._id } });
+    // Deleting character will cascade delete items due to ON DELETE CASCADE
+    const { error: deleteError } = await supabase
+      .from('characters')
+      .delete()
+      .eq('id', char.id);
+      
+    if (deleteError) throw deleteError;
     
     res.json({ message: 'Character deleted successfully' });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
 });

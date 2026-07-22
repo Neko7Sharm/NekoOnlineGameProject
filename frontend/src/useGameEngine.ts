@@ -2056,6 +2056,16 @@ export function useGameEngine() {
     } else if (tile.type === "quest") {
       updateChar(char.id, { position: { x, y } });
       setShowQuests(true);
+    } else if (tile.type === "shrine") {
+      updateChar(char.id, c => ({ ...c, hp: c.maxHp, mp: c.maxMp }));
+      notify("✨ You prayed at Selenia's Statue. HP & MP fully restored!");
+    } else if (tile.type === "inn") {
+      updateChar(char.id, c => ({ ...c, hp: c.maxHp, mp: c.maxMp }));
+      notify("🏨 Rested at Hearthstone Inn. HP & MP fully restored!");
+    } else if (tile.type === "alchemy") {
+      notify("🧪 Alchemy Table: Herb crafting & Potion brewing coming in v0.6!");
+    } else if (tile.type === "blacksmith") {
+      notify("🔨 Blacksmith Forge: Equipment upgrading & forging coming in v0.6!");
     }
   }
 

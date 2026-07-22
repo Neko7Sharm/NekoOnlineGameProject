@@ -13,13 +13,18 @@ import type { MapGridProps } from "../../types/game";
 import townBg from "../../assets/town_map_bg.png";
 import tileGrass from "../../assets/tile_grass.png";
 import tilePath from "../../assets/tile_path.png";
-import tileTree from "../../assets/tile_tree.png";
-import tileFence from "../../assets/tile_fence.png";
 import bShop from "../../assets/b_shop.png";
 import bQuest from "../../assets/b_quest.png";
 import bInn from "../../assets/b_inn.png";
 import bStatue from "../../assets/b_statue.png";
+import bAlchemy from "../../assets/b_alchemy.png";
+import bBlacksmith from "../../assets/b_blacksmith.png";
 import npcSeleniaChibi from "../../assets/npc/npc_g01c.png";
+import npcMerchant from "../../assets/npc/npc_01.png";
+import npcQuestmaster from "../../assets/npc/npc_b01.png";
+import npcInnkeeper from "../../assets/npc/npc_c01.png";
+import npcAlchemist from "../../assets/npc/npc_d01.png";
+import npcBlacksmith from "../../assets/npc/npc_g02.png";
 import monsterSlime from "../../assets/monster_slime.png";
 import monsterWolf from "../../assets/monster_wolf.png";
 import monsterGoblin from "../../assets/monster_goblin.png";
@@ -273,6 +278,18 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
         @keyframes dnd-slash-sheet { 0% { transform: translateX(0); } 100% { transform: translateX(-100%); } }
       `}</style>
         <div ref={gridRef}
+          onClick={(e) => {
+            if (!gridRef.current) return;
+            if (mode === "town" || mode === "sanctuary") {
+              const r = gridRef.current.getBoundingClientRect();
+              const cx = Math.floor((e.clientX - r.left) / CELL);
+              const cy = Math.floor((e.clientY - r.top) / CELL);
+              if (cx >= 0 && cx < cols && cy >= 0 && cy < rows) {
+                const td = mode === "town" ? getTownTile(cx, cy) : getSanctuaryTile(cx, cy);
+                if (!td.isWall) onTileClick(cx, cy);
+              }
+            }
+          }}
           onMouseMove={e => {
             if (!gridRef.current) return;
             if (combatMode !== "spell" || !selectedSpell) return;
@@ -281,10 +298,156 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
           }}
           style={{ 
             position: "relative", width: cols * CELL, height: rows * CELL, imageRendering: "pixelated",
-            backgroundColor: "#000"
+            backgroundColor: "#000", cursor: "pointer"
           }}>
-        {/* Tiles */}
-        {(() => {
+        {/* ═══ GROUND LAYER: Pure Grass Base + Separate Stone Path Overlay ═══ */}
+        {(mode === "town") && (
+          <>
+            {/* 1. Full-Coverage Pure Grass Base Layer */}
+            <div style={{
+              position: "absolute", left: 0, top: 0, width: cols * CELL, height: rows * CELL,
+              backgroundImage: `url(${tileGrass})`, backgroundSize: `${CELL * 4}px ${CELL * 4}px`,
+              backgroundColor: "#1b1435", pointerEvents: "none", zIndex: 0
+            }} />
+
+            {/* 2. Separate Stone Path Overlay Layer (Renders only on path tiles) */}
+            {(() => {
+              const pathTiles = [];
+              for (let y = 0; y < rows; y++) {
+                for (let x = 0; x < cols; x++) {
+                  const td = getTownTile(x, y);
+                  if (td.type === "path") {
+                    pathTiles.push(
+                      <div key={`path-${x}-${y}`} style={{
+                        position: "absolute", left: x * CELL, top: y * CELL, width: CELL, height: CELL,
+                        backgroundImage: `url(${tilePath})`, backgroundSize: `${CELL * 4}px ${CELL * 4}px`,
+                        backgroundPosition: `-${(x % 4) * CELL}px -${(y % 4) * CELL}px`,
+                        pointerEvents: "none", zIndex: 1, opacity: 0.92,
+                        boxShadow: "inset 0 0 6px rgba(0,0,0,0.25)"
+                      }} />
+                    );
+                  }
+                }
+              }
+              return pathTiles;
+            })()}
+
+            {/* 3. Atmosphere Layer: Floating Firefly Orbs, Street Lamps & Glowing Mana Crystals */}
+            <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 2, overflow: "hidden" }}>
+              {Array.from({ length: 24 }).map((_, i) => (
+                <div key={`orb-${i}`} style={{
+                  position: "absolute",
+                  left: `${(i * 17 + 7) % 100}%`,
+                  top: `${(i * 23 + 11) % 100}%`,
+                  width: `${(i % 3) * 3 + 6}px`,
+                  height: `${(i % 3) * 3 + 6}px`,
+                  borderRadius: "50%",
+                  background: i % 2 === 0 ? "#ffd700" : "#00e5ff",
+                  boxShadow: i % 2 === 0 ? "0 0 12px #ffd700, 0 0 24px #ffaa00" : "0 0 12px #00e5ff, 0 0 24px #0088ff",
+                  opacity: 0.8,
+                  animation: `dnd-float-up ${4 + (i % 4)}s ease-in-out infinite alternate`,
+                  animationDelay: `${i * 0.25}s`
+                }} />
+              ))}
+            </div>
+
+            {/* Street Lamps, Moonflowers & Mana Crystals scattered across key town locations */}
+            {[
+              { x: 5, y: 6, icon: "🏮", color: "#ffd700" },
+              { x: 22, y: 6, icon: "🏮", color: "#ffd700" },
+              { x: 5, y: 14, icon: "🏮", color: "#ffd700" },
+              { x: 22, y: 14, icon: "🏮", color: "#ffd700" },
+              { x: 12, y: 8, icon: "💎", color: "#00e5ff" },
+              { x: 16, y: 12, icon: "💎", color: "#00e5ff" },
+              { x: 2, y: 14, icon: "🌸", color: "#c492d6" },
+              { x: 26, y: 14, icon: "🌸", color: "#c492d6" },
+            ].map((item, idx) => (
+              <div key={`prop-${idx}`} style={{
+                position: "absolute", left: item.x * CELL, top: item.y * CELL, width: CELL, height: CELL,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: CELL * 0.5, pointerEvents: "none", zIndex: 4,
+                filter: `drop-shadow(0 0 10px ${item.color})`
+              }}>
+                {item.icon}
+              </div>
+            ))}
+
+            {/* Clickable overlay grid — only walkable & special tiles get DOM elements */}
+            {Object.entries(TOWN_SPECIAL).map(([key, special]) => {
+              const [sx, sy] = key.split(",");
+              const x = parseInt(sx), y = parseInt(sy);
+              return (
+                <div key={`sp-${key}`}
+                  onClick={() => onTileClick(x, y)}
+                  style={{
+                    position: "absolute", left: x * CELL, top: y * CELL, width: CELL, height: CELL,
+                    cursor: "pointer", zIndex: 6,
+                  }}>
+                  {["8,6", "9,6", "20,6", "21,6", "8,14", "9,14", "4,10", "22,8", "22,14", "19,21", "20,21", "21,21", "14,6"].includes(key) && (
+                    <div style={{ 
+                      position: "absolute", inset: 2, display: "flex", alignItems: "center", justifyContent: "center", 
+                      fontSize: CELL * 0.6, background: "rgba(0,0,0,0.5)", border: `2px solid ${special.color}`, 
+                      borderRadius: 6, opacity: 0.9, boxShadow: `0 0 8px ${special.color}`, zIndex: 6
+                    }}>
+                      {special.icon}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </>
+        )}
+
+        {(mode === "sanctuary") && (
+          <>
+            {/* Sanctuary ground: single gradient background */}
+            <div style={{
+              position: "absolute", left: 0, top: 0, width: cols * CELL, height: rows * CELL,
+              background: "linear-gradient(180deg, #fdfbfe 0%, #f2e6ff 40%, #e8d5f5 100%)",
+              pointerEvents: "none", zIndex: 0
+            }} />
+            {/* Border walls */}
+            {Array.from({ length: cols }).map((_, x) => (
+              <div key={`sb-t-${x}`} style={{ position: "absolute", left: x * CELL, top: 0, width: CELL, height: CELL, backgroundColor: "#ffffff", zIndex: 1 }} />
+            ))}
+            {Array.from({ length: cols }).map((_, x) => (
+              <div key={`sb-b-${x}`} style={{ position: "absolute", left: x * CELL, top: (rows - 1) * CELL, width: CELL, height: CELL, backgroundColor: "#ffffff", zIndex: 1 }} />
+            ))}
+            {Array.from({ length: rows }).map((_, y) => (
+              <div key={`sb-l-${y}`} style={{ position: "absolute", left: 0, top: y * CELL, width: CELL, height: CELL, backgroundColor: "#ffffff", zIndex: 1 }} />
+            ))}
+            {Array.from({ length: rows }).map((_, y) => (
+              <div key={`sb-r-${y}`} style={{ position: "absolute", left: (cols - 1) * CELL, top: y * CELL, width: CELL, height: CELL, backgroundColor: "#ffffff", zIndex: 1 }} />
+            ))}
+            {/* Sanctuary special interactive tiles */}
+            {Object.entries(SANCTUARY_SPECIAL).map(([key, special]) => {
+              const [sx, sy] = key.split(",");
+              const x = parseInt(sx), y = parseInt(sy);
+              return (
+                <div key={`sanc-sp-${key}`}
+                  onClick={() => onTileClick(x, y)}
+                  style={{ position: "absolute", left: x * CELL, top: y * CELL, width: CELL, height: CELL, cursor: "pointer", zIndex: 2 }}
+                />
+              );
+            })}
+            {/* Invisible click layer for walkable tiles */}
+            <div style={{ position: "absolute", left: 0, top: 0, width: cols * CELL, height: rows * CELL, zIndex: 1 }}
+              onClick={(e) => {
+                if (!gridRef.current) return;
+                const r = gridRef.current.getBoundingClientRect();
+                const cx = Math.floor((e.clientX - r.left) / CELL);
+                const cy = Math.floor((e.clientY - r.top) / CELL);
+                if (cx >= 0 && cx < cols && cy >= 0 && cy < rows) {
+                  const td = getSanctuaryTile(cx, cy);
+                  if (!td.isWall) onTileClick(cx, cy);
+                }
+              }}
+            />
+          </>
+        )}
+
+        {/* ═══ TILE LAYER: Dungeon & Tutorial keep per-tile rendering (fog-of-war) ═══ */}
+        {(mode === "dungeon" || mode === "tutorial") && (() => {
           let keysToRender: {x: number, y: number, key: string}[] = [];
           if (mode === "dungeon") {
             const setKeys = new Set(localFogRevealed);
@@ -302,19 +465,8 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
             }
           }
           return keysToRender.map(({x, y, key}) => {
-            const td = mode === "town" ? getTownTile(x, y) : (mode === "sanctuary" ? getSanctuaryTile(x, y) : (mode === "tutorial" ? getTutorialTile(x, y) : getDungeonTile(x, y)));
+            const td = mode === "tutorial" ? getTutorialTile(x, y) : getDungeonTile(x, y);
             let tileBg = td.bg;
-            let special = null;
-            let tileImg = "none";
-            const type = mode === "town" ? (td as any).type : undefined;
-            if (mode === "town") {
-              if (type === "grass") tileImg = `url(${tileGrass})`;
-              else if (type === "path") tileImg = `url(${tilePath})`;
-              else if (type === "fence") tileImg = `url(${tileFence})`;
-              special = TOWN_SPECIAL[key];
-            } else if (mode === "sanctuary") {
-              special = SANCTUARY_SPECIAL[key];
-            }
             
             const isExit = mode === "dungeon" && x === DUNGEON_EXIT.x && y === DUNGEON_EXIT.y;
             const isEntrance = mode === "dungeon" && x === DUNGEON_ENTER.x && y === DUNGEON_ENTER.y;
@@ -325,7 +477,7 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
             const isInsightVision = insightVisionTiles?.has(key) && !isFogged;
             const isPlayer = x === pos.x && y === pos.y;
 
-            let cellBg = special?.color ? special.color + "50" : tileBg;
+            let cellBg = tileBg;
             const inCone = aoeTiles.has(key);
             const isAoeCursor = inCone && isAoeSpell && combatMode === "spell";
             
@@ -349,31 +501,18 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
                 style={{
                   position: "absolute", left: x * CELL, top: y * CELL, width: CELL, height: CELL,
                   backgroundColor: isFogged ? "#000" : cellBg,
-                  backgroundImage: !isFogged && tileImg !== "none" ? tileImg : "none",
-                  backgroundSize: type === "fence" ? `${CELL}px ${CELL}px` : `${CELL * 10}px ${CELL * 10}px`,
-                  backgroundPosition: `-${x * CELL}px -${y * CELL}px`,
                   opacity: isDimmed ? 0.4 : 1,
                   cursor: td.isWall || isFogged ? "default" : isAoeCursor ? "crosshair" : "pointer",
                   outline: isReachable ? `2px solid ${C.gold}` : isAttackRange ? `1px solid ${C.blue}50` : "none",
                   outlineOffset: "-2px",
                   boxShadow: isReachable ? `inset 0 0 8px ${C.gold}20` : isAttackRange ? `inset 0 0 12px ${C.blue}30` : "none",
-                  transform: type === "fence" && (x === 0 || x === cols - 1) ? "rotate(90deg)" : "none",
                 }}>
                   {isInsightVision && <div style={{ position: "absolute", inset: 0, background: "rgba(255, 0, 0, 0.25)", pointerEvents: "none" }} />}
                   {isWarning && <div style={{ position: "absolute", inset: 0, border: "2px solid rgba(255,50,50,0.8)", animation: "pulse 1.5s infinite" }} />}
                   {isAoeCursor && <div style={{ position: "absolute", inset: 0, background: "rgba(255,50,50,0.3)", border: `1px solid ${C.red}` }} />}
                   {isAttackRange && <div style={{ position: "absolute", inset: 0, background: `${C.blue}15`, pointerEvents: "none" }} />}
-                <div style={{ position: "absolute", inset: 0, border: mode === "town" ? "none" : "1px solid rgba(0,0,0,0.25)" }} />
+                <div style={{ position: "absolute", inset: 0, border: "1px solid rgba(0,0,0,0.25)" }} />
 
-                {special && !isFogged && ["8,6", "9,6", "20,6", "21,6", "14,14", "15,14", "4,11", "22,19", "23,19", "24,19"].includes(key) && (
-                  <div style={{ 
-                    position: "absolute", inset: 2, display: "flex", alignItems: "center", justifyContent: "center", 
-                    fontSize: CELL * 0.6, background: "rgba(0,0,0,0.5)", border: `2px solid ${special.color}`, 
-                    borderRadius: 6, opacity: 0.9, boxShadow: `0 0 8px ${special.color}`, zIndex: 6
-                  }}>
-                    {special.icon}
-                  </div>
-                )}
                 {isExit && !isFogged && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: CELL * 0.5 }}>🚪</div>}
                 {isEntrance && !isFogged && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: CELL * 0.4, opacity: 0.5 }}>⬇️</div>}
                 {isReachable && !isPlayer && <div style={{ position: "absolute", inset: 0, background: `${C.gold}12` }} />}
@@ -413,13 +552,23 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
 
         {mode === "dungeon" && <AmbientSystem width={cols * CELL} height={rows * CELL} />}
 
-        {/* Building / Character Overlays */}
+        {/* Building & NPC Overlays */}
         {mode === "town" && (
           <>
-            <img src={bInn} style={{ position: "absolute", left: 2 * CELL, top: 1 * CELL, width: 11 * CELL, height: 5 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "cover", borderRadius: "12px" }} alt="Inn" />
-            <img src={bShop} style={{ position: "absolute", left: 2 * CELL, top: 15 * CELL, width: 17 * CELL, height: 5 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "cover", borderRadius: "12px" }} alt="Shop" />
-            <img src={bQuest} style={{ position: "absolute", left: 18 * CELL, top: 1 * CELL, width: 11 * CELL, height: 5 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "cover", borderRadius: "12px" }} alt="Quest Guild" />
-            <img src={bStatue} style={{ position: "absolute", left: 1 * CELL, top: 10 * CELL, width: 3 * CELL, height: 3 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain", transform: "rotate(180deg)" }} alt="Statue" />
+            <img src={bInn} style={{ position: "absolute", left: 3 * CELL, top: 1 * CELL, width: 10 * CELL, height: 5 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain", filter: "drop-shadow(0 6px 12px rgba(0,0,0,0.4))" }} alt="Inn" />
+            <img src={bShop} style={{ position: "absolute", left: 3 * CELL, top: 15 * CELL, width: 12 * CELL, height: 5 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain", filter: "drop-shadow(0 6px 12px rgba(0,0,0,0.4))" }} alt="Shop" />
+            <img src={bQuest} style={{ position: "absolute", left: 17 * CELL, top: 1 * CELL, width: 10 * CELL, height: 5 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain", filter: "drop-shadow(0 6px 12px rgba(0,0,0,0.4))" }} alt="Quest Guild" />
+            <img src={bStatue} style={{ position: "absolute", left: 1 * CELL, top: 8 * CELL, width: 3 * CELL, height: 4 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain", filter: "drop-shadow(0 0 20px rgba(196,146,214,0.6))" }} alt="Statue" />
+            <img src={bAlchemy} style={{ position: "absolute", left: 23 * CELL, top: 6 * CELL, width: 5 * CELL, height: 5 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain", filter: "drop-shadow(0 6px 12px rgba(0,0,0,0.4))" }} alt="Alchemy Workstation" />
+            <img src={bBlacksmith} style={{ position: "absolute", left: 23 * CELL, top: 12 * CELL, width: 5 * CELL, height: 5 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain", filter: "drop-shadow(0 6px 12px rgba(0,0,0,0.4))" }} alt="Blacksmith Workstation" />
+            
+            {/* NPC Tokens standing in front of interactive locations */}
+            <img src={npcInnkeeper} style={{ position: "absolute", left: 8 * CELL, top: 6 * CELL, width: CELL, height: CELL, pointerEvents: "none", zIndex: 6, objectFit: "contain" }} alt="Innkeeper NPC" />
+            <img src={npcQuestmaster} style={{ position: "absolute", left: 20 * CELL, top: 6 * CELL, width: CELL, height: CELL, pointerEvents: "none", zIndex: 6, objectFit: "contain" }} alt="Questmaster NPC" />
+            <img src={npcMerchant} style={{ position: "absolute", left: 8 * CELL, top: 14 * CELL, width: CELL, height: CELL, pointerEvents: "none", zIndex: 6, objectFit: "contain" }} alt="Merchant NPC" />
+            <img src={npcSeleniaChibi} style={{ position: "absolute", left: 4 * CELL, top: 10 * CELL, width: CELL, height: CELL, pointerEvents: "none", zIndex: 6, objectFit: "contain" }} alt="Selenia Shrine NPC" />
+            <img src={npcAlchemist} style={{ position: "absolute", left: 22 * CELL, top: 8 * CELL, width: CELL, height: CELL, pointerEvents: "none", zIndex: 6, objectFit: "contain" }} alt="Alchemist NPC" />
+            <img src={npcBlacksmith} style={{ position: "absolute", left: 22 * CELL, top: 14 * CELL, width: CELL, height: CELL, pointerEvents: "none", zIndex: 6, objectFit: "contain" }} alt="Blacksmith NPC" />
           </>
         )}
         {mode === "dungeon" && (

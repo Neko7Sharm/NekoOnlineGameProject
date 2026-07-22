@@ -316,8 +316,8 @@ export default function App() {
           />
         )}
 
-        {/* 2. Shop Modal (แสดงเมื่อ confirmed แล้ว) */}
-        {specialDialog?.confirmed && specialDialog?.tile.type === 'shop' && char && (
+        {/* 2. Shop / Alchemy / Blacksmith Modal (แสดงเมื่อ confirmed แล้ว) */}
+        {specialDialog?.confirmed && (specialDialog?.tile.type === 'shop' || specialDialog?.tile.type === 'alchemy' || specialDialog?.tile.type === 'blacksmith') && char && (
           <ShopModal 
             char={char} 
             onBuy={eng.handleBuyItem} 

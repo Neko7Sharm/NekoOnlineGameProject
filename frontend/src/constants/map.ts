@@ -8,23 +8,23 @@ export const SIGHT = 11; // +5 for morning forest player sight
 
 export function getMapCols(mode: string) {
   if (mode === "sanctuary") return 27;
-  if (mode === "town") return 29;
+  if (mode === "town") return 30;
   return 100;
 }
 
 export function getMapRows(mode: string) {
   if (mode === "sanctuary") return 19;
-  if (mode === "town") return 21;
+  if (mode === "town") return 22;
   return 100;
 }
 
 // Entry / exit positions
-export const TOWN_ENTER = { x: 15, y: 10 }; // Start in the middle of the central path
+export const TOWN_ENTER = { x: 14, y: 10 }; // Start in the middle of the central plaza
 export const DUNGEON_ENTER = { x: 20, y: 95 }; // Entrance safe zone bottom left
 export const DUNGEON_EXIT = { x: 80, y: 20 }; // Boss room top right
 
-// Town special tiles (Interactive zones moved 1 tile into the path)
-export const TOWN_SPECIAL: Record<string, { label: string; type: string; icon: string; prompt: string; color: string }> = {
+// Town special tiles (Interactive zones)
+export const TOWN_SPECIAL: Record<string, { label: string; type: string; icon: string; prompt: string; color: string; requiredSkill?: string; dc?: number; successText?: string; failText?: string }> = {
   // --- 🏨 Hearthstone Inn ---
   "8,6": { label: "Hearthstone Inn", type: "inn", icon: "🏨", prompt: "Enter the Hearthstone Inn?", color: "#8B5A2B" },
   "9,6": { label: "Hearthstone Inn", type: "inn", icon: "🏨", prompt: "Enter the Hearthstone Inn?", color: "#8B5A2B" },
@@ -34,19 +34,25 @@ export const TOWN_SPECIAL: Record<string, { label: string; type: string; icon: s
   "21,6": { label: "Quest Board", type: "quest", icon: "📋", prompt: "Check the Quest Board?", color: "#1e4aaa" },
 
   // --- 🏪 General Store ---
-  "14,14": { label: "General Store", type: "shop", icon: "🏪", prompt: "Enter the General Store?", color: "#c45000" },
-  "15,14": { label: "General Store", type: "shop", icon: "🏪", prompt: "Enter the General Store?", color: "#c45000" },
+  "8,14": { label: "General Store", type: "shop", icon: "🏪", prompt: "Enter the General Store?", color: "#c45000" },
+  "9,14": { label: "General Store", type: "shop", icon: "🏪", prompt: "Enter the General Store?", color: "#c45000" },
 
   // --- ⛪ Selenia Statue ---
-  "4,11": { label: "Sacred Shrine", type: "shrine", icon: "⛪", prompt: "Pray at the Statue?", color: "#FFD700" },
+  "4,10": { label: "Sacred Shrine", type: "shrine", icon: "⛪", prompt: "Pray at Selenia's Statue?", color: "#FFD700" },
 
-  // --- 🚪 Old Locked Door (Interaction Check) ---
-  "12,10": { label: "Old Cellar Door", type: "check", icon: "🚪", prompt: "The door is heavily padlocked and covered in rust.", color: "#666", requiredSkill: "Investigation", dc: 12, successText: "You found a loose hinge and popped the door open. (Found 20g)", failText: "The lock is too complex. You couldn't open it." },
+  // --- 🧪 Alchemy Station ---
+  "22,8": { label: "Alchemy Table", type: "alchemy", icon: "🧪", prompt: "Examine the Alchemy Table?", color: "#9c27b0" },
+
+  // --- 🔨 Blacksmith Forge ---
+  "22,14": { label: "Blacksmith Forge", type: "blacksmith", icon: "🔨", prompt: "Examine the Forge & Anvil?", color: "#e65100" },
+
+  // --- 🚪 Old Locked Cellar Door ---
+  "14,6": { label: "Old Cellar Door", type: "check", icon: "🚪", prompt: "The door is heavily padlocked and covered in rust.", color: "#666", requiredSkill: "Investigation", dc: 12, successText: "You found a loose hinge and popped the door open. (Found 20g)", failText: "The lock is too complex. You couldn't open it." },
 
   // --- 🗺️ Town Exit ---
-  "22,19": { label: "Town Exit", type: "exit", icon: "🚪", prompt: "Leave Town and enter the Dungeon?", color: "#4caf50" },
-  "23,19": { label: "Town Exit", type: "exit", icon: "🚪", prompt: "Leave Town and enter the Dungeon?", color: "#4caf50" },
-  "24,19": { label: "Town Exit", type: "exit", icon: "🚪", prompt: "Leave Town and enter the Dungeon?", color: "#4caf50" }
+  "19,21": { label: "Town Exit", type: "exit", icon: "🚪", prompt: "Leave Town and enter the Dungeon?", color: "#4caf50" },
+  "20,21": { label: "Town Exit", type: "exit", icon: "🚪", prompt: "Leave Town and enter the Dungeon?", color: "#4caf50" },
+  "21,21": { label: "Town Exit", type: "exit", icon: "🚪", prompt: "Leave Town and enter the Dungeon?", color: "#4caf50" }
 };
 
 export const SANCTUARY_SPECIAL: Record<string, { label: string; type: string; icon: string; prompt: string; color: string; requiredSkill?: string; dc?: number; successText?: string; failText?: string }> = {
@@ -71,36 +77,42 @@ export const DUNGEON_SPECIAL: Record<string, { label: string; type: string; icon
 export function getTownTile(x: number, y: number): { bg: string; isWall: boolean, type: "grass" | "path" | "fence" | "none" } {
   const cols = getMapCols("town");
   const rows = getMapRows("town");
-  if (x >= cols || y >= rows) return { bg: "#000", isWall: true, type: "none" };
+  if (x >= cols || y >= rows || x < 0 || y < 0) return { bg: "#000", isWall: true, type: "none" };
 
-  // Map Boundaries
+  // Outer Map Boundaries
   if (x === 0 || y === 0 || x === cols - 1 || y === rows - 1) {
-    if (x >= 20 && x <= 24 && y === rows - 1) return { bg: "transparent", isWall: false, type: "path" }; // Exit path
+    if (x >= 18 && x <= 22 && y === rows - 1) return { bg: "transparent", isWall: false, type: "path" }; // South Exit path
     return { bg: "transparent", isWall: true, type: "fence" };
   }
-  
-  // --- BUILDINGS (Walls) ---
-  // Inn (Top-Left Rectangle)
-  if (x >= 2 && x <= 12 && y >= 1 && y <= 5) return { bg: "transparent", isWall: true, type: "grass" };
 
-  // Quest (Top-Right Rectangle)
-  if (x >= 18 && x <= 28 && y >= 1 && y <= 5) return { bg: "transparent", isWall: true, type: "grass" };
+  // --- BUILDINGS & WORKSTATIONS (Walls / Obstacles) ---
+  // Inn (Top-Left Building: X:3..12, Y:1..5)
+  if (x >= 3 && x <= 12 && y >= 1 && y <= 5) return { bg: "transparent", isWall: true, type: "grass" };
 
-  // Shop (Bottom-Left Rectangle)
-  if (x >= 2 && x <= 18 && y >= 15 && y <= 19) return { bg: "transparent", isWall: true, type: "grass" };
+  // Quest Board / Guildhall (Top-Right Building: X:17..26, Y:1..5)
+  if (x >= 17 && x <= 26 && y >= 1 && y <= 5) return { bg: "transparent", isWall: true, type: "grass" };
 
-  // Statue (Middle-Left)
-  if (x >= 1 && x <= 3 && y >= 10 && y <= 12) return { bg: "transparent", isWall: true, type: "grass" };
+  // Selenia Statue / Shrine Base (Far-Left: X:1..4, Y:8..12)
+  if (x >= 1 && x <= 3 && y >= 8 && y <= 12) return { bg: "transparent", isWall: true, type: "grass" };
+
+  // General Store / Shop (Bottom-Left: X:3..14, Y:15..19)
+  if (x >= 3 && x <= 14 && y >= 15 && y <= 19) return { bg: "transparent", isWall: true, type: "grass" };
+
+  // Alchemy Station Workstation (Right-Top: X:23..28, Y:6..10)
+  if (x >= 23 && x <= 28 && y >= 6 && y <= 10) return { bg: "transparent", isWall: true, type: "grass" };
+
+  // Blacksmith Forge Workstation (Right-Bottom: X:23..28, Y:12..16)
+  if (x >= 23 && x <= 28 && y >= 12 && y <= 16) return { bg: "transparent", isWall: true, type: "grass" };
 
   // --- PATHS ---
-  // Main central block
-  if (x >= 6 && x <= 24 && y >= 6 && y <= 14) return { bg: "transparent", isWall: false, type: "path" };
-  
-  // Path extending down (exit)
-  if (x >= 20 && x <= 24 && y >= 15 && y <= 19) return { bg: "transparent", isWall: false, type: "path" };
-  
-  // Path extending left to Statue
-  if (x >= 4 && x <= 5 && y >= 10 && y <= 12) return { bg: "transparent", isWall: false, type: "path" };
+  // Central Plaza
+  if (x >= 5 && x <= 22 && y >= 6 && y <= 14) return { bg: "transparent", isWall: false, type: "path" };
+
+  // Approach path to Shrine (X:4, Y:10)
+  if (x === 4 && y >= 9 && y <= 11) return { bg: "transparent", isWall: false, type: "path" };
+
+  // Exit path extending South (X:18..22, Y:15..21)
+  if (x >= 18 && x <= 22 && y >= 15 && y <= 21) return { bg: "transparent", isWall: false, type: "path" };
 
   return { bg: "transparent", isWall: false, type: "grass" };
 }

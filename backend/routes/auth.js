@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const supabase = require('../supabase');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'neko_super_secret_key_2026';
 
@@ -17,7 +17,12 @@ router.post('/register', async (req, res) => {
     }
     
     // Check if user exists
-    const existingUser = await User.findOne({ username });
+    const { data: existingUser, error: checkError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('username', username)
+      .maybeSingle();
+      
     if (existingUser) {
       return res.status(400).json({ error: 'Username already exists' });
     }
@@ -27,20 +32,23 @@ router.post('/register', async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, salt);
     
     // Create new user
-    const newUser = new User({
-      username,
-      password: hashedPassword
-    });
-    
-    await newUser.save();
+    const { data: newUser, error: insertError } = await supabase
+      .from('users')
+      .insert({ username, password: hashedPassword })
+      .select()
+      .single();
+      
+    if (insertError) {
+      throw insertError;
+    }
     
     // Generate token
-    const token = jwt.sign({ id: newUser._id }, JWT_SECRET, { expiresIn: '1d' });
+    const token = jwt.sign({ id: newUser.id }, JWT_SECRET, { expiresIn: '1d' });
     
     res.status(201).json({
       token,
       user: {
-        id: newUser._id,
+        id: newUser.id,
         username: newUser.username
       }
     });
@@ -61,7 +69,12 @@ router.post('/login', async (req, res) => {
     }
     
     // Find user
-    const user = await User.findOne({ username });
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('username', username)
+      .maybeSingle();
+      
     if (!user) {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
@@ -73,12 +86,12 @@ router.post('/login', async (req, res) => {
     }
     
     // Generate token
-    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '1d' });
+    const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '1d' });
     
     res.json({
       token,
       user: {
-        id: user._id,
+        id: user.id,
         username: user.username
       }
     });
