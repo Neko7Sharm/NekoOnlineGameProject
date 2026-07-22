@@ -552,23 +552,15 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
 
         {mode === "dungeon" && <AmbientSystem width={cols * CELL} height={rows * CELL} />}
 
-        {/* Building & NPC Overlays */}
+        {/* Building Overlays */}
         {mode === "town" && (
           <>
             <img src={bInn} style={{ position: "absolute", left: 3 * CELL, top: 1 * CELL, width: 10 * CELL, height: 5 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain", filter: "drop-shadow(0 6px 12px rgba(0,0,0,0.4))" }} alt="Inn" />
-            <img src={bShop} style={{ position: "absolute", left: 3 * CELL, top: 15 * CELL, width: 12 * CELL, height: 5 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain", filter: "drop-shadow(0 6px 12px rgba(0,0,0,0.4))" }} alt="Shop" />
+            <img src={bShop} style={{ position: "absolute", left: 3 * CELL, top: 15 * CELL, width: 12 * CELL, height: 5 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain", filter: "drop-shadow(0 6px 12px rgba(0,0,0,0.4))", transform: "rotate(180deg)" }} alt="Shop" />
             <img src={bQuest} style={{ position: "absolute", left: 17 * CELL, top: 1 * CELL, width: 10 * CELL, height: 5 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain", filter: "drop-shadow(0 6px 12px rgba(0,0,0,0.4))" }} alt="Quest Guild" />
             <img src={bStatue} style={{ position: "absolute", left: 1 * CELL, top: 8 * CELL, width: 3 * CELL, height: 4 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain", filter: "drop-shadow(0 0 20px rgba(196,146,214,0.6))" }} alt="Statue" />
             <img src={bAlchemy} style={{ position: "absolute", left: 23 * CELL, top: 6 * CELL, width: 5 * CELL, height: 5 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain", filter: "drop-shadow(0 6px 12px rgba(0,0,0,0.4))" }} alt="Alchemy Workstation" />
             <img src={bBlacksmith} style={{ position: "absolute", left: 23 * CELL, top: 12 * CELL, width: 5 * CELL, height: 5 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain", filter: "drop-shadow(0 6px 12px rgba(0,0,0,0.4))" }} alt="Blacksmith Workstation" />
-            
-            {/* NPC Tokens standing in front of interactive locations */}
-            <img src={npcInnkeeper} style={{ position: "absolute", left: 8 * CELL, top: 6 * CELL, width: CELL, height: CELL, pointerEvents: "none", zIndex: 6, objectFit: "contain" }} alt="Innkeeper NPC" />
-            <img src={npcQuestmaster} style={{ position: "absolute", left: 20 * CELL, top: 6 * CELL, width: CELL, height: CELL, pointerEvents: "none", zIndex: 6, objectFit: "contain" }} alt="Questmaster NPC" />
-            <img src={npcMerchant} style={{ position: "absolute", left: 8 * CELL, top: 14 * CELL, width: CELL, height: CELL, pointerEvents: "none", zIndex: 6, objectFit: "contain" }} alt="Merchant NPC" />
-            <img src={npcSeleniaChibi} style={{ position: "absolute", left: 4 * CELL, top: 10 * CELL, width: CELL, height: CELL, pointerEvents: "none", zIndex: 6, objectFit: "contain" }} alt="Selenia Shrine NPC" />
-            <img src={npcAlchemist} style={{ position: "absolute", left: 22 * CELL, top: 8 * CELL, width: CELL, height: CELL, pointerEvents: "none", zIndex: 6, objectFit: "contain" }} alt="Alchemist NPC" />
-            <img src={npcBlacksmith} style={{ position: "absolute", left: 22 * CELL, top: 14 * CELL, width: CELL, height: CELL, pointerEvents: "none", zIndex: 6, objectFit: "contain" }} alt="Blacksmith NPC" />
           </>
         )}
         {mode === "dungeon" && (
