@@ -282,8 +282,10 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
             if (!gridRef.current) return;
             if (mode === "town" || mode === "sanctuary") {
               const r = gridRef.current.getBoundingClientRect();
-              const cx = Math.floor((e.clientX - r.left) / CELL);
-              const cy = Math.floor((e.clientY - r.top) / CELL);
+              const cellW = r.width / cols;
+              const cellH = r.height / rows;
+              const cx = Math.floor((e.clientX - r.left) / cellW);
+              const cy = Math.floor((e.clientY - r.top) / cellH);
               if (cx >= 0 && cx < cols && cy >= 0 && cy < rows) {
                 const td = mode === "town" ? getTownTile(cx, cy) : getSanctuaryTile(cx, cy);
                 if (!td.isWall) onTileClick(cx, cy);
@@ -294,7 +296,12 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
             if (!gridRef.current) return;
             if (combatMode !== "spell" || !selectedSpell) return;
             const r = gridRef.current.getBoundingClientRect();
-            setMouseGrid({ x: e.clientX - r.left, y: e.clientY - r.top });
+            const cellW = r.width / cols;
+            const cellH = r.height / rows;
+            setMouseGrid({
+              x: ((e.clientX - r.left) / cellW) * CELL,
+              y: ((e.clientY - r.top) / cellH) * CELL
+            });
           }}
           style={{ 
             position: "relative", width: cols * CELL, height: rows * CELL, imageRendering: "pixelated",
@@ -435,8 +442,10 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
               onClick={(e) => {
                 if (!gridRef.current) return;
                 const r = gridRef.current.getBoundingClientRect();
-                const cx = Math.floor((e.clientX - r.left) / CELL);
-                const cy = Math.floor((e.clientY - r.top) / CELL);
+                const cellW = r.width / cols;
+                const cellH = r.height / rows;
+                const cx = Math.floor((e.clientX - r.left) / cellW);
+                const cy = Math.floor((e.clientY - r.top) / cellH);
                 if (cx >= 0 && cx < cols && cy >= 0 && cy < rows) {
                   const td = getSanctuaryTile(cx, cy);
                   if (!td.isWall) onTileClick(cx, cy);

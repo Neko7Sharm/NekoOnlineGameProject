@@ -1916,9 +1916,10 @@ export function useGameEngine() {
     }
   }
 
-  // Path execution
+  // Path execution (Click-to-move synchronized with WASD speed)
   useEffect(() => {
     if (movingPath.length > 0 && !combat.active && char) {
+      const stepDelay = stealthActive ? 300 : 130;
       const timer = setTimeout(() => {
         const nextPos = movingPath[0];
         
@@ -1959,27 +1960,61 @@ export function useGameEngine() {
         updateChar(char.id, { position: nextPos });
         if (screen === "dungeon") revealFog(nextPos);
         setMovingPath(prev => prev.slice(1));
-      }, 70);
+      }, stepDelay);
       return () => clearTimeout(timer);
     }
-  }, [movingPath, combat.active, screen, char?.id]);
+  }, [movingPath, combat.active, screen, char?.id, stealthActive]);
 
-  // Keyboard movement
+  // Smooth WASD & Arrow Key Movement System (Continuous Game Loop Input Tracking)
+  const keysPressedRef = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
+      if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA") return;
+      const k = e.key.toLowerCase();
+      if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(k)) {
+        keysPressedRef.current.add(k);
+      }
+    }
+
+    function handleKeyUp(e: KeyboardEvent) {
+      const k = e.key.toLowerCase();
+      keysPressedRef.current.delete(k);
+    }
+
+    function handleBlur() {
+      keysPressedRef.current.clear();
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", handleBlur);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", handleBlur);
+    };
+  }, []);
+
+  useEffect(() => {
+    const moveInterval = setInterval(() => {
       if ((screen !== "town" && screen !== "dungeon" && screen !== "sanctuary" && screen !== "tutorial") || !char || specialDialog) return;
 
+      const keys = keysPressedRef.current;
+      if (keys.size === 0) return;
+
       let dx = 0, dy = 0;
-      if (e.key === "w" || e.key === "W" || e.key === "ArrowUp") dy = -1;
-      if (e.key === "s" || e.key === "S" || e.key === "ArrowDown") dy = 1;
-      if (e.key === "a" || e.key === "A" || e.key === "ArrowLeft") dx = -1;
-      if (e.key === "d" || e.key === "D" || e.key === "ArrowRight") dx = 1;
+      if (keys.has("w") || keys.has("arrowup")) dy = -1;
+      else if (keys.has("s") || keys.has("arrowdown")) dy = 1;
+
+      if (keys.has("a") || keys.has("arrowleft")) dx = -1;
+      else if (keys.has("d") || keys.has("arrowright")) dx = 1;
 
       if (dx === 0 && dy === 0) return;
 
       const now = Date.now();
-      const moveDelay = stealthActive ? 300 : 120;
-      if (now - moveCooldownRef.current < moveDelay) return;
+      const stepDelay = stealthActive ? 300 : 130;
+      if (now - moveCooldownRef.current < stepDelay) return;
       moveCooldownRef.current = now;
 
       if (combat.active) {
@@ -1998,7 +2033,7 @@ export function useGameEngine() {
       const newY = Math.max(0, Math.min(getMapRows(screen) - 1, char.position.y + dy));
 
       if (newX === char.position.x && newY === char.position.y) return;
-      if (!isWalkable(screen as any, newX, newY)) return; // WASD collision check
+      if (!isWalkable(screen as any, newX, newY)) return;
 
       setMovingPath([]); // Cancel click path if WASD used
 
@@ -2007,26 +2042,31 @@ export function useGameEngine() {
         const special = TOWN_SPECIAL[`${newX},${newY}`];
         if (special) {
           setSpecialDialog({ x: newX, y: newY, tile: special });
+          keysPressedRef.current.clear();
           return;
         }
       } else if (screen === "sanctuary") {
         const special = SANCTUARY_SPECIAL[`${newX},${newY}`];
         if (special) {
           setSpecialDialog({ x: newX, y: newY, tile: special });
+          keysPressedRef.current.clear();
           return;
         }
       } else if (screen === "dungeon") {
         const special = DUNGEON_SPECIAL[`${newX},${newY}`];
         if (special) {
           setSpecialDialog({ x: newX, y: newY, tile: special });
+          keysPressedRef.current.clear();
           return;
         }
         if (newX === DUNGEON_ENTER.x && newY === DUNGEON_ENTER.y) {
           setSpecialDialog({ x: newX, y: newY, tile: { label: "Exit Dungeon", type: "exit", icon: "⬆️", prompt: "Leave the dungeon via the entrance?", color: "#1a5a1a" } });
+          keysPressedRef.current.clear();
           return;
         }
         if (newX === DUNGEON_EXIT.x && newY === DUNGEON_EXIT.y) {
           setSpecialDialog({ x: newX, y: newY, tile: { label: "Dungeon Exit", type: "exit", icon: "🚪", prompt: "Leave the dungeon and return to the World Map?", color: "#1a5a1a" } });
+          keysPressedRef.current.clear();
           return;
         }
       }
@@ -2036,11 +2076,10 @@ export function useGameEngine() {
       if (combat.active) {
         setCombat(prev => ({ ...prev, movedSquares: prev.movedSquares + 1 }));
       }
-    }
+    }, 16);
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [screen, char, specialDialog, combat.active, combat.turnOrder, combat.currentIndex, combatMode]);
+    return () => clearInterval(moveInterval);
+  }, [screen, char, specialDialog, combat.active, combat.turnOrder, combat.currentIndex, combatMode, stealthActive]);
 
   function handleSpecialYes() {
     if (!char || !specialDialog) return;
