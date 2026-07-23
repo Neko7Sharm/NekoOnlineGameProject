@@ -203,7 +203,6 @@ export default function App() {
 
   const [isMuted, setIsMuted] = useState(audioManager.getIsMuted());
   const [volume, setVolume] = useState(audioManager.getVolume());
-  const [showAlchemyModal, setShowAlchemyModal] = useState(false);
   const [hasPressedStart, setHasPressedStart] = useState(false);
 
   useEffect(() => {
@@ -369,23 +368,7 @@ export default function App() {
               SHORT REST
             </button>
           )}
-          {/* Alchemy Bench Button */}
-          {screen === "town" && !combat.active && char && (
-            <button onClick={() => setShowAlchemyModal(true)}
-              style={{
-                position: "absolute", top: 16, right: 155, zIndex: 100,
-                background: "rgba(100,50,180,0.5)", border: `1px solid ${C.purple}`,
-                color: "#fff", padding: "8px 14px", borderRadius: 8,
-                fontFamily: PX, cursor: "pointer", display: "flex", gap: 8, alignItems: "center",
-                fontSize: 12, boxShadow: `0 0 12px ${C.purple}60`, transition: "0.2s"
-              }}
-              onMouseOver={e => e.currentTarget.style.background = "rgba(120,60,200,0.8)"}
-              onMouseOut={e => e.currentTarget.style.background = "rgba(100,50,180,0.5)"}
-            >
-              <span style={{ fontSize: 16 }}>🧪</span>
-              ALCHEMY BENCH
-            </button>
-          )}
+
 
 
 
@@ -541,12 +524,21 @@ export default function App() {
           />
         )}
 
-        {/* 2. Shop / Alchemy / Blacksmith Modal (แสดงเมื่อ confirmed แล้ว) */}
-        {specialDialog?.confirmed && (specialDialog?.tile.type === 'shop' || specialDialog?.tile.type === 'alchemy' || specialDialog?.tile.type === 'blacksmith') && char && (
+        {/* 2. Shop / Blacksmith Modal (แสดงเมื่อ confirmed แล้ว) */}
+        {specialDialog?.confirmed && (specialDialog?.tile.type === 'shop' || specialDialog?.tile.type === 'blacksmith') && char && (
           <ShopModal 
             char={char} 
             onBuy={eng.handleBuyItem} 
             onClose={() => eng.setSpecialDialog(null)} 
+          />
+        )}
+
+        {/* 2.5 Tag Alchemy Modal (เปิดเมื่อยืนยันคุยที่ Alchemy Table) */}
+        {specialDialog?.confirmed && specialDialog?.tile.type === 'alchemy' && char && (
+          <AlchemyModal
+            char={char}
+            onClose={() => eng.setSpecialDialog(null)}
+            onCraft={(ing1Id, ing2Id, catId) => eng.handleCraftAlchemy(ing1Id, ing2Id, catId)}
           />
         )}
 
@@ -762,14 +754,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Tag Alchemy Modal */}
-        {showAlchemyModal && char && (
-          <AlchemyModal
-            char={char}
-            onClose={() => setShowAlchemyModal(false)}
-            onCraft={(ing1Id, ing2Id, catId) => eng.handleCraftAlchemy(ing1Id, ing2Id, catId)}
-          />
-        )}
+
       </div>
     );
     }

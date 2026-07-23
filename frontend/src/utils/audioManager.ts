@@ -81,17 +81,24 @@ class AudioManager {
     return this.isMuted;
   }
 
+  // Helper method to resolve path with base URL (for GitHub Pages compatibility)
+  private getAssetPath(pathStr: string): string {
+    const cleanPath = pathStr.startsWith("/") ? pathStr.slice(1) : pathStr;
+    const baseUrl = import.meta.env.BASE_URL || "/";
+    return baseUrl.endsWith("/") ? `${baseUrl}${cleanPath}` : `${baseUrl}/${cleanPath}`;
+  }
+
   // BGM Track Candidates Dictionary
   private tracks: Record<string, string[]> = {
-    auth: ["/assets/bgm/Moonlit Gate.mp3", "/assets/bgm/MoonlitGate.mp3", "/assets/bgm/bgm_mainmenu.mp3"],
-    charSelect: ["/assets/bgm/Moonlit Gate.mp3", "/assets/bgm/MoonlitGate.mp3", "/assets/bgm/bgm_mainmenu.mp3"],
-    charCreate: ["/assets/bgm/Moonlit Gate.mp3", "/assets/bgm/MoonlitGate.mp3", "/assets/bgm/bgm_mainmenu.mp3"],
-    worldMap: ["/assets/bgm/Moonlit Gate.mp3", "/assets/bgm/MoonlitGate.mp3", "/assets/bgm/bgm_mainmenu.mp3"],
-    town: ["/assets/bgm/A New Horizon.mp3", "/assets/bgm/bgm_town.mp3"],
-    sanctuary: ["/assets/bgm/Moonflower Sanctuary.mp3", "/assets/bgm/bgm_sanctuary.mp3"],
-    dungeon: ["/assets/bgm/Moonlit Fern Path.mp3", "/assets/bgm/MoonlitFernPath.mp3", "/assets/bgm/bgm_dungeon.mp3"],
-    combat: ["/assets/bgm/Moonlit Dice Chase.mp3", "/assets/bgm/MoonlitDiceChase.mp3", "/assets/bgm/bgm_combat.mp3"],
-    bossCombat: ["/assets/bgm/Ivory Guardian.mp3", "/assets/bgm/IvoryGuardian.mp3", "/assets/bgm/Moonlit Dice Chase.mp3"],
+    auth: ["assets/bgm/Moonlit Gate.mp3", "assets/bgm/MoonlitGate.mp3", "assets/bgm/bgm_mainmenu.mp3"],
+    charSelect: ["assets/bgm/Moonlit Gate.mp3", "assets/bgm/MoonlitGate.mp3", "assets/bgm/bgm_mainmenu.mp3"],
+    charCreate: ["assets/bgm/Moonlit Gate.mp3", "assets/bgm/MoonlitGate.mp3", "assets/bgm/bgm_mainmenu.mp3"],
+    worldMap: ["assets/bgm/Moonlit Gate.mp3", "assets/bgm/MoonlitGate.mp3", "assets/bgm/bgm_mainmenu.mp3"],
+    town: ["assets/bgm/A New Horizon.mp3", "assets/bgm/bgm_town.mp3"],
+    sanctuary: ["assets/bgm/Moonflower Sanctuary.mp3", "assets/bgm/bgm_sanctuary.mp3"],
+    dungeon: ["assets/bgm/Moonlit Fern Path.mp3", "assets/bgm/MoonlitFernPath.mp3", "assets/bgm/bgm_dungeon.mp3"],
+    combat: ["assets/bgm/Moonlit Dice Chase.mp3", "assets/bgm/MoonlitDiceChase.mp3", "assets/bgm/bgm_combat.mp3"],
+    bossCombat: ["assets/bgm/Ivory Guardian.mp3", "assets/bgm/IvoryGuardian.mp3", "assets/bgm/Moonlit Dice Chase.mp3"],
   };
 
   constructor() {
@@ -138,9 +145,7 @@ class AudioManager {
     this.listeners.forEach(cb => cb());
   }
 
-  public getIsMuted(): boolean {
-    return this.isMuted;
-  }
+
 
   /**
    * Play or crossfade to a new BGM track based on screen / state
@@ -173,8 +178,9 @@ class AudioManager {
     // Try playing candidates in sequence if file not found
     const tryPlayCandidate = (index: number) => {
       if (index >= candidates.length) return;
-      const url = candidates[index];
-      const newAudio = new Audio(encodeURI(url));
+      const rawUrl = candidates[index];
+      const fullPath = this.getAssetPath(rawUrl);
+      const newAudio = new Audio(encodeURI(fullPath));
       newAudio.loop = true;
       newAudio.volume = 0;
       this.currentAudio = newAudio;
@@ -195,7 +201,7 @@ class AudioManager {
           if (index + 1 < candidates.length) {
             tryPlayCandidate(index + 1);
           } else {
-            console.warn("BGM track missing or autoplay prevented:", url, err);
+            console.warn("BGM track missing or autoplay prevented:", fullPath, err);
           }
         });
       }
@@ -219,22 +225,7 @@ class AudioManager {
     this.notifyListeners();
   }
 
-  /**
-   * Toggle mute / unmute
-   */
-  public toggleMute(): boolean {
-    this.isMuted = !this.isMuted;
-    if (this.currentAudio) {
-      if (this.isMuted) {
-        this.currentAudio.pause();
-      } else {
-        this.currentAudio.play().catch(() => {});
-        this.currentAudio.volume = this.volume;
-      }
-    }
-    this.notifyListeners();
-    return this.isMuted;
-  }
+
 
   /**
    * Play a Sound Effect (SFX)
@@ -242,7 +233,8 @@ class AudioManager {
   public playSFX(name: string) {
     if (this.isMuted) return;
     try {
-      const sfx = new Audio(`/assets/sfx/sfx_${name}.mp3`);
+      const sfxPath = this.getAssetPath(`assets/sfx/sfx_${name}.mp3`);
+      const sfx = new Audio(encodeURI(sfxPath));
       sfx.volume = Math.min(1, this.volume * 1.2);
       sfx.play().catch(() => {});
     } catch (e) {

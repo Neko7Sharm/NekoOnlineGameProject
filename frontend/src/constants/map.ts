@@ -44,6 +44,7 @@ export const TOWN_SPECIAL: Record<string, { label: string; type: string; icon: s
 
   // --- 🧪 Alchemy Station ---
   "22,8": { label: "Alchemy Table", type: "alchemy", icon: "🧪", prompt: "Examine the Alchemy Table?", color: "#9c27b0" },
+  "23,8": { label: "Alchemy Table", type: "alchemy", icon: "🧪", prompt: "Examine the Alchemy Table?", color: "#9c27b0" },
 
   // --- 🔨 Blacksmith Forge ---
   "22,14": { label: "Blacksmith Forge", type: "blacksmith", icon: "🔨", prompt: "Examine the Forge & Anvil?", color: "#e65100" },

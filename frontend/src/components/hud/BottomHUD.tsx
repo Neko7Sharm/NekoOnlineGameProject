@@ -274,7 +274,20 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
                     if (rarity === "rare") return "#1e90ff";
                     if (rarity === "epic") return "#9d57a9";
                     if (rarity === "legendary") return "#fdb813";
-                    return C.border; // common
+                    return C.border;
+                  };
+                  const getTagColor = (tag: string) => {
+                    const t = tag.toLowerCase();
+                    if (t === "healing") return "#4cdb70";
+                    if (t === "water") return "#4499ff";
+                    if (t === "fire") return "#ff6644";
+                    if (t === "magic" || t === "crystal") return "#cc88ff";
+                    if (t === "moon") return "#aaddff";
+                    if (t === "poison") return "#88dd44";
+                    if (t === "plant") return "#66cc55";
+                    if (t === "beast") return "#dd9944";
+                    if (t === "metal") return "#aabbcc";
+                    return C.purple;
                   };
 
                   const stackedItems = Object.values(filtered.reduce((acc, item) => {
@@ -287,77 +300,58 @@ export function BottomHUD({ char, hudTab, setHudTab, hudOpen, setHudOpen, chatTa
                   }, {} as Record<string, Item & { count: number }>));
 
                   return (
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 5 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 }}>
                       {stackedItems.map(item => (
                         <div key={item.id}
-                          onClick={() => setExpandedItem(expandedItem === item.id ? null : item.id)}
+                          onClick={() => setItemMenu(item)}
                           style={{
                             cursor: "pointer", position: "relative",
-                            border: `2px solid ${expandedItem === item.id ? C.blue : getRarityColor(item.rarity)}`,
-                            background: expandedItem === item.id ? C.blue + "15" : C.card2,
-                            padding: 6, display: "flex", flexDirection: "column", alignItems: "center",
-                            transition: "border-color 0.15s, background 0.15s",
-                            boxShadow: item.rarity && item.rarity !== "common" ? `inset 0 0 8px ${getRarityColor(item.rarity)}40` : "none"
-                          }}>
+                            border: `1.5px solid ${item.rarity && item.rarity !== "common" ? getRarityColor(item.rarity) : C.border}`,
+                            background: C.card2,
+                            padding: "8px 6px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                            borderRadius: 6, minHeight: 62,
+                            transition: "all 0.15s ease-in-out",
+                            boxShadow: item.rarity && item.rarity !== "common" ? `inset 0 0 10px ${getRarityColor(item.rarity)}30, 0 0 6px ${getRarityColor(item.rarity)}20` : "none"
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.transform = "translateY(-2px)";
+                            e.currentTarget.style.borderColor = C.blue;
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.transform = "translateY(0)";
+                            e.currentTarget.style.borderColor = item.rarity && item.rarity !== "common" ? getRarityColor(item.rarity) : C.border;
+                          }}
+                        >
                           {item.count > 1 && (
-                            <div style={{ position: "absolute", top: -4, right: -4, background: C.blue, color: "#fff", fontSize: 7, fontFamily: PX, padding: "1px 3px", borderRadius: 4, zIndex: 2 }}>
+                            <div style={{ position: "absolute", top: -4, right: -4, background: C.blue, color: "#fff", fontSize: 7, fontFamily: PX, padding: "1px 4px", borderRadius: 4, zIndex: 2, boxShadow: "0 2px 4px rgba(0,0,0,0.5)" }}>
                               x{item.count}
                             </div>
                           )}
-                          <span style={{ fontSize: 18 }}>
+                          <span style={{ fontSize: 20, filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.5))" }}>
                             {item.type === "weapon" ? "⚔" : item.type === "armor" ? "🛡" : item.type === "accessory" ? "💍" : item.material ? "🪵" : "💊"}
                           </span>
-                          <span style={{ fontFamily: PX, fontSize: 5, color: C.muted, marginTop: 2, textAlign: "center", lineHeight: 1.2, overflow: "hidden", maxHeight: 18 }}>
-                            {item.name.slice(0, 6)}
+                          <span style={{ fontFamily: PX, fontSize: 7, color: C.text, marginTop: 4, textAlign: "center", lineHeight: 1.2, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", maxWidth: "90%" }}>
+                            {item.name}
                           </span>
+                          {item.tags && item.tags.length > 0 && (
+                            <div style={{ display: "flex", gap: 2, flexWrap: "wrap", justifyContent: "center", marginTop: 3 }}>
+                              {item.tags.slice(0, 2).map((t: string) => (
+                                <span key={t} style={{
+                                  fontFamily: PX, fontSize: 6, padding: "1px 4px",
+                                  background: getTagColor(t) + "25",
+                                  border: `1px solid ${getTagColor(t)}60`,
+                                  borderRadius: 3, color: getTagColor(t),
+                                  lineHeight: 1.2,
+                                }}>{t}</span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
                   );
                 })()}
               </div>
-              {expandedItem && (() => {
-                const item = char.inventory.find(i => i.id === expandedItem);
-                if (!item) return null;
-                return (
-                  <div style={{
-                    borderTop: `1px solid ${C.border}`, padding: "10px 12px",
-                    background: C.card, flexShrink: 0,
-                    animation: "item-detail-in 0.2s ease-out",
-                  }}>
-                    <div style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "center" }}>
-                      <span style={{ fontFamily: PX, fontSize: 8, color: getRarityColor(item.rarity), flex: 1, textShadow: item.rarity && item.rarity !== "common" ? `0 0 4px ${getRarityColor(item.rarity)}80` : "none" }}>{item.name}</span>
-                      {item.rarity && <span style={{ fontFamily: PX, fontSize: 5, padding: "2px 4px", border: `1px solid ${getRarityColor(item.rarity)}`, color: getRarityColor(item.rarity), borderRadius: 2 }}>{item.rarity.toUpperCase()}</span>}
-                      {item.hands === 2 && <span style={{ fontFamily: PX, fontSize: 5, padding: "2px 4px", border: `1px solid ${C.muted}`, color: C.muted, borderRadius: 2 }}>2H</span>}
-                      <button onClick={() => setExpandedItem(null)} style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, fontFamily: MO, fontSize: 12 }}>×</button>
-                    </div>
-                    <div style={{ fontFamily: NU, fontSize: 10, color: C.muted, marginBottom: 6 }}>{item.description}</div>
-                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 6 }}>
-                      {item.damage && <span style={{ fontFamily: MO, fontSize: 9, color: C.red, padding: "2px 5px", background: C.card2 }}>DMG: {item.damage}</span>}
-                      {item.ac && <span style={{ fontFamily: MO, fontSize: 9, color: C.blue, padding: "2px 5px", background: C.card2 }}>AC: +{item.ac}</span>}
-                      {item.healAmount && <span style={{ fontFamily: MO, fontSize: 9, color: C.green, padding: "2px 5px", background: C.card2 }}>HEAL: {item.healAmount}</span>}
-                      {item.range && <span style={{ fontFamily: MO, fontSize: 9, color: C.muted, padding: "2px 5px", background: C.card2 }}>{item.range / 5} tiles</span>}
-                      {item.aoeRadius && <span style={{ fontFamily: MO, fontSize: 9, color: C.gold, padding: "2px 5px", background: C.card2 }}>AOE r{item.aoeRadius}</span>}
-                    </div>
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                      {(item.type === "consumable" && !item.material) && (
-                        !inCombat ? (
-                          <button onClick={() => { onUseItem(item); setExpandedItem(null); }}
-                            style={{ ...pixelBtn("primary", true), fontSize: 6 }}>USE</button>
-                        ) : (
-                          <span style={{ fontFamily: NU, fontSize: 10, color: C.muted }}>↑ Combat panel</span>
-                        )
-                      )}
-                      {(item.type === "weapon" || item.type === "armor" || item.type === "accessory") && (
-                        <button onClick={() => { onEquipItem(item); setExpandedItem(null); }}
-                          style={{ ...pixelBtn("primary", true), fontSize: 6 }}>EQUIP</button>
-                      )}
-                      <button onClick={() => { onDropItem(item.id); setExpandedItem(null); }}
-                        style={{ ...pixelBtn("danger", true), fontSize: 6 }}>DROP</button>
-                    </div>
-                  </div>
-                );
-              })()}
             </div>
           )}
 

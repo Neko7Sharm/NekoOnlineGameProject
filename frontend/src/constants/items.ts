@@ -24,8 +24,8 @@ export const SHOP_ITEMS: Item[] = [
   { id: "s9",  name: "Chain Mail",     type: "armor",  ac: 16, value: 75,  description: "Interlocked rings. AC 16." },
   { id: "s10", name: "Shield",         type: "weapon", hands: 1, range: 0, damage: "0", effect: "guard", value: 10, description: "Wooden shield. +2 AC while equipped. Use [EXTRA] to Guard (1d4+CON damage reduction)." },
   // ─── CONSUMABLES ───────────────────────────────
-  { id: "s11", name: "Healing Potion", type: "consumable", healAmount: "2d4+2", effect: "heal",     value: 50, description: "Restores 2d4+2 HP." },
-  { id: "s16", name: "Small Bomb",     type: "consumable", damage: "3d6", effect: "aoe_bomb", saveStat: "dex", saveDC: 15, aoeRadius: 2, value: 60, description: "3d6 explosion, DEX save DC 15. Half damage on save. Circle AOE." },
+  { id: "s11", name: "Healing Potion", type: "consumable", healAmount: "2d4+2", effect: "heal", tags: ["Healing", "Water"], value: 50, description: "Restores 2d4+2 HP." },
+  { id: "s16", name: "Small Bomb",     type: "consumable", damage: "3d6", effect: "aoe_bomb", saveStat: "dex", saveDC: 15, aoeRadius: 2, tags: ["Fire", "Poison"], value: 60, description: "3d6 explosion, DEX save DC 15. Half damage on save. Circle AOE." },
   // ─── ACCESSORIES ───────────────────────────────
   { id: "s12", name: "Ring of Protection",   type: "accessory", ac: 1,           value: 100, description: "+1 AC." },
   { id: "s13", name: "Amulet of Vigor",      type: "accessory", stat: "con", bonus: 2, value: 80, description: "+2 CON." },
@@ -38,7 +38,7 @@ export const SHOP_ITEMS: Item[] = [
 // ─────────────────────────────────────────────────
 
 export const BRANCH_ITEM: Omit<Item, "id"> = {
-  name: "Branch", type: "consumable", value: 1, material: true,
+  name: "Branch", type: "consumable", value: 1, material: true, tags: ["Wood", "Plant"],
   description: "Rough wooden branch from a training dummy. Used as crafting material.",
 };
 
@@ -75,10 +75,10 @@ export const MONSTER_DROPS: Omit<Item, "id">[] = [
   { name: "Treant Seed", type: "consumable", value: 100, material: true, rarity: "boss_material", tags: ["Seed", "Divine"], description: "A seed pulsating with life." },
   { name: "Woodland Shield", type: "weapon", hands: 1, range: 0, damage: "0", effect: "guard", value: 60, rarity: "rare", description: "Sturdy wooden shield. Use [EXTRA] to Guard." },
   // Chests & Secrets
-  { name: "Minor Healing Potion", type: "consumable", healAmount: "1d4+1", effect: "heal", value: 25, rarity: "common", description: "Restores 1d4+1 HP." },
+  { name: "Minor Healing Potion", type: "consumable", healAmount: "1d4+1", effect: "heal", value: 25, rarity: "common", tags: ["Healing", "Water"], description: "Restores 1d4+1 HP." },
   { name: "Equipment Enhancement Stone", type: "consumable", value: 150, material: true, rarity: "rare", tags: ["Upgrade"], description: "Used to upgrade equipment." },
   { name: "Treasure Map Fragment", type: "consumable", value: 20, material: true, rarity: "rare", tags: ["Map"], description: "A piece of a larger treasure map." },
-  { name: "Gold Pouch", type: "consumable", effect: "gold_pouch", value: 50, rarity: "uncommon", description: "A small pouch of gold." },
+  { name: "Gold Pouch", type: "consumable", effect: "gold_pouch", value: 50, rarity: "uncommon", tags: ["Gold", "Treasure"], description: "A small pouch of gold." },
   { name: "Selenia's Flower", type: "consumable", value: 0, material: true, rarity: "rare", tags: ["Divine", "Nature"], description: "A glowing, ethereal flower." }
 ];
 

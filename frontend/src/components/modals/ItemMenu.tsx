@@ -65,6 +65,39 @@ export function DamageTypeTag({ dt, small = false }: { dt: string; small?: boole
   );
 }
 
+export const getTagColor = (tag: string) => {
+  const t = tag.toLowerCase();
+  if (t === "healing") return "#4cdb70";
+  if (t === "water") return "#4499ff";
+  if (t === "fire") return "#ff6644";
+  if (t === "magic" || t === "crystal") return "#cc88ff";
+  if (t === "moon") return "#aaddff";
+  if (t === "poison") return "#88dd44";
+  if (t === "plant" || t === "nature") return "#66cc55";
+  if (t === "beast" || t === "fur") return "#dd9944";
+  if (t === "metal" || t === "ore") return "#aabbcc";
+  if (t === "wood" || t === "fiber") return "#d4a373";
+  if (t === "divine" || t === "gold" || t === "treasure") return "#fdb813";
+  return C.purple;
+};
+
+export function TagBadge({ tag, small = false }: { tag: string; small?: boolean }) {
+  const color = getTagColor(tag);
+  return (
+    <span style={{
+      fontFamily: PX, fontSize: small ? 6 : 8,
+      padding: small ? "1px 4px" : "2px 7px",
+      background: color + "20", color,
+      border: `1px solid ${color}50`,
+      borderRadius: 3,
+      boxShadow: `0 0 6px ${color}25`,
+      display: "inline-flex", alignItems: "center", gap: 3,
+    }}>
+      🏷 {tag}
+    </span>
+  );
+}
+
 // ─── Section label ────────────────────────────────────────────────────────────
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -142,13 +175,27 @@ export function ItemMenu({ item, inInventory, onUse, onEquip, onUnequip, onDrop,
 
   const statModLabel = isFinesse ? "STR or DEX" : isRanged ? "DEX" : "STR";
 
+  const getRarityColor = (rarity?: string) => {
+    if (rarity === "uncommon") return "#63c74d";
+    if (rarity === "rare") return "#1e90ff";
+    if (rarity === "epic") return "#9d57a9";
+    if (rarity === "legendary") return "#fdb813";
+    return C.border;
+  };
+  const rarityColor = getRarityColor(merged.rarity);
+
   return (
     <div
-      style={{ position: "fixed", inset: 0, zIndex: 8000, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.65)" }}
+      style={{ position: "fixed", inset: 0, zIndex: 8000, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.65)", backdropFilter: "blur(2px)" }}
       onClick={onClose}
     >
       <div
-        style={{ position: "relative", width: 270, background: C.card, border: `1px solid ${C.border}`, padding: "18px 18px 14px" }}
+        style={{
+          position: "relative", width: 280, background: C.card,
+          border: `1.5px solid ${merged.rarity && merged.rarity !== "common" ? rarityColor : C.border}`,
+          boxShadow: merged.rarity && merged.rarity !== "common" ? `0 0 25px ${rarityColor}35` : `0 8px 32px rgba(0,0,0,0.5)`,
+          padding: "18px 18px 14px", borderRadius: 8,
+        }}
         onClick={e => e.stopPropagation()}
       >
         <PixelCorners size={5} />
@@ -156,20 +203,31 @@ export function ItemMenu({ item, inInventory, onUse, onEquip, onUnequip, onDrop,
         {/* ── Header ─────────────────────────────── */}
         <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
           <div style={{
-            width: 42, height: 42, flexShrink: 0,
-            background: C.card2, border: `1px solid ${C.border}`,
+            width: 44, height: 44, flexShrink: 0,
+            background: C.card2,
+            border: `1.5px solid ${rarityColor}`,
+            boxShadow: merged.rarity && merged.rarity !== "common" ? `0 0 12px ${rarityColor}40` : "none",
+            borderRadius: 6,
             display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22,
           }}>
             {typeIcon}
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: PX, fontSize: 11, color: C.text, marginBottom: 3 }}>{merged.name}</div>
-            {handsLabel && (
-              <div style={{ fontFamily: PX, fontSize: 7, color: handsColor, letterSpacing: 1, marginBottom: 4 }}>{handsLabel}</div>
-            )}
+            <div style={{ fontFamily: PX, fontSize: 11, color: C.text, marginBottom: 3, textShadow: merged.rarity && merged.rarity !== "common" ? `0 0 8px ${rarityColor}60` : "none" }}>{merged.name}</div>
+            <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap", marginBottom: 4 }}>
+              {merged.rarity && (
+                <span style={{ fontFamily: PX, fontSize: 6, padding: "1px 4px", border: `1px solid ${rarityColor}`, color: rarityColor, borderRadius: 2 }}>
+                  {merged.rarity.toUpperCase()}
+                </span>
+              )}
+              {handsLabel && (
+                <span style={{ fontFamily: PX, fontSize: 6, color: handsColor, letterSpacing: 1 }}>{handsLabel}</span>
+              )}
+            </div>
             {/* Tags row */}
-            <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
               {merged.damageType && !isWeapon && <DamageTypeTag dt={merged.damageType} small />}
+              {merged.tags && merged.tags.map(t => <TagBadge key={t} tag={t} small />)}
             </div>
           </div>
         </div>
@@ -285,6 +343,16 @@ export function ItemMenu({ item, inInventory, onUse, onEquip, onUnequip, onDrop,
                   <span style={{ fontFamily: NU, fontSize: 11, color: C.muted, lineHeight: 1.4 }}>{PROPERTY_META[prop].desc}</span>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Item Tags ───────────────────────────── */}
+        {merged.tags && merged.tags.length > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <SectionLabel>TAGS & ESSENCES</SectionLabel>
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+              {merged.tags.map(t => <TagBadge key={t} tag={t} />)}
             </div>
           </div>
         )}
