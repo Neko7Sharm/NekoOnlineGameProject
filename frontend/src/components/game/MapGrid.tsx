@@ -1071,9 +1071,63 @@ export function MapGrid({ mode, char, monsters, chests, dungeonObjects, secrets,
               </div>
             );
           }
-          if (e.type === "slash" || e.type === "scratch" || e.type === "whip" || e.type === "sword_swing") {
-            // User requested to remove all generic melee attack effects for now to prepare for new custom animations
-            return null;
+          if (e.type === "ls_slash" || e.type === "slash" || e.type === "sword_swing") {
+            let angle = 0;
+            let cx = ex;
+            let cy = ey;
+            if (e.targetX !== undefined && e.targetY !== undefined) {
+              const fromX = e.targetX * CELL + CELL / 2;
+              const fromY = e.targetY * CELL + CELL / 2;
+              const dx = ex - fromX;
+              const dy = ey - fromY;
+              angle = Math.atan2(dy, dx) * 180 / Math.PI;
+              cx = fromX + dx * 0.55;
+              cy = fromY + dy * 0.55;
+            }
+            const animStyle: React.CSSProperties = { position: "absolute", width: "100%", height: "100%", objectFit: "contain", opacity: 0 };
+            const slashFrames = [
+              lsSlash1, lsSlash2, lsSlash3, lsSlash4, lsSlash5, lsSlash6, lsSlash7,
+              lsSlash8, lsSlash9, lsSlash10, lsSlash11, lsSlash12, lsSlash13
+            ];
+            return (
+              <div key={e.id} style={{
+                position: "absolute", pointerEvents: "none", zIndex: 60, left: cx - 160, top: cy - 160, width: 320, height: 320,
+                transform: `rotate(${angle}deg) scaleY(${e.flip ? -1 : 1}) scale(${e.scale || 1})`,
+                mixBlendMode: "screen",
+                overflow: "hidden"
+              }}>
+                {slashFrames.map((imgSrc, idx) => (
+                  <img key={`lss-${idx}`} src={imgSrc} style={{ ...animStyle, animation: `anim-frame-13-${idx + 1} 0.35s linear forwards` }} />
+                ))}
+              </div>
+            );
+          }
+
+          if (e.type === "ls_hit") {
+            let angle = 0;
+            if (e.targetX !== undefined && e.targetY !== undefined) {
+              const fromX = e.targetX * CELL + CELL / 2;
+              const fromY = e.targetY * CELL + CELL / 2;
+              const dx = ex - fromX;
+              const dy = ey - fromY;
+              angle = Math.atan2(dy, dx) * 180 / Math.PI;
+            }
+            const animStyle: React.CSSProperties = { position: "absolute", width: "100%", height: "100%", objectFit: "contain", opacity: 0 };
+            return (
+              <div key={e.id} style={{
+                position: "absolute", pointerEvents: "none", zIndex: 65, left: ex - 75, top: ey - 75, width: 150, height: 150,
+                transform: `rotate(${angle}deg) scaleY(${e.flip ? -1 : 1}) scale(${e.scale || 1})`,
+                mixBlendMode: "screen"
+              }}>
+                <img src={lsHit1} style={{ ...animStyle, animation: "anim-frame-7-1 0.2s linear forwards" }} />
+                <img src={lsHit2} style={{ ...animStyle, animation: "anim-frame-7-2 0.2s linear forwards" }} />
+                <img src={lsHit3} style={{ ...animStyle, animation: "anim-frame-7-3 0.2s linear forwards" }} />
+                <img src={lsHit4} style={{ ...animStyle, animation: "anim-frame-7-4 0.2s linear forwards" }} />
+                <img src={lsHit5} style={{ ...animStyle, animation: "anim-frame-7-5 0.2s linear forwards" }} />
+                <img src={lsHit6} style={{ ...animStyle, animation: "anim-frame-7-6 0.2s linear forwards" }} />
+                <img src={lsHit7} style={{ ...animStyle, animation: "anim-frame-7-7 0.2s linear forwards" }} />
+              </div>
+            );
           }
 
           if (e.type === "thrust_attack") {
