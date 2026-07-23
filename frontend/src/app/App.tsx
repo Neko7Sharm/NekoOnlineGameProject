@@ -1,14 +1,17 @@
-import { Heart, Shield, Zap, RotateCcw, BookOpen } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Heart, Shield, Zap, RotateCcw, BookOpen, Volume2, VolumeX } from "lucide-react";
 import { C, PX, NU, MO, pixelBtn } from "../constants/theme";
 import { CLASS_CFG } from "../constants/classes";
 import { getMapCols, getMapRows, CELL } from "../constants/map";
 import { LONG_REST_COST } from "../constants/levels";
 import { useGameEngine } from "../useGameEngine";
+import { audioManager } from "../utils/audioManager";
 import { HpBar } from "../components/ui/HpBar";
 import { GoldBadge } from "../components/ui/GoldBadge";
 import { AnimeDialog } from "../components/ui/AnimeDialog";
 import { CheckModal } from "../components/game/CheckModal";
 import { AuthScreen } from "../components/screens/AuthScreen";
+import { TitleSplashScreen } from "../components/screens/TitleSplashScreen";
 import { CharSelectScreen } from "../components/screens/CharSelectScreen";
 import { CharCreateScreen } from "../components/screens/CharCreateScreen";
 import { WorldMapScreen } from "../components/screens/WorldMapScreen";
@@ -20,7 +23,173 @@ import { InnModal } from "../components/modals/InnModal";
 import { StatueModal } from "../components/modals/StatueModal";
 import { QuestModal } from "../components/modals/QuestModal";
 import { SeleniaDialog, SeleniaPopup } from "../components/modals/SeleniaDialog";
+import { AlchemyModal } from "../components/modals/AlchemyModal";
 import { BottomHUD } from "../components/hud/BottomHUD";
+
+const GlobalBgmButton = () => {
+  const [showSlider, setShowSlider] = useState(false);
+  const [masterVol, setMasterVol] = useState(audioManager.getMasterVolume());
+  const [bgmVol, setBgmVol] = useState(audioManager.getBgmVolume());
+  const [sfxVol, setSfxVol] = useState(audioManager.getSfxVolume());
+  const [isMuted, setIsMuted] = useState(audioManager.getIsMuted());
+
+  useEffect(() => {
+    return audioManager.subscribe(() => {
+      setMasterVol(audioManager.getMasterVolume());
+      setBgmVol(audioManager.getBgmVolume());
+      setSfxVol(audioManager.getSfxVolume());
+      setIsMuted(audioManager.getIsMuted());
+    });
+  }, []);
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        top: 110,
+        right: 14,
+        zIndex: 99999,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "flex-end",
+        gap: 8,
+      }}
+    >
+      {/* Audio Mixer Popup Panel (Expands when speaker button is clicked) */}
+      {showSlider && (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+            padding: "14px 18px",
+            borderRadius: 16,
+            background: "rgba(12, 8, 25, 0.94)",
+            backdropFilter: "blur(16px)",
+            border: `1.5px solid rgba(196, 146, 214, 0.6)`,
+            boxShadow: "0 8px 32px rgba(0, 0, 0, 0.6), 0 0 20px rgba(196, 146, 214, 0.3)",
+            animation: "audio-panel-expand 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+            minWidth: 230,
+          }}
+        >
+          <style>{`
+            @keyframes audio-panel-expand {
+              0% { opacity: 0; transform: translateY(-10px) scale(0.92); }
+              100% { opacity: 1; transform: translateY(0) scale(1); }
+            }
+          `}</style>
+
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(196, 146, 214, 0.2)", paddingBottom: 8 }}>
+            <div style={{ fontFamily: PX, fontSize: 10, color: C.gold, letterSpacing: 1 }}>🎚️ AUDIO MIXER</div>
+            <button
+              onClick={() => audioManager.toggleMute()}
+              style={{
+                background: isMuted ? "rgba(220, 38, 38, 0.8)" : "rgba(196, 146, 214, 0.2)",
+                border: `1px solid ${isMuted ? "#ef4444" : "rgba(196, 146, 214, 0.5)"}`,
+                color: isMuted ? "#fff" : C.gold,
+                borderRadius: 6,
+                padding: "2px 8px",
+                fontFamily: PX,
+                fontSize: 8,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 4
+              }}
+            >
+              {isMuted ? <VolumeX size={12} /> : <Volume2 size={12} />}
+              {isMuted ? "MUTED" : "MUTE"}
+            </button>
+          </div>
+
+          {/* 1. MASTER SOUND */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, opacity: isMuted ? 0.6 : 1 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontFamily: PX, fontSize: 8, color: C.text }}>🔊 MASTER SOUND</span>
+              <span style={{ fontFamily: MO, fontSize: 9, color: C.gold }}>{isMuted ? "MUTED" : `${Math.round(masterVol * 100)}%`}</span>
+            </div>
+            <input
+              type="range" min="0" max="1" step="0.02"
+              value={masterVol}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value);
+                audioManager.setMasterVolume(val);
+              }}
+              style={{ width: "100%", height: 5, accentColor: C.gold, cursor: "pointer" }}
+            />
+          </div>
+
+          {/* 2. BGM MUSIC */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, opacity: isMuted ? 0.6 : 1 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontFamily: PX, fontSize: 8, color: C.text }}>🎶 BGM (MUSIC)</span>
+              <span style={{ fontFamily: MO, fontSize: 9, color: "#c492d6" }}>{isMuted ? "MUTED" : `${Math.round(bgmVol * 100)}%`}</span>
+            </div>
+            <input
+              type="range" min="0" max="1" step="0.02"
+              value={bgmVol}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value);
+                audioManager.setBgmVolume(val);
+              }}
+              style={{ width: "100%", height: 5, accentColor: "#c492d6", cursor: "pointer" }}
+            />
+          </div>
+
+          {/* 3. SFX EFFECTS */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, opacity: isMuted ? 0.6 : 1 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontFamily: PX, fontSize: 8, color: C.text }}>⚔️ SFX (EFFECTS)</span>
+              <span style={{ fontFamily: MO, fontSize: 9, color: C.blue }}>{isMuted ? "MUTED" : `${Math.round(sfxVol * 100)}%`}</span>
+            </div>
+            <input
+              type="range" min="0" max="1" step="0.02"
+              value={sfxVol}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value);
+                audioManager.setSfxVolume(val);
+              }}
+              style={{ width: "100%", height: 5, accentColor: C.blue, cursor: "pointer" }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Primary Round Speaker Button (Click to toggle Audio Mixer Panel) */}
+      <button
+        onClick={() => setShowSlider(prev => !prev)}
+        onDoubleClick={() => audioManager.toggleMute()}
+        title={showSlider ? "Close Audio Mixer" : "Click to Adjust Master, BGM & SFX Volume"}
+        style={{
+          width: 42,
+          height: 42,
+          borderRadius: "50%",
+          background: isMuted ? "rgba(220, 38, 38, 0.88)" : "rgba(15, 10, 30, 0.85)",
+          backdropFilter: "blur(10px)",
+          border: `1.5px solid ${isMuted ? "#ef4444" : "rgba(196, 146, 214, 0.6)"}`,
+          color: isMuted ? "#ffffff" : "#c492d6",
+          boxShadow: isMuted ? "0 0 16px rgba(239, 68, 68, 0.5)" : "0 0 16px rgba(196, 146, 214, 0.35)",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+          flexShrink: 0,
+        }}
+        onMouseOver={e => {
+          e.currentTarget.style.transform = "scale(1.12)";
+          e.currentTarget.style.borderColor = isMuted ? "#f87171" : "#e9d5ff";
+        }}
+        onMouseOut={e => {
+          e.currentTarget.style.transform = "scale(1)";
+          e.currentTarget.style.borderColor = isMuted ? "#ef4444" : "rgba(196, 146, 214, 0.6)";
+        }}
+      >
+        {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+      </button>
+    </div>
+  );
+};
 
 export default function App() {
   const eng = useGameEngine();
@@ -32,14 +201,32 @@ export default function App() {
     setHudTab, setHudOpen, setChatTab, setZoom, setCombatMode,
   } = eng;
 
-  if (screen === "auth") return <AuthScreen onLogin={eng.handleLogin} />;
-  if (screen === "charSelect") {
-    if (creatingChar) return <CharCreateScreen onCreated={eng.handleCreateChar} onBack={() => eng.setCreatingChar(false)} />;
-    return <CharSelectScreen session={session!} characters={gs.characters} onSelect={eng.handleSelectChar} onCreateNew={() => eng.setCreatingChar(true)} onLogout={eng.handleLogout} onDelete={eng.handleDeleteChar} />;
-  }
-  if (screen === "worldMap" && char) return <WorldMapScreen char={char} onEnterTown={eng.enterTown} onEnterDungeon={eng.enterDungeon} onExitToCharSelect={() => { eng.setActiveCharId(null); eng.setScreen("charSelect"); }} onLogout={eng.handleLogout} />;
+  const [isMuted, setIsMuted] = useState(audioManager.getIsMuted());
+  const [volume, setVolume] = useState(audioManager.getVolume());
+  const [showAlchemyModal, setShowAlchemyModal] = useState(false);
+  const [hasPressedStart, setHasPressedStart] = useState(false);
 
-  if ((screen === "town" || screen === "dungeon" || screen === "sanctuary" || screen === "tutorial") && char) {
+  useEffect(() => {
+    return audioManager.subscribe(() => {
+      setIsMuted(audioManager.getIsMuted());
+      setVolume(audioManager.getVolume());
+    });
+  }, []);
+
+  const renderScreen = () => {
+    if (screen === "auth") {
+      if (!hasPressedStart) {
+        return <TitleSplashScreen onStart={() => setHasPressedStart(true)} />;
+      }
+      return <AuthScreen onLogin={eng.handleLogin} />;
+    }
+    if (screen === "charSelect") {
+      if (creatingChar) return <CharCreateScreen onCreated={eng.handleCreateChar} onBack={() => eng.setCreatingChar(false)} />;
+      return <CharSelectScreen session={session!} characters={gs.characters} onSelect={eng.handleSelectChar} onCreateNew={() => eng.setCreatingChar(true)} onLogout={eng.handleLogout} onDelete={eng.handleDeleteChar} />;
+    }
+    if (screen === "worldMap" && char) return <WorldMapScreen char={char} onEnterTown={eng.enterTown} onEnterDungeon={eng.enterDungeon} onExitToCharSelect={() => { eng.setActiveCharId(null); eng.setScreen("charSelect"); }} onLogout={eng.handleLogout} />;
+
+    if ((screen === "town" || screen === "dungeon" || screen === "sanctuary" || screen === "tutorial") && char) {
     const cfg = CLASS_CFG[char.class];
     const locationLabel = screen === "town" ? "🏰 MILLHAVEN" : screen === "sanctuary" ? "✨ SANCTUARY" : screen === "tutorial" ? "⚔️ TRAINING GROUND" : "💀 DARKROOT DEPTHS";
 
@@ -93,7 +280,7 @@ export default function App() {
         </div>
 
         {/* Wrapper: relative container for map + combat overlay (CombatPanel must be OUTSIDE overflow:hidden) */}
-        <div style={{ position: "relative", flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+        <div style={{ position: "relative", zIndex: 10, flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
 
         {/* Map area - Camera Follow Mode */}
         <div
@@ -101,7 +288,36 @@ export default function App() {
             if (e.deltaY < 0) setZoom(z => Math.min(3.0, z + 0.1));
             else setZoom(z => Math.max(0.15, z - 0.1));
           }}
-          style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", position: "relative", minHeight: 0, background: screen === "dungeon" ? "#040310" : screen === "sanctuary" ? "#ffffff" : "#080e04" }}>
+          style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", position: "relative", minHeight: 0, background: screen === "dungeon" ? "#040310" : screen === "sanctuary" ? "radial-gradient(circle at 50% 35%, #1b1238 0%, #0c081e 65%, #05030c 100%)" : "#080e04" }}>
+          {/* Floating Moonlight Orbs background overlay for Sanctuary map viewport */}
+          {screen === "sanctuary" && (
+            <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 0, overflow: "hidden" }}>
+              <style>{`
+                @keyframes sanc-viewport-orb-float {
+                  0% { transform: translateY(0px) rotate(0deg); opacity: 0.35; }
+                  50% { opacity: 0.85; }
+                  100% { transform: translateY(-100px) rotate(180deg); opacity: 0.2; }
+                }
+              `}</style>
+              {Array.from({ length: 32 }).map((_, i) => (
+                <div
+                  key={`sanc-viewport-orb-${i}`}
+                  style={{
+                    position: "absolute",
+                    left: `${(i * 13 + 5) % 100}%`,
+                    top: `${(i * 19 + 7) % 100}%`,
+                    width: `${(i % 3) * 4 + 4}px`,
+                    height: `${(i % 3) * 4 + 4}px`,
+                    borderRadius: "50%",
+                    background: i % 2 === 0 ? "#c492d6" : "#60a5fa",
+                    boxShadow: i % 2 === 0 ? "0 0 16px #c492d6" : "0 0 16px #60a5fa",
+                    animation: `sanc-viewport-orb-float ${5 + (i % 5)}s ease-in-out infinite alternate`,
+                    animationDelay: `${i * 0.2}s`,
+                  }}
+                />
+              ))}
+            </div>
+          )}
           {(() => {
              const mapScale = eng.zoom;
              const mapCols = getMapCols(screen);
@@ -120,7 +336,7 @@ export default function App() {
                }}>
                  <div style={{ position: "relative" }}>
                    <MapGrid mode={screen} char={char} monsters={gs.dungeonMonsters}
-                     chests={gs.dungeonChests} secrets={gs.dungeonSecrets}
+                     chests={gs.dungeonChests} dungeonObjects={gs.dungeonObjects} secrets={gs.dungeonSecrets}
                      combat={combat} fogRevealed={fogRevealed} combatMode={combatMode}
                      selectedSpell={selectedSpell ?? undefined}
                      onTileClick={eng.handleTileClick} onMonsterClick={eng.handleMonsterClick}
@@ -153,6 +369,25 @@ export default function App() {
               SHORT REST
             </button>
           )}
+          {/* Alchemy Bench Button */}
+          {screen === "town" && !combat.active && char && (
+            <button onClick={() => setShowAlchemyModal(true)}
+              style={{
+                position: "absolute", top: 16, right: 155, zIndex: 100,
+                background: "rgba(100,50,180,0.5)", border: `1px solid ${C.purple}`,
+                color: "#fff", padding: "8px 14px", borderRadius: 8,
+                fontFamily: PX, cursor: "pointer", display: "flex", gap: 8, alignItems: "center",
+                fontSize: 12, boxShadow: `0 0 12px ${C.purple}60`, transition: "0.2s"
+              }}
+              onMouseOver={e => e.currentTarget.style.background = "rgba(120,60,200,0.8)"}
+              onMouseOut={e => e.currentTarget.style.background = "rgba(100,50,180,0.5)"}
+            >
+              <span style={{ fontSize: 16 }}>🧪</span>
+              ALCHEMY BENCH
+            </button>
+          )}
+
+
 
           {/* Exploration Panel */}
           {screen === "dungeon" && !combat.active && char && (
@@ -229,17 +464,7 @@ export default function App() {
             </div>
           )}
 
-          {/* Tips */}
-          {screen === "town" && !combat.active && (
-            <div style={{ position: "absolute", bottom: 4, left: 4, background: C.card + "cc", border: `1px solid ${C.border}`, padding: "4px 8px", fontFamily: NU, fontSize: 10, color: C.muted }}>
-              Click to move · 🏪 Shop · 🏨 Inn · ⛪ Shrine · 📋 Quests · 🗺️ Exit
-            </div>
-          )}
-          {screen === "dungeon" && !combat.active && (
-            <div style={{ position: "absolute", bottom: 4, left: 4, background: C.card + "cc", border: `1px solid ${C.border}`, padding: "4px 8px", fontFamily: NU, fontSize: 10, color: C.muted }}>
-              🚪 Reach north exit · Avoid monsters or fight!
-            </div>
-          )}
+
         </div>{/* end map div */}
 
         {/* Combat panel — outside overflow:hidden so it won't be clipped */}
@@ -292,7 +517,7 @@ export default function App() {
             title={specialDialog.tile.label.toUpperCase()}
             message={specialDialog.tile.prompt}
             onYes={() => {
-              if (specialDialog.tile.type === "exit") {
+              if (specialDialog.tile.type === "exit" || specialDialog.tile.type === "sanctuary_exit") {
                 eng.handleSpecialYes();
               } else if (specialDialog.tile.type === "selenia") {
                 eng.handleSpeakWithSelenia();
@@ -451,26 +676,47 @@ export default function App() {
         {battleStart && (
           <>
             <style>{`
-              @keyframes epic-flash { 0%{background:rgba(255,255,255,0.85)} 15%{background:rgba(0,0,0,0.85)} 100%{background:rgba(0,0,0,0)} }
-              @keyframes epic-shake { 0%,100%{transform:translate(0,0) scale(1)} 25%{transform:translate(-3px, 2px) scale(1.02)} 50%{transform:translate(3px, -2px) scale(0.98)} 75%{transform:translate(-2px, -1px) scale(1.01)} }
-              @keyframes epic-fly-left { 0%{transform:translateX(-100vw) scale(1) skewX(20deg); opacity:0;} 15%{transform:translateX(10px) scale(1) skewX(0); opacity:1; text-shadow:0 0 100px red, 8px 8px 0 #000} 20%{transform:translateX(0) scale(1.1)} 85%{transform:translateX(0) scale(1); opacity:1;} 100%{transform:translateX(-100vw) scale(1) skewX(-20deg); opacity:0;} }
-              @keyframes epic-fly-right { 0%{transform:translateX(100vw) scale(1) skewX(-20deg); opacity:0;} 15%{transform:translateX(-10px) scale(1) skewX(0); opacity:1; text-shadow:0 0 100px red, 8px 8px 0 #000} 20%{transform:translateX(0) scale(1.1)} 85%{transform:translateX(0) scale(1); opacity:1;} 100%{transform:translateX(100vw) scale(1) skewX(20deg); opacity:0;} }
+              @keyframes battle-bg-flash {
+                0% { opacity: 0; background: rgba(255, 255, 255, 0.4); }
+                15% { opacity: 1; background: rgba(15, 5, 20, 0.85); }
+                80% { opacity: 1; background: rgba(15, 5, 20, 0.85); }
+                100% { opacity: 0; background: rgba(0, 0, 0, 0); }
+              }
+              @keyframes battle-banner-bounce {
+                0% { transform: scaleX(0) scaleY(0.2) skewX(-15deg); opacity: 0; }
+                25% { transform: scaleX(1.08) scaleY(1.08) skewX(-12deg); opacity: 1; filter: drop-shadow(0 0 30px #ff3333); }
+                80% { transform: scaleX(1) scaleY(1) skewX(-12deg); opacity: 1; }
+                100% { transform: scaleX(1.2) scaleY(0) skewX(-20deg); opacity: 0; }
+              }
+              @keyframes battle-text-pop {
+                0% { transform: scale(0.6) translateY(20px); opacity: 0; }
+                25% { transform: scale(1.15) translateY(0); opacity: 1; text-shadow: 0 0 40px #ff3366, 0 0 80px #ff9900, 4px 4px 0 #000; }
+                80% { transform: scale(1) translateY(0); opacity: 1; }
+                100% { transform: scale(1.2) translateY(-10px); opacity: 0; }
+              }
             `}</style>
             <div style={{
               position: "fixed", inset: 0, zIndex: 9000, display: "flex", alignItems: "center", justifyContent: "center",
-              pointerEvents: "none", animation: "epic-flash 1.8s ease-out forwards",
+              pointerEvents: "none", animation: "battle-bg-flash 1.1s cubic-bezier(0.16, 1, 0.3, 1) forwards",
             }}>
-              <div style={{ animation: "epic-shake 0.5s ease-in-out", display: "flex", gap: 16 }}>
+              <div style={{
+                position: "relative", width: "100%", height: 110,
+                background: "linear-gradient(90deg, rgba(220, 38, 38, 0) 0%, rgba(180, 20, 50, 0.92) 20%, rgba(140, 10, 30, 0.95) 50%, rgba(180, 20, 50, 0.92) 80%, rgba(220, 38, 38, 0) 100%)",
+                borderTop: "2px solid #ffd700", borderBottom: "2px solid #ffd700",
+                boxShadow: "0 0 40px rgba(239, 68, 68, 0.8), inset 0 0 20px rgba(255, 215, 0, 0.4)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                animation: "battle-banner-bounce 1.1s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+              }}>
                 <div style={{
-                  fontFamily: PX, fontSize: 64, color: "#fff", fontStyle: "italic", letterSpacing: 8,
-                  textShadow: `0 0 50px ${C.red}, 0 0 80px #800000, 6px 6px 0 #000, -3px -3px 0 #000`,
-                  animation: "epic-fly-left 1.8s cubic-bezier(0.1, 0, 0.2, 1) forwards", whiteSpace: "nowrap",
-                }}>⚔ BATTLE</div>
-                <div style={{
-                  fontFamily: PX, fontSize: 64, color: "#fff", fontStyle: "italic", letterSpacing: 8,
-                  textShadow: `0 0 50px ${C.red}, 0 0 80px #800000, 6px 6px 0 #000, -3px -3px 0 #000`,
-                  animation: "epic-fly-right 1.8s cubic-bezier(0.1, 0, 0.2, 1) forwards", whiteSpace: "nowrap",
-                }}>START! ⚔</div>
+                  fontFamily: PX, fontSize: 44, color: "#ffffff", fontStyle: "italic", letterSpacing: 8,
+                  textShadow: `0 0 30px ${C.gold}, 0 0 60px ${C.red}, 4px 4px 0 #000, -2px -2px 0 #000`,
+                  animation: "battle-text-pop 1.1s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+                  display: "flex", alignItems: "center", gap: 16,
+                }}>
+                  <span style={{ color: C.gold }}>⚔</span>
+                  <span>BATTLE START!</span>
+                  <span style={{ color: C.gold }}>⚔</span>
+                </div>
               </div>
             </div>
           </>
@@ -515,10 +761,42 @@ export default function App() {
             </div>
           </div>
         )}
+
+        {/* Tag Alchemy Modal */}
+        {showAlchemyModal && char && (
+          <AlchemyModal
+            char={char}
+            onClose={() => setShowAlchemyModal(false)}
+            onCraft={(ing1Id, ing2Id, catId) => eng.handleCraftAlchemy(ing1Id, ing2Id, catId)}
+          />
+        )}
       </div>
     );
-  }
+    }
+    return null;
+  };
 
+  const currentScreenKey = `${screen}-${creatingChar ? "create" : "main"}-${char?.id ?? "none"}`;
 
-  return null;
+  return (
+    <>
+      <style>{`
+        @keyframes page-fade-switch {
+          0% { opacity: 0; transform: scale(0.985); filter: blur(5px); }
+          100% { opacity: 1; transform: scale(1); filter: blur(0px); }
+        }
+      `}</style>
+      {!combat.active && <GlobalBgmButton />}
+      <div
+        key={currentScreenKey}
+        style={{
+          width: "100%",
+          minHeight: "100vh",
+          animation: "page-fade-switch 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+        }}
+      >
+        {renderScreen()}
+      </div>
+    </>
+  );
 }

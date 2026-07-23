@@ -70,6 +70,8 @@ export interface Character {
   lastLoginTime?: number;
   lastSeenVersion?: string;
   activeQuests?: Quest[];
+  discoveredRecipes?: string[];
+  alchemyLevel?: number;
 }
 
 export interface Monster {
@@ -91,8 +93,10 @@ export interface Monster {
   damageType?: string;
   resistances?: string[];
   weaknesses?: string[];
-  drops?: string[];
   bossSkillsUsed?: Record<string, number>;
+  threatMemory?: Record<string, number>;
+  bossPhase?: 1 | 2 | 3;
+  telegraphAction?: { skillName: string; targetTiles: string[]; executeRound: number };
 }
 
 export interface Combatant { id: string; type: "player" | "monster"; name: string; initiative: number }
@@ -171,6 +175,10 @@ export interface DungeonObject {
   type: "chest" | "ore" | "herb" | "light" | "trap";
   position: { x: number; y: number };
   state: "active" | "opened" | "depleted";
+  subType?: string;
+  turnsRequired?: number;
+  turnsProgress?: number;
+  noiseLevel?: number;
 }
 
 export interface GameState {
@@ -183,6 +191,14 @@ export interface GameState {
   dungeonChests: { id: string; position: {x: number, y: number}; opened: boolean }[];
   dungeonObjects?: DungeonObject[];
   dungeonSecrets: { id: string; position: {x: number, y: number}; found: boolean; type: string }[];
+  dungeonObjectives?: {
+    explorePercent: number;
+    herbsGathered: number;
+    oresMined: number;
+    chestsOpened: number;
+    monstersDefeated: number;
+    bossDefeated: boolean;
+  };
   availableQuests: Quest[];
   questRefreshAt: number;
 }
@@ -195,6 +211,7 @@ export interface MapGridProps {
   mode: "town" | "dungeon";
   char: Character; monsters: Monster[];
   chests?: { id: string; position: {x: number, y: number}; opened: boolean }[];
+  dungeonObjects?: DungeonObject[];
   secrets?: { id: string; position: {x: number, y: number}; found: boolean; type: string }[];
   glowingTrees?: { x: number, y: number, range: number }[];
   combat: CombatState; fogRevealed: Set<string>;

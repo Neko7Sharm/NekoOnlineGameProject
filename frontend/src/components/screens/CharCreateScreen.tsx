@@ -56,8 +56,37 @@ export function CharCreateScreen({ onCreated, onBack }: { onCreated: (c: Charact
   const STEPS = ["basic", "class", "stats", "review"];
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, overflowY: "auto" }}>
-      <div style={{ width: "100%", maxWidth: 620 }}>
+    <div style={{ minHeight: "100vh", background: "radial-gradient(circle at 50% 35%, #1b1238 0%, #0c081e 65%, #05030c 100%)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, overflowY: "auto", position: "relative" }}>
+      <style>{`
+        @keyframes char-orb-float {
+          0% { transform: translateY(0px) rotate(0deg); opacity: 0.3; }
+          50% { opacity: 0.8; }
+          100% { transform: translateY(-90px) rotate(180deg); opacity: 0.2; }
+        }
+      `}</style>
+
+      {/* Floating Moonlight Particles */}
+      <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 1, overflow: "hidden" }}>
+        {Array.from({ length: 24 }).map((_, i) => (
+          <div
+            key={`char-orb-${i}`}
+            style={{
+              position: "absolute",
+              left: `${(i * 13 + 5) % 100}%`,
+              top: `${(i * 19 + 7) % 100}%`,
+              width: `${(i % 3) * 4 + 4}px`,
+              height: `${(i % 3) * 4 + 4}px`,
+              borderRadius: "50%",
+              background: i % 2 === 0 ? "#c492d6" : "#60a5fa",
+              boxShadow: i % 2 === 0 ? "0 0 16px #c492d6" : "0 0 16px #60a5fa",
+              animation: `char-orb-float ${5 + (i % 5)}s ease-in-out infinite alternate`,
+              animationDelay: `${i * 0.2}s`,
+            }}
+          />
+        ))}
+      </div>
+
+      <div style={{ width: "100%", maxWidth: 620, position: "relative", zIndex: 10 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 18 }}>
           <div>
             <div style={{ fontFamily: PX, fontSize: 11, color: C.gold, letterSpacing: 1, marginBottom: 4 }}>SELestia HORIZON</div>

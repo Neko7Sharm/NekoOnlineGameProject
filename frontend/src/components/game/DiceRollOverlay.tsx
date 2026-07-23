@@ -6,7 +6,7 @@ export function DiceRollOverlay({ rolls }: { rolls: DiceRollDisplay[] }) {
   const [tick, setTick] = useState(0);
   useEffect(() => {
     if (!rolls.some(r => r.phase === "rolling")) return;
-    const iv = setInterval(() => setTick(t => t + 1), 60);
+    const iv = setInterval(() => setTick(t => t + 1), 35);
     return () => clearInterval(iv);
   }, [rolls]);
 
@@ -27,8 +27,8 @@ export function DiceRollOverlay({ rolls }: { rolls: DiceRollDisplay[] }) {
           100% { transform: translateY(0) rotate(0deg) scale(1); opacity: 1; filter: blur(0); }
         }
         @keyframes dnd-dice-slam {
-          0% { transform: scale(1.4) skewX(-10deg); filter: brightness(2) drop-shadow(0 0 30px rgba(255,255,255,0.8)); }
-          40% { transform: scale(0.9) skewX(2deg); filter: brightness(1.2) drop-shadow(0 0 10px rgba(255,255,255,0.3)); }
+          0% { transform: scale(1.45) skewX(-10deg); filter: brightness(2.2) drop-shadow(0 0 35px rgba(255,215,0,0.9)); }
+          40% { transform: scale(0.92) skewX(2deg); filter: brightness(1.3) drop-shadow(0 0 15px rgba(255,255,255,0.5)); }
           100% { transform: scale(1) skewX(-5deg); filter: brightness(1) drop-shadow(0 0 20px rgba(0,0,0,0.8)); }
         }
         @keyframes dnd-dice-nums { 0%,100%{opacity:0.6; transform: scale(0.95)} 50%{opacity:1; transform: scale(1.05)} }

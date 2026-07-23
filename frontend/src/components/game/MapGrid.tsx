@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo } from "react";
-import { C, MO } from "../../constants/theme";
+import { C, PX, MO } from "../../constants/theme";
 import { CLASS_CFG } from "../../constants/classes";
 import { CLASS_SPELLS, WIZARD_SPELL_CHOICES } from "../../constants/classes";
 import { SKILL_DICTIONARY } from "../../constants/skills";
@@ -39,6 +39,8 @@ import effectScratch from "../../assets/effect_scratch.png";
 import effectArrow from "../../assets/effect_arrow.png";
 import effectWhip from "../../assets/effect_whip.png";
 import effectRootslam from "../../assets/effect_rootslam.png";
+import dungeonEntrance from "../../assets/dungeon_entrance.png";
+import dungeonExit from "../../assets/dungeon_exit.png";
 
 // Longsword Custom Effects
 import lsSlash1 from "../../assets/effect/attackeffect/slash1/1.png";
@@ -48,6 +50,12 @@ import lsSlash4 from "../../assets/effect/attackeffect/slash1/4.png";
 import lsSlash5 from "../../assets/effect/attackeffect/slash1/5.png";
 import lsSlash6 from "../../assets/effect/attackeffect/slash1/6.png";
 import lsSlash7 from "../../assets/effect/attackeffect/slash1/7.png";
+import lsSlash8 from "../../assets/effect/attackeffect/slash1/8.png";
+import lsSlash9 from "../../assets/effect/attackeffect/slash1/9.png";
+import lsSlash10 from "../../assets/effect/attackeffect/slash1/10.png";
+import lsSlash11 from "../../assets/effect/attackeffect/slash1/11.png";
+import lsSlash12 from "../../assets/effect/attackeffect/slash1/12.png";
+import lsSlash13 from "../../assets/effect/attackeffect/slash1/13.png";
 
 import lsHit1 from "../../assets/effect/hiteffect/slash1/1.png";
 import lsHit2 from "../../assets/effect/hiteffect/slash1/2.png";
@@ -91,7 +99,7 @@ function getConeTiles(playerPos: { x: number; y: number }, mouseX: number, mouse
   return tiles;
 }
 
-export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogRevealed, combatMode, selectedSpell, onTileClick, onMonsterClick, onObjectClick, onAOECast, effects, dyingMonsters, hitTokenIds, onHealSelf, insightVisionTiles }: MapGridProps) {
+export function MapGrid({ mode, char, monsters, chests, dungeonObjects, secrets, combat, fogRevealed, combatMode, selectedSpell, onTileClick, onMonsterClick, onObjectClick, onAOECast, effects, dyingMonsters, hitTokenIds, onHealSelf, insightVisionTiles }: MapGridProps) {
   const cols = getMapCols(mode);
   const rows = getMapRows(mode);
   const pos = char.position;
@@ -120,44 +128,51 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
     return sets;
   }, []);
 
-  const visible = new Set<string>();
-  const activeGlowingTrees: number[] = [];
-  const localFogRevealed = new Set(fogRevealed);
+  const { visible, activeGlowingTrees, localFogRevealed } = useMemo(() => {
+    const visible = new Set<string>();
+    const activeGlowingTrees: number[] = [];
+    const localFogRevealed = new Set(fogRevealed);
 
-  if (mode === "dungeon") {
-    const baseVisible = new Set<string>();
-    for (let dy = -SIGHT; dy <= SIGHT; dy++)
-      for (let dx = -SIGHT; dx <= SIGHT; dx++) {
-        if (Math.abs(dx) + Math.abs(dy) <= SIGHT) {
-          const fx = pos.x + dx, fy = pos.y + dy;
-          if (fx >= 0 && fx < cols && fy >= 0 && fy < rows) {
-            if (hasLineOfSight("dungeon", pos.x, pos.y, fx, fy)) {
-              baseVisible.add(`${fx},${fy}`);
-              visible.add(`${fx},${fy}`);
+    if (mode === "dungeon") {
+      const baseVisible = new Set<string>();
+      for (let dy = -SIGHT; dy <= SIGHT; dy++)
+        for (let dx = -SIGHT; dx <= SIGHT; dx++) {
+          if (Math.abs(dx) + Math.abs(dy) <= SIGHT) {
+            const fx = pos.x + dx, fy = pos.y + dy;
+            if (fx >= 0 && fx < cols && fy >= 0 && fy < rows) {
+              if (hasLineOfSight("dungeon", pos.x, pos.y, fx, fy)) {
+                baseVisible.add(`${fx},${fy}`);
+                visible.add(`${fx},${fy}`);
+              }
             }
           }
         }
-      }
 
-    // Glowing trees vision logic
-    for (let i = 0; i < treeIlluminatedTiles.length; i++) {
-       const treeTiles = treeIlluminatedTiles[i];
-       let intersects = false;
-       for (const t of treeTiles) {
+      // Glowing trees vision logic
+      for (let i = 0; i < treeIlluminatedTiles.length; i++) {
+        const treeTiles = treeIlluminatedTiles[i];
+        let intersects = false;
+        for (const t of treeTiles) {
           if (baseVisible.has(t) || localFogRevealed.has(t)) {
-             intersects = true;
-             break;
+            intersects = true;
+            break;
           }
-       }
-       if (intersects) {
+        }
+        if (intersects) {
           activeGlowingTrees.push(i);
           for (const t of treeTiles) {
-             visible.add(t);
-             localFogRevealed.add(t); // Keep it revealed
+            visible.add(t);
+            localFogRevealed.add(t); // Keep it revealed
           }
-       }
+        }
+      }
     }
-  }
+    return { visible, activeGlowingTrees, localFogRevealed };
+  }, [pos.x, pos.y, cols, rows, mode, fogRevealed, treeIlluminatedTiles]);
+
+  const warningSet = useMemo(() => {
+    return new Set(combat.warnings?.map(w => `${w.x},${w.y}`));
+  }, [combat.warnings]);
 
   const reachable = new Set<string>();
   if (combat.active && combatMode === "move") {
@@ -249,12 +264,36 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
     const s = spells.find(sp => sp.name === selectedSpell);
     const gs = SKILL_DICTIONARY[selectedSpell];
     const selfBuffs = ["fighter_action_surge", "fighter_shield_wall", "fighter_warrior_focus", "fighter_samurai_focus", "fighter_berserker_rage"];
-    return s?.type === "heal" || (s?.type === "cantrip" && s?.heal) || !!gs?.healAmount || selfBuffs.includes(selectedSpell);
   })();
 
   return (
     <>
       <style>{`
+        @keyframes dnd-crit-bounce {
+          0% { transform: scale(0.3) translateY(10px); opacity: 0; filter: blur(4px); }
+          25% { transform: scale(1.45) translateY(-15px); opacity: 1; filter: blur(0); }
+          60% { transform: scale(1.1) translateY(-35px); opacity: 1; }
+          100% { transform: scale(0.9) translateY(-60px); opacity: 0; }
+        }
+        @keyframes dnd-hit-pop {
+          0% { transform: scale(0.5) translateY(5px); opacity: 0; }
+          20% { transform: scale(1.25) translateY(-10px); opacity: 1; }
+          70% { transform: scale(1) translateY(-30px); opacity: 1; }
+          100% { transform: scale(0.85) translateY(-50px); opacity: 0; }
+        }
+        @keyframes dnd-miss-slide {
+          0% { transform: translateX(-20px) skewX(-15deg); opacity: 0; }
+          25% { transform: translateX(5px) skewX(-10deg); opacity: 1; }
+          75% { transform: translateX(0px) skewX(-10deg); opacity: 1; }
+          100% { transform: translateY(-25px) skewX(-5deg); opacity: 0; }
+        }
+        @keyframes dnd-heal-spring {
+          0% { transform: scale(0.6) translateY(5px); opacity: 0; }
+          30% { transform: scale(1.2) translateY(-12px); opacity: 1; }
+          75% { transform: scale(1) translateY(-35px); opacity: 1; }
+          100% { transform: scale(0.9) translateY(-55px); opacity: 0; }
+        }
+
         @keyframes anim-frame-1 { 0%, 24.9% { opacity: 1; } 25%, 100% { opacity: 0; } }
         @keyframes anim-frame-2 { 0%, 24.9% { opacity: 0; } 25%, 49.9% { opacity: 1; } 50%, 100% { opacity: 0; } }
         @keyframes anim-frame-3 { 0%, 49.9% { opacity: 0; } 50%, 74.9% { opacity: 1; } 75%, 100% { opacity: 0; } }
@@ -267,6 +306,20 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
         @keyframes anim-frame-7-5 { 0%, 57.1% { opacity: 0; } 57.2%, 71.4% { opacity: 1; } 71.5%, 100% { opacity: 0; } }
         @keyframes anim-frame-7-6 { 0%, 71.4% { opacity: 0; } 71.5%, 85.7% { opacity: 1; } 85.8%, 100% { opacity: 0; } }
         @keyframes anim-frame-7-7 { 0%, 85.7% { opacity: 0; } 85.8%, 100% { opacity: 1; } }
+
+        @keyframes anim-frame-13-1  { 0%, 7.68% { opacity: 1; } 7.69%, 100% { opacity: 0; } }
+        @keyframes anim-frame-13-2  { 0%, 7.68% { opacity: 0; } 7.69%, 15.37% { opacity: 1; } 15.38%, 100% { opacity: 0; } }
+        @keyframes anim-frame-13-3  { 0%, 15.37% { opacity: 0; } 15.38%, 23.06% { opacity: 1; } 23.07%, 100% { opacity: 0; } }
+        @keyframes anim-frame-13-4  { 0%, 23.06% { opacity: 0; } 23.07%, 30.75% { opacity: 1; } 30.76%, 100% { opacity: 0; } }
+        @keyframes anim-frame-13-5  { 0%, 30.75% { opacity: 0; } 30.76%, 38.44% { opacity: 1; } 38.45%, 100% { opacity: 0; } }
+        @keyframes anim-frame-13-6  { 0%, 38.44% { opacity: 0; } 38.45%, 46.13% { opacity: 1; } 46.14%, 100% { opacity: 0; } }
+        @keyframes anim-frame-13-7  { 0%, 46.13% { opacity: 0; } 46.14%, 53.82% { opacity: 1; } 53.83%, 100% { opacity: 0; } }
+        @keyframes anim-frame-13-8  { 0%, 53.82% { opacity: 0; } 53.83%, 61.51% { opacity: 1; } 61.52%, 100% { opacity: 0; } }
+        @keyframes anim-frame-13-9  { 0%, 61.51% { opacity: 0; } 61.52%, 69.20% { opacity: 1; } 69.21%, 100% { opacity: 0; } }
+        @keyframes anim-frame-13-10 { 0%, 69.20% { opacity: 0; } 69.21%, 76.89% { opacity: 1; } 76.90%, 100% { opacity: 0; } }
+        @keyframes anim-frame-13-11 { 0%, 76.89% { opacity: 0; } 76.90%, 84.58% { opacity: 1; } 84.59%, 100% { opacity: 0; } }
+        @keyframes anim-frame-13-12 { 0%, 84.58% { opacity: 0; } 84.59%, 92.27% { opacity: 1; } 92.28%, 100% { opacity: 0; } }
+        @keyframes anim-frame-13-13 { 0%, 92.27% { opacity: 0; } 92.28%, 100% { opacity: 1; } }
         @keyframes dnd-slash { 0%{opacity:0;transform:scale(0.3) rotate(-25deg)} 30%{opacity:1;transform:scale(1) rotate(-25deg)} 100%{opacity:0;transform:scale(1.6) rotate(-25deg)} }
         @keyframes dnd-float-up { 0%{opacity:1;transform:translateY(0)} 60%{opacity:1;transform:translateY(-22px)} 100%{opacity:0;transform:translateY(-44px)} }
         @keyframes dnd-fireball { 0%{opacity:0;transform:scale(0)} 35%{opacity:1;transform:scale(1.1)} 100%{opacity:0;transform:scale(2)} }
@@ -280,14 +333,14 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
         <div ref={gridRef}
           onClick={(e) => {
             if (!gridRef.current) return;
-            if (mode === "town" || mode === "sanctuary") {
+            if (mode === "town" || mode === "sanctuary" || mode === "tutorial") {
               const r = gridRef.current.getBoundingClientRect();
               const cellW = r.width / cols;
               const cellH = r.height / rows;
               const cx = Math.floor((e.clientX - r.left) / cellW);
               const cy = Math.floor((e.clientY - r.top) / cellH);
               if (cx >= 0 && cx < cols && cy >= 0 && cy < rows) {
-                const td = mode === "town" ? getTownTile(cx, cy) : getSanctuaryTile(cx, cy);
+                const td = mode === "town" ? getTownTile(cx, cy) : mode === "sanctuary" ? getSanctuaryTile(cx, cy) : getTutorialTile(cx, cy);
                 if (!td.isWall) onTileClick(cx, cy);
               }
             }
@@ -307,17 +360,20 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
             position: "relative", width: cols * CELL, height: rows * CELL, imageRendering: "pixelated",
             backgroundColor: "#000", cursor: "pointer"
           }}>
-        {/* ═══ GROUND LAYER: Pure Grass Base + Separate Stone Path Overlay ═══ */}
+        {/* ═══ GROUND LAYER: Full-Coverage Pure Grass Base ═══ */}
         {(mode === "town") && (
           <>
-            {/* 1. Full-Coverage Pure Grass Base Layer */}
+            {/* 1. Full-Coverage Pure Grass Map Background */}
             <div style={{
               position: "absolute", left: 0, top: 0, width: cols * CELL, height: rows * CELL,
-              backgroundImage: `url(${tileGrass})`, backgroundSize: `${CELL * 4}px ${CELL * 4}px`,
+              backgroundImage: `url(${tileGrass})`,
+              backgroundSize: "100% 100%",
+              backgroundPosition: "center",
+              backgroundRepeat: "no-repeat",
               backgroundColor: "#1b1435", pointerEvents: "none", zIndex: 0
             }} />
 
-            {/* 2. Separate Stone Path Overlay Layer (Renders only on path tiles) */}
+            {/* 2. Separate Stone Path Overlay Layer (Renders on path tiles over grass) */}
             {(() => {
               const pathTiles = [];
               for (let y = 0; y < rows; y++) {
@@ -358,26 +414,7 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
               ))}
             </div>
 
-            {/* Street Lamps, Moonflowers & Mana Crystals scattered across key town locations */}
-            {[
-              { x: 5, y: 6, icon: "🏮", color: "#ffd700" },
-              { x: 22, y: 6, icon: "🏮", color: "#ffd700" },
-              { x: 5, y: 14, icon: "🏮", color: "#ffd700" },
-              { x: 22, y: 14, icon: "🏮", color: "#ffd700" },
-              { x: 12, y: 8, icon: "💎", color: "#00e5ff" },
-              { x: 16, y: 12, icon: "💎", color: "#00e5ff" },
-              { x: 2, y: 14, icon: "🌸", color: "#c492d6" },
-              { x: 26, y: 14, icon: "🌸", color: "#c492d6" },
-            ].map((item, idx) => (
-              <div key={`prop-${idx}`} style={{
-                position: "absolute", left: item.x * CELL, top: item.y * CELL, width: CELL, height: CELL,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: CELL * 0.5, pointerEvents: "none", zIndex: 4,
-                filter: `drop-shadow(0 0 10px ${item.color})`
-              }}>
-                {item.icon}
-              </div>
-            ))}
+
 
             {/* Clickable overlay grid — only walkable & special tiles get DOM elements */}
             {Object.entries(TOWN_SPECIAL).map(([key, special]) => {
@@ -407,7 +444,7 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
 
         {(mode === "sanctuary") && (
           <>
-            {/* Sanctuary ground: single gradient background */}
+            {/* Sanctuary ground: single gradient background (light lavender to white) */}
             <div style={{
               position: "absolute", left: 0, top: 0, width: cols * CELL, height: rows * CELL,
               background: "linear-gradient(180deg, #fdfbfe 0%, #f2e6ff 40%, #e8d5f5 100%)",
@@ -426,6 +463,72 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
             {Array.from({ length: rows }).map((_, y) => (
               <div key={`sb-r-${y}`} style={{ position: "absolute", left: (cols - 1) * CELL, top: y * CELL, width: CELL, height: CELL, backgroundColor: "#ffffff", zIndex: 1 }} />
             ))}
+
+            {/* 🔮 Magic Teleportation Circle (วงเวทวาปกลับเมือง) at X: 12..14, Y: 15 */}
+            <div style={{
+              position: "absolute",
+              left: 11.9 * CELL,
+              top: 14.3 * CELL,
+              width: 2.2 * CELL,
+              height: 1.2 * CELL,
+              pointerEvents: "none",
+              zIndex: 3,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}>
+              <style>{`
+                @keyframes warp-circle-rotate {
+                  0% { transform: rotate(0deg) scale(1); opacity: 0.85; }
+                  50% { transform: rotate(180deg) scale(1.08); opacity: 1; filter: drop-shadow(0 0 16px #a855f7); }
+                  100% { transform: rotate(360deg) scale(1); opacity: 0.85; }
+                }
+                @keyframes warp-beam-pulse {
+                  0%, 100% { opacity: 0.35; transform: scaleY(0.9); }
+                  50% { opacity: 0.85; transform: scaleY(1.15); }
+                }
+              `}</style>
+              
+              {/* Outer Glowing Rune Ring */}
+              <div style={{
+                position: "absolute",
+                inset: 0,
+                borderRadius: "50%",
+                border: "1.5px dashed #a855f7",
+                boxShadow: "0 0 18px rgba(168, 85, 247, 0.85), inset 0 0 10px rgba(168, 85, 247, 0.5)",
+                background: "radial-gradient(circle, rgba(168, 85, 247, 0.35) 0%, rgba(126, 34, 206, 0.15) 60%, transparent 100%)",
+                animation: "warp-circle-rotate 8s linear infinite",
+              }} />
+
+              {/* Inner Magic Symbol Ring */}
+              <div style={{
+                position: "absolute",
+                width: "68%",
+                height: "68%",
+                borderRadius: "50%",
+                border: "1px solid #e9d5ff",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 13,
+                color: "#e9d5ff",
+                textShadow: "0 0 10px #a855f7",
+                animation: "warp-circle-rotate 5s linear infinite reverse",
+              }}>
+                🔮
+              </div>
+
+              {/* Upward Light Beam */}
+              <div style={{
+                position: "absolute",
+                bottom: "50%",
+                width: "75%",
+                height: CELL * 2.0,
+                background: "linear-gradient(0deg, rgba(192, 132, 252, 0.55) 0%, rgba(168, 85, 247, 0.18) 70%, transparent 100%)",
+                clipPath: "polygon(15% 100%, 85% 100%, 70% 0%, 30% 0%)",
+                animation: "warp-beam-pulse 2s ease-in-out infinite",
+              }} />
+            </div>
             {/* Sanctuary special interactive tiles */}
             {Object.entries(SANCTUARY_SPECIAL).map(([key, special]) => {
               const [sx, sy] = key.split(",");
@@ -455,26 +558,51 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
           </>
         )}
 
-        {/* ═══ TILE LAYER: Dungeon & Tutorial keep per-tile rendering (fog-of-war) ═══ */}
-        {(mode === "dungeon" || mode === "tutorial") && (() => {
-          let keysToRender: {x: number, y: number, key: string}[] = [];
-          if (mode === "dungeon") {
-            const setKeys = new Set(localFogRevealed);
-            setKeys.add(`${DUNGEON_ENTER.x},${DUNGEON_ENTER.y}`);
-            setKeys.add(`${DUNGEON_EXIT.x},${DUNGEON_EXIT.y}`);
-            keysToRender = Array.from(setKeys).map(k => {
-              const [sx, sy] = k.split(",");
-              return { x: parseInt(sx), y: parseInt(sy), key: k };
-            });
-          } else {
-            for (let y = 0; y < rows; y++) {
-              for (let x = 0; x < cols; x++) {
-                keysToRender.push({x, y, key: `${x},${y}`});
-              }
-            }
-          }
+        {/* GROUND LAYER: Tutorial (Training Ground) */}
+        {mode === "tutorial" && (
+          <>
+            <div style={{
+              position: "absolute", left: 0, top: 0, width: cols * CELL, height: rows * CELL,
+              background: "linear-gradient(135deg, #2a2b36 0%, #3b3d4f 50%, #252631 100%)",
+              pointerEvents: "none", zIndex: 0
+            }} />
+            {/* Border walls */}
+            {Array.from({ length: cols }).map((_, x) => (
+              <div key={`tb-t-${x}`} style={{ position: "absolute", left: x * CELL, top: 0, width: CELL, height: CELL, backgroundColor: "#1e1f29", zIndex: 1 }} />
+            ))}
+            {Array.from({ length: cols }).map((_, x) => (
+              <div key={`tb-b-${x}`} style={{ position: "absolute", left: x * CELL, top: (rows - 1) * CELL, width: CELL, height: CELL, backgroundColor: "#1e1f29", zIndex: 1 }} />
+            ))}
+            {Array.from({ length: rows }).map((_, y) => (
+              <div key={`tb-l-${y}`} style={{ position: "absolute", left: 0, top: y * CELL, width: CELL, height: CELL, backgroundColor: "#1e1f29", zIndex: 1 }} />
+            ))}
+            {Array.from({ length: rows }).map((_, y) => (
+              <div key={`tb-r-${y}`} style={{ position: "absolute", left: (cols - 1) * CELL, top: y * CELL, width: CELL, height: CELL, backgroundColor: "#1e1f29", zIndex: 1 }} />
+            ))}
+          </>
+        )}
+
+        {/* GROUND LAYER: Dungeon (Whispering Forest) */}
+        {mode === "dungeon" && (
+          <div style={{
+            position: "absolute", left: 0, top: 0, width: cols * CELL, height: rows * CELL,
+            backgroundColor: "#0d170d",
+            backgroundImage: "radial-gradient(circle at 50% 50%, #152715 0%, #0a120a 100%)",
+            pointerEvents: "none", zIndex: 0
+          }} />
+        )}
+
+        {/* ═══ TILE LAYER: Dungeon keeps per-tile rendering (fog-of-war) ═══ */}
+        {mode === "dungeon" && (() => {
+          const setKeys = new Set(localFogRevealed);
+          setKeys.add(`${DUNGEON_ENTER.x},${DUNGEON_ENTER.y}`);
+          setKeys.add(`${DUNGEON_EXIT.x},${DUNGEON_EXIT.y}`);
+          const keysToRender = Array.from(setKeys).map(k => {
+            const [sx, sy] = k.split(",");
+            return { x: parseInt(sx), y: parseInt(sy), key: k };
+          });
           return keysToRender.map(({x, y, key}) => {
-            const td = mode === "tutorial" ? getTutorialTile(x, y) : getDungeonTile(x, y);
+            const td = getDungeonTile(x, y);
             let tileBg = td.bg;
             
             const isExit = mode === "dungeon" && x === DUNGEON_EXIT.x && y === DUNGEON_EXIT.y;
@@ -490,7 +618,7 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
             const inCone = aoeTiles.has(key);
             const isAoeCursor = inCone && isAoeSpell && combatMode === "spell";
             
-            const isWarning = combat.active && combat.warnings?.some(w => w.x === x && w.y === y && w.level === 2) && !isFogged;
+            const isWarning = combat.active && warningSet.has(key) && !isFogged;
             if (isWarning) cellBg = "rgba(220, 20, 20, 0.45)";
 
             // Optimization: Skip rendering DOM nodes for tiles that are completely fogged out
@@ -509,7 +637,7 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
                 }}
                 style={{
                   position: "absolute", left: x * CELL, top: y * CELL, width: CELL, height: CELL,
-                  backgroundColor: isFogged ? "#000" : cellBg,
+                  backgroundColor: isFogged ? "#000" : td.isWall ? "#000" : cellBg,
                   opacity: isDimmed ? 0.4 : 1,
                   cursor: td.isWall || isFogged ? "default" : isAoeCursor ? "crosshair" : "pointer",
                   outline: isReachable ? `2px solid ${C.gold}` : isAttackRange ? `1px solid ${C.blue}50` : "none",
@@ -519,8 +647,7 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
                   {isInsightVision && <div style={{ position: "absolute", inset: 0, background: "rgba(255, 0, 0, 0.25)", pointerEvents: "none" }} />}
                   {isWarning && <div style={{ position: "absolute", inset: 0, border: "2px solid rgba(255,50,50,0.8)", animation: "pulse 1.5s infinite" }} />}
                   {isAoeCursor && <div style={{ position: "absolute", inset: 0, background: "rgba(255,50,50,0.3)", border: `1px solid ${C.red}` }} />}
-                  {isAttackRange && <div style={{ position: "absolute", inset: 0, background: `${C.blue}15`, pointerEvents: "none" }} />}
-                <div style={{ position: "absolute", inset: 0, border: "1px solid rgba(0,0,0,0.25)" }} />
+                  {isReachable && <div style={{ position: "absolute", inset: 0, border: "1px solid rgba(255,215,0,0.4)" }} />}
 
                 {isExit && !isFogged && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: CELL * 0.5 }}>🚪</div>}
                 {isEntrance && !isFogged && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: CELL * 0.4, opacity: 0.5 }}>⬇️</div>}
@@ -552,9 +679,9 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
             <div key={`glowingTree-${i}`} style={{
               position: "absolute", left: cx - CELL*2, top: cy - CELL*3, width: CELL*4, height: CELL*4, pointerEvents: "none", zIndex: 3
             }}>
-               <img src="/assets/glowing_tree.png" style={{ width: "100%", height: "100%", objectFit: "contain",
-                  filter: isActive ? "drop-shadow(0 0 30px rgba(0, 255, 200, 0.8))" : "none"
-                }} />
+               <img src={sacredTree} style={{ width: "100%", height: "100%", objectFit: "contain",
+                  filter: isActive ? "drop-shadow(0 0 30px rgba(0, 255, 200, 0.8))" : "drop-shadow(0 0 15px rgba(0, 255, 150, 0.5))"
+                }} alt="Glowing Tree" />
             </div>
           );
         })}
@@ -564,9 +691,9 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
         {/* Building Overlays */}
         {mode === "town" && (
           <>
-            <img src={bInn} style={{ position: "absolute", left: 3 * CELL, top: 1 * CELL, width: 10 * CELL, height: 5 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain", filter: "drop-shadow(0 6px 12px rgba(0,0,0,0.4))" }} alt="Inn" />
+            <img src={bInn} style={{ position: "absolute", left: 4 * CELL, top: 1 * CELL, width: 10 * CELL, height: 5 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain", filter: "drop-shadow(0 6px 12px rgba(0,0,0,0.4))" }} alt="Inn" />
             <img src={bShop} style={{ position: "absolute", left: 3 * CELL, top: 15 * CELL, width: 12 * CELL, height: 5 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain", filter: "drop-shadow(0 6px 12px rgba(0,0,0,0.4))", transform: "rotate(180deg)" }} alt="Shop" />
-            <img src={bQuest} style={{ position: "absolute", left: 17 * CELL, top: 1 * CELL, width: 10 * CELL, height: 5 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain", filter: "drop-shadow(0 6px 12px rgba(0,0,0,0.4))" }} alt="Quest Guild" />
+            <img src={bQuest} style={{ position: "absolute", left: 16 * CELL, top: 1 * CELL, width: 10 * CELL, height: 5 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain", filter: "drop-shadow(0 6px 12px rgba(0,0,0,0.4))" }} alt="Quest Guild" />
             <img src={bStatue} style={{ position: "absolute", left: 1 * CELL, top: 8 * CELL, width: 3 * CELL, height: 4 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain", filter: "drop-shadow(0 0 20px rgba(196,146,214,0.6))" }} alt="Statue" />
             <img src={bAlchemy} style={{ position: "absolute", left: 23 * CELL, top: 6 * CELL, width: 5 * CELL, height: 5 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain", filter: "drop-shadow(0 6px 12px rgba(0,0,0,0.4))" }} alt="Alchemy Workstation" />
             <img src={bBlacksmith} style={{ position: "absolute", left: 23 * CELL, top: 12 * CELL, width: 5 * CELL, height: 5 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain", filter: "drop-shadow(0 6px 12px rgba(0,0,0,0.4))" }} alt="Blacksmith Workstation" />
@@ -585,12 +712,37 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
               const h = l.type === "V" ? 2 * CELL : CELL;
               return <img key={`log-${i}`} src={src} style={{ position: "absolute", left: l.x * CELL, top: l.y * CELL, width: w, height: h, pointerEvents: "none", zIndex: 4, objectFit: "fill", opacity: isDimmed ? 0.4 : 1 }} alt="Log" />
             })}
-            {localFogRevealed.has(`${wfMap.landmark.x},${wfMap.landmark.y}`) && (() => {
-              const isDimmed = !visible.has(`${wfMap.landmark.x},${wfMap.landmark.y}`);
-              return <img src={sacredTree} style={{ position: "absolute", left: (wfMap.landmark.x - 2.5) * CELL, top: (wfMap.landmark.y - 3) * CELL, width: 6 * CELL, height: 6 * CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain", opacity: isDimmed ? 0.4 : 1 }} alt="Sacred Tree" />
-            })()}
+
+
+
+            {/* Dungeon Entrance Marker */}
+            {wfMap.entrance && (
+              <div style={{
+                position: "absolute", left: wfMap.entrance.x * CELL, top: wfMap.entrance.y * CELL,
+                width: CELL, height: CELL, pointerEvents: "none", zIndex: 6,
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center"
+              }}>
+                <img src={dungeonEntrance} style={{ width: "100%", height: "100%", objectFit: "contain", filter: "drop-shadow(0 0 15px rgba(0, 255, 180, 0.8))" }} alt="Entrance" />
+                <span style={{ fontSize: 9, color: "#50ffb4", fontFamily: PX, textShadow: "0 0 5px #000", marginTop: -4 }}>⛩️ ENTRANCE</span>
+              </div>
+            )}
+
           </>
         )}
+
+        {/* Boss Red Telegraph Warnings */}
+        {combat.warnings?.map((w, i) => (
+          <div key={`warn-${i}`} style={{
+            position: "absolute", left: w.x * CELL, top: w.y * CELL, width: CELL, height: CELL,
+            background: "rgba(255, 30, 30, 0.35)", border: "1px solid #ff3333",
+            boxShadow: "inset 0 0 12px rgba(255,0,0,0.6)", pointerEvents: "none", zIndex: 12,
+            animation: "dnd-pulse-ring 0.8s ease-in-out infinite",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 10, color: "#fff", fontWeight: "bold", fontFamily: PX
+          }}>
+            ⚠️
+          </div>
+        ))}
         {mode === "sanctuary" && (
           <>
             <style>{`
@@ -610,7 +762,7 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
                 }}>✨</div>
               ))}
             </div>
-            <img src={npcSeleniaChibi} style={{ position: "absolute", left: 15 * CELL, top: 8 * CELL, width: CELL, height: CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain", transform: "scale(1.2)" }} alt="Selenia" />
+            <img src={npcSeleniaChibi} style={{ position: "absolute", left: 13 * CELL, top: 8 * CELL, width: CELL, height: CELL, pointerEvents: "none", zIndex: 5, objectFit: "contain", transform: "scale(1.2)" }} alt="Selenia" />
           </>
         )}
 
@@ -712,6 +864,38 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
           );
         })}
 
+        {/* Resource Nodes & Objects */}
+        {dungeonObjects?.filter(o => o.state !== "depleted" && localFogRevealed.has(`${o.position.x},${o.position.y}`)).map(o => {
+          const dx = Math.abs(pos.x - o.position.x);
+          const dy = Math.abs(pos.y - o.position.y);
+          const isAdjacent = dx <= 1 && dy <= 1;
+          const icon = o.type === "ore" ? "⛏️" : o.type === "herb" ? "🌿" : "📦";
+          const prog = o.turnsProgress || 0;
+          const req = o.turnsRequired || 1;
+
+          return (
+            <div key={o.id}
+              onClick={() => { if (isAdjacent && onObjectClick) onObjectClick(o.id, o.type === "chest" ? "chest" : "secret"); }}
+              style={{
+                position: "absolute",
+                left: o.position.x * CELL + 4, top: o.position.y * CELL + 4,
+                width: CELL - 8, height: CELL - 8,
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                fontSize: CELL * 0.55, cursor: isAdjacent ? "pointer" : "default",
+                background: isAdjacent ? "rgba(255,215,0,0.25)" : "rgba(0,0,0,0.2)",
+                borderRadius: "6px", border: isAdjacent ? "1px solid #ffd700" : "1px solid rgba(255,255,255,0.1)",
+                zIndex: 25
+              }}>
+              <span>{icon}</span>
+              {req > 1 && (
+                <div style={{ width: "80%", height: 3, background: "#333", borderRadius: 2, marginTop: 2, overflow: "hidden" }}>
+                  <div style={{ width: `${(prog / req) * 100}%`, height: "100%", background: "#4cdb70", transition: "width 0.2s" }} />
+                </div>
+              )}
+            </div>
+          );
+        })}
+
         {/* Secrets */}
         {secrets?.filter(s => !s.found && localFogRevealed.has(`${s.position.x},${s.position.y}`)).map(s => {
           const dx = Math.abs(pos.x - s.position.x);
@@ -769,15 +953,35 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
           const ex = e.gridX * CELL + CELL / 2;
           const ey = e.gridY * CELL + CELL / 2;
           if (e.type === "miss" || e.type === "number") {
+            const valStr = String(e.value);
+            const isMiss = e.type === "miss" || valStr.toUpperCase().includes("MISS");
+            const isCrit = valStr.toUpperCase().includes("CRIT") || valStr.includes("!");
+            const isHeal = valStr.startsWith("+");
+
             return (
               <div key={e.id} style={{
-                position: "absolute", left: ex - 24, top: ey - 20,
-                fontFamily: MO, fontSize: e.type === "miss" ? 14 : 20,
-                fontWeight: "bold", pointerEvents: "none", zIndex: 50,
-                color: e.type === "miss" ? C.muted : C.red,
-                textShadow: "2px 2px 0 #000, -2px -2px 0 #000",
-                animation: "dnd-float-up 0.8s ease-out forwards",
-              }}>{e.value}</div>
+                position: "absolute", left: ex - 60, top: ey - 35, width: 120, textAlign: "center",
+                fontFamily: PX,
+                fontSize: isCrit ? 22 : isMiss ? 15 : 18,
+                fontWeight: "bold", pointerEvents: "none", zIndex: 80,
+                color: isCrit ? "#ffe600" : isMiss ? "#a0c0e0" : isHeal ? "#4cdb70" : "#ff3333",
+                textShadow: isCrit
+                  ? "0 0 16px #ff3300, 0 0 30px #ffe600, 3px 3px 0 #000, -2px -2px 0 #000"
+                  : isMiss
+                  ? "0 0 10px #a0c0e0, 2px 2px 0 #000"
+                  : isHeal
+                  ? "0 0 12px #4cdb70, 2px 2px 0 #000"
+                  : "0 0 12px #ff0000, 2px 2px 0 #000, -2px -2px 0 #000",
+                animation: isCrit
+                  ? "dnd-crit-bounce 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards"
+                  : isMiss
+                  ? "dnd-miss-slide 0.8s ease-out forwards"
+                  : isHeal
+                  ? "dnd-heal-spring 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards"
+                  : "dnd-hit-pop 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+              }}>
+                {e.value}
+              </div>
             );
           }
           if (e.type === "slash" || e.type === "scratch" || e.type === "whip" || e.type === "sword_swing") {
@@ -801,6 +1005,10 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
               cy = fromY + dy * 0.55;
             }
             const animStyle: React.CSSProperties = { position: "absolute", width: "100%", height: "100%", objectFit: "contain", opacity: 0 };
+            const slashFrames = [
+              lsSlash1, lsSlash2, lsSlash3, lsSlash4, lsSlash5, lsSlash6, lsSlash7,
+              lsSlash8, lsSlash9, lsSlash10, lsSlash11, lsSlash12, lsSlash13
+            ];
             return (
               <div key={e.id} style={{
                 position: "absolute", pointerEvents: "none", zIndex: 60, left: cx - 160, top: cy - 160, width: 320, height: 320,
@@ -808,13 +1016,9 @@ export function MapGrid({ mode, char, monsters, chests, secrets, combat, fogReve
                 mixBlendMode: "screen",
                 overflow: "hidden"
               }}>
-                <img src={lsSlash1} style={{ ...animStyle, animation: "anim-frame-7-1 0.25s linear forwards" }} />
-                <img src={lsSlash2} style={{ ...animStyle, animation: "anim-frame-7-2 0.25s linear forwards" }} />
-                <img src={lsSlash3} style={{ ...animStyle, animation: "anim-frame-7-3 0.25s linear forwards" }} />
-                <img src={lsSlash4} style={{ ...animStyle, animation: "anim-frame-7-4 0.25s linear forwards" }} />
-                <img src={lsSlash5} style={{ ...animStyle, animation: "anim-frame-7-5 0.25s linear forwards" }} />
-                <img src={lsSlash6} style={{ ...animStyle, animation: "anim-frame-7-6 0.25s linear forwards" }} />
-                <img src={lsSlash7} style={{ ...animStyle, animation: "anim-frame-7-7 0.25s linear forwards" }} />
+                {slashFrames.map((imgSrc, idx) => (
+                  <img key={`lss-${idx}`} src={imgSrc} style={{ ...animStyle, animation: `anim-frame-13-${idx + 1} 0.35s linear forwards` }} />
+                ))}
               </div>
             );
           }

@@ -81,3 +81,14 @@ export const MONSTER_DROPS: Omit<Item, "id">[] = [
   { name: "Gold Pouch", type: "consumable", effect: "gold_pouch", value: 50, rarity: "uncommon", description: "A small pouch of gold." },
   { name: "Selenia's Flower", type: "consumable", value: 0, material: true, rarity: "rare", tags: ["Divine", "Nature"], description: "A glowing, ethereal flower." }
 ];
+
+export const RESOURCE_ITEMS: Omit<Item, "id">[] = [
+  { name: "Iron Ore", type: "consumable", value: 15, material: true, rarity: "uncommon", tags: ["Metal", "Ore"], description: "Unrefined iron ore from mining." },
+  { name: "Copper Ore", type: "consumable", value: 10, material: true, rarity: "common", tags: ["Metal", "Ore"], description: "Soft copper ore." },
+  { name: "Stone", type: "consumable", value: 2, material: true, rarity: "common", tags: ["Earth"], description: "Common stone piece." },
+  { name: "Healing Herb", type: "consumable", value: 8, material: true, rarity: "common", tags: ["Plant", "Healing"], description: "A fresh green herb with restorative sap." },
+  { name: "Moon Hydrangea", type: "consumable", value: 25, material: true, rarity: "rare", tags: ["Plant", "Moon", "Magic"], description: "A rare flower glowing with ethereal moonlight." },
+  { name: "Moon Essence Flower", type: "consumable", value: 45, material: true, rarity: "epic", tags: ["Plant", "Moon", "Divine"], description: "Pure lunar essence trapped in blossom." },
+  { name: "Antidote Herb", type: "consumable", value: 12, material: true, rarity: "uncommon", tags: ["Plant", "Antidote"], description: "Herb effective against venom." },
+  { name: "Rare Crystal", type: "consumable", value: 60, material: true, rarity: "epic", tags: ["Crystal", "Magic"], description: "Glowing crystal pulsating with arcane energy." },
+];

@@ -40,19 +40,49 @@ export function AuthScreen({ onLogin }: { onLogin: (u: string, ids: string[], gs
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>
-      <div style={{ position: "absolute", inset: 0, opacity: 0.04, backgroundImage: `repeating-linear-gradient(0deg,transparent,transparent 37px,${C.blue} 38px),repeating-linear-gradient(90deg,transparent,transparent 37px,${C.blue} 38px)` }} />
-      <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse at 50% 20%, rgba(245,216,122,0.12) 0%, rgba(180,138,255,0.06) 45%, transparent 75%)` }} />
+    <div style={{ minHeight: "100vh", background: "radial-gradient(circle at 50% 35%, #1b1238 0%, #0c081e 65%, #05030c 100%)", display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden", userSelect: "none" }}>
+      <style>{`
+        @keyframes auth-logo-fade-in {
+          0% { opacity: 0; transform: scale(0.9) translateY(-15px); filter: blur(8px); }
+          100% { opacity: 1; transform: scale(1) translateY(0); filter: blur(0px); }
+        }
+        @keyframes auth-orb-float {
+          0% { transform: translateY(0px) rotate(0deg); opacity: 0.3; }
+          50% { opacity: 0.8; }
+          100% { transform: translateY(-90px) rotate(180deg); opacity: 0.2; }
+        }
+      `}</style>
+
+      {/* Floating Moonlight Particles */}
+      <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 1, overflow: "hidden" }}>
+        {Array.from({ length: 24 }).map((_, i) => (
+          <div
+            key={`auth-orb-${i}`}
+            style={{
+              position: "absolute",
+              left: `${(i * 13 + 5) % 100}%`,
+              top: `${(i * 19 + 7) % 100}%`,
+              width: `${(i % 3) * 4 + 4}px`,
+              height: `${(i % 3) * 4 + 4}px`,
+              borderRadius: "50%",
+              background: i % 2 === 0 ? "#c492d6" : "#60a5fa",
+              boxShadow: i % 2 === 0 ? "0 0 16px #c492d6" : "0 0 16px #60a5fa",
+              animation: `auth-orb-float ${5 + (i % 5)}s ease-in-out infinite alternate`,
+              animationDelay: `${i * 0.2}s`,
+            }}
+          />
+        ))}
+      </div>
 
       <div style={{ position: "relative", zIndex: 10, width: "100%", maxWidth: 390, padding: "0 20px" }}>
-        <div style={{ textAlign: "center", marginBottom: 24 }}>
-          <div style={{ fontFamily: PX, fontSize: 16, color: C.gold, lineHeight: 1.5, letterSpacing: 2, textShadow: `0 0 18px ${C.gold}55` }}>
-            SELestia<br />HORIZON
+        <div style={{ textAlign: "center", marginBottom: 24, animation: "auth-logo-fade-in 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards" }}>
+          <div style={{ fontFamily: PX, fontSize: 24, fontWeight: "bold", color: "#ffffff", letterSpacing: 4, textShadow: `0 0 25px ${C.gold}88, 0 4px 10px rgba(0,0,0,0.8)` }}>
+            SELASTIA HORIZON
           </div>
-          <div style={{ fontFamily: NU, fontSize: 12, color: C.muted, marginTop: 8, fontStyle: "italic" }}>
-            ✨ A peaceful fantasy journey begins here ✨
+          <div style={{ fontFamily: NU, fontSize: 12, color: C.gold, marginTop: 6, fontStyle: "italic", letterSpacing: 2 }}>
+            ✨ Choice & Consequence RPG ✨
           </div>
-          <div style={{ height: 2, margin: "12px auto 0", width: 140, background: `linear-gradient(90deg, transparent, ${C.blue}, transparent)` }} />
+          <div style={{ height: 2, margin: "14px auto 0", width: 160, background: `linear-gradient(90deg, transparent, ${C.gold}, transparent)` }} />
         </div>
 
         <div style={{ ...panel, padding: 24, position: "relative", borderRadius: 16, background: `linear-gradient(180deg, ${C.card} 0%, ${C.card2} 100%)` }}>

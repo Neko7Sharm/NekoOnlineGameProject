@@ -9,19 +9,21 @@ export const SIGHT = 11; // +5 for morning forest player sight
 export function getMapCols(mode: string) {
   if (mode === "sanctuary") return 27;
   if (mode === "town") return 30;
-  return 100;
+  if (mode === "dungeon") return 90;
+  return 90;
 }
 
 export function getMapRows(mode: string) {
-  if (mode === "sanctuary") return 19;
+  if (mode === "sanctuary") return 17;
   if (mode === "town") return 22;
-  return 100;
+  if (mode === "dungeon") return 60;
+  return 60;
 }
 
 // Entry / exit positions
 export const TOWN_ENTER = { x: 14, y: 10 }; // Start in the middle of the central plaza
-export const DUNGEON_ENTER = { x: 20, y: 95 }; // Entrance safe zone bottom left
-export const DUNGEON_EXIT = { x: 80, y: 20 }; // Boss room top right
+export const DUNGEON_ENTER = { x: 4, y: 30 }; // Entrance safe zone (left)
+export const DUNGEON_EXIT = { x: 82, y: 30 }; // Boss room center
 
 // Town special tiles (Interactive zones)
 export const TOWN_SPECIAL: Record<string, { label: string; type: string; icon: string; prompt: string; color: string; requiredSkill?: string; dc?: number; successText?: string; failText?: string }> = {
@@ -56,9 +58,14 @@ export const TOWN_SPECIAL: Record<string, { label: string; type: string; icon: s
 };
 
 export const SANCTUARY_SPECIAL: Record<string, { label: string; type: string; icon: string; prompt: string; color: string; requiredSkill?: string; dc?: number; successText?: string; failText?: string }> = {
-  "15,8": { label: "Selenia", type: "selenia", icon: "✨", prompt: "Speak with Selenia?", color: "#c492d6" },
+  "13,8": { label: "Selenia", type: "selenia", icon: "✨", prompt: "Speak with Selenia?", color: "#c492d6" },
+  "12,8": { label: "Selenia", type: "selenia", icon: "✨", prompt: "Speak with Selenia?", color: "#c492d6" },
   "14,8": { label: "Selenia", type: "selenia", icon: "✨", prompt: "Speak with Selenia?", color: "#c492d6" },
-  "16,8": { label: "Selenia", type: "selenia", icon: "✨", prompt: "Speak with Selenia?", color: "#c492d6" },
+
+  // --- 🔮 Sanctuary Return Teleport Circle ---
+  "12,15": { label: "Return Teleport Rune", type: "sanctuary_exit", icon: "🔮", prompt: "Step onto the Teleport Circle and return to Millhaven Town?", color: "#9333ea" },
+  "13,15": { label: "Return Teleport Rune", type: "sanctuary_exit", icon: "🔮", prompt: "Step onto the Teleport Circle and return to Millhaven Town?", color: "#9333ea" },
+  "14,15": { label: "Return Teleport Rune", type: "sanctuary_exit", icon: "🔮", prompt: "Step onto the Teleport Circle and return to Millhaven Town?", color: "#9333ea" },
 };
 
 // Dungeon special tiles
@@ -86,11 +93,11 @@ export function getTownTile(x: number, y: number): { bg: string; isWall: boolean
   }
 
   // --- BUILDINGS & WORKSTATIONS (Walls / Obstacles) ---
-  // Inn (Top-Left Building: X:3..12, Y:1..5)
-  if (x >= 3 && x <= 12 && y >= 1 && y <= 5) return { bg: "transparent", isWall: true, type: "grass" };
+  // Inn (Top-Left Building: X:4..13, Y:1..5)
+  if (x >= 4 && x <= 13 && y >= 1 && y <= 5) return { bg: "transparent", isWall: true, type: "grass" };
 
-  // Quest Board / Guildhall (Top-Right Building: X:17..26, Y:1..5)
-  if (x >= 17 && x <= 26 && y >= 1 && y <= 5) return { bg: "transparent", isWall: true, type: "grass" };
+  // Quest Board / Guildhall (Top-Right Building: X:16..25, Y:1..5)
+  if (x >= 16 && x <= 25 && y >= 1 && y <= 5) return { bg: "transparent", isWall: true, type: "grass" };
 
   // Selenia Statue / Shrine Base (Far-Left: X:1..4, Y:8..12)
   if (x >= 1 && x <= 3 && y >= 8 && y <= 12) return { bg: "transparent", isWall: true, type: "grass" };
@@ -141,7 +148,7 @@ export function getSanctuaryTile(x: number, y: number): { bg: string; isWall: bo
   const rows = getMapRows("sanctuary");
   if (x >= cols || y >= rows) return { bg: "#000", isWall: true };
   if (x === 0 || y === 0 || x === cols - 1 || y === rows - 1) return { bg: "#ffffff", isWall: true }; // white wall boundaries
-  const isCenterPath = (x >= 12 && x <= 17 && y >= 5 && y <= 15);
+  const isCenterPath = (x >= 10 && x <= 16 && y >= 4 && y <= 15);
   return { bg: isCenterPath ? "#f2e6ff" : "#fdfbfe", isWall: false }; // lavender center, soft white elsewhere
 }
 

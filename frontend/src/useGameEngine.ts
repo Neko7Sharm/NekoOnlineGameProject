@@ -5,7 +5,8 @@ import type {
 import { C } from "./constants/theme";
 import { CLASS_CFG, CLASS_SPELLS, WIZARD_SPELL_CHOICES, PROFICIENCY_LIST } from "./constants/classes";
 import { SKILL_DICTIONARY } from "./constants/skills";
-import { SHOP_ITEMS, STARTING_ITEMS, BRANCH_ITEM, MONSTER_DROPS } from "./constants/items";
+import { SHOP_ITEMS, STARTING_ITEMS, BRANCH_ITEM, MONSTER_DROPS, RESOURCE_ITEMS } from "./constants/items";
+import { craftTagAlchemy } from "./constants/alchemy";
 import { NPC_CHAT } from "./constants/quests";
 import {
   getMapRows, getMapCols, TOWN_ENTER, DUNGEON_ENTER, DUNGEON_EXIT,
@@ -14,6 +15,8 @@ import {
 import { gid, d20, getMod, dist, distToEntity, tnow, rollDice, getSpellcastingMod, calcAC, getWeaponStat, getEffectiveDamage } from "./utils/dice";
 import { loadState, persist } from "./storage";
 import { genMonsters, genQuests } from "./game/character";
+import { audioManager } from "./utils/audioManager";
+import { sfxManager } from "./utils/sfxManager";
 import { parseWhisperingForest } from "./maps/whispering_forest";
 const wfMap = parseWhisperingForest();
 
@@ -159,7 +162,7 @@ export function useGameEngine() {
   const [restAnim, setRestAnim] = useState<"short" | "long" | null>(null);
   const [zooms, setZooms] = useState<Record<string, number>>({
     town: 0.4,
-    sanctuary: 0.5,
+    sanctuary: 1.20,
     dungeon: 0.5,
     tutorial: 0.7,
     worldMap: 1.0
@@ -193,6 +196,23 @@ export function useGameEngine() {
   useEffect(() => { charRef.current = char; }, [char]);
 
   useEffect(() => { persist(gs); }, [gs]);
+
+  // BGM Auto-Switching System
+  useEffect(() => {
+    if (combat.active) {
+      const isBossCombat = gs.dungeonMonsters.some(
+        m => (combat.engagedMonsterIds || []).includes(m.id) &&
+             (m.personality === "boss" || m.image === "monster_treant" || m.name.includes("Treant"))
+      );
+      if (isBossCombat) {
+        audioManager.playBGM("bossCombat");
+      } else {
+        audioManager.playBGM("combat");
+      }
+    } else if (screen === "auth" || screen === "charSelect" || screen === "charCreate" || screen === "town" || screen === "sanctuary" || screen === "dungeon") {
+      audioManager.playBGM(screen);
+    }
+  }, [screen, combat.active, combat.engagedMonsterIds, gs.dungeonMonsters]);
 
   // Sync tutorialsSeenRef from persisted char state on login / char switch
   useEffect(() => {
@@ -280,7 +300,8 @@ export function useGameEngine() {
     setStealthCasting(false);
     setTimeout(() => setActionText(null), 1500);
     setBattleStart(true);
-    setTimeout(() => setBattleStart(false), 1800);
+    sfxManager.play("slash");
+    setTimeout(() => setBattleStart(false), 1100);
     const playerInit = 20 + getMod(char.stats.dex);
     const order: CombatState["turnOrder"] = [{ id: char.id, type: "player" as const, name: char.name, initiative: playerInit }];
     const engaged = gs.dungeonMonsters.filter(m => monsterIds.includes(m.id) && m.hp > 0);
@@ -613,95 +634,125 @@ export function useGameEngine() {
           } else {
               if (bState["wrath_recovery"]) {
                   bState["wrath_recovery"] -= 1;
-                  if (bState["wrath_recovery"] <= 0) {
-                      delete bState["wrath_recovery"];
-                      newMonsters[mIdx].ac += 5;
-                      newLog.push(`🌲 ${monster.name} recovers its defenses.`);
-                  } else {
-                      newLog.push(`  ${monster.name} is recovering and takes no action.`);
-                  }
+                  newLog.push(`🌲 ${monster.name} is recovering from Wrath...`);
               } else {
+                  bossSkillUsedThisTurn = true;
                   const d = distToEntity(char.position, monster.position, monster.size);
-                  
-                  // Proficiency check helper
-                  const checkProf = (skills: string[]) => {
-                      let best = -1;
-                      for (const s of skills) {
-                          if (!char.skills?.includes(s)) continue;
-                          const profDef = PROFICIENCY_LIST.find(p => p.name === s);
-                          if (!profDef) continue;
-                          const score = getMod(char.stats[profDef.stat]) + 2;
-                          if (score > best) best = score;
-                      }
-                      return best === -1 ? 0 : best >= 5 ? 2 : 1;
-                  };
-                  
-                  if (isPhase2 && combat.round >= 6 && !bState["used_Wrath"]) {
-                      const lvl = checkProf(["Arcana", "History", "Nature"]);
-                      if (lvl === 0) newLog.push(`⚠ Something magical is happening...`);
-                      else if (lvl === 1) newLog.push(`⚠ ${monster.name} is gathering massive magical energy!`);
-                      else newLog.push(`⚠ ${monster.name} awakens the forest! (Wrath of Ancient Forest, Range: 9x9)`);
-                      
-                      bState["prep_Wrath"] = 1;
-                      bState["used_Wrath"] = 1;
-                      const warns = [];
-                      for(let dy = -4; dy <= 4; dy++) {
-                          for(let dx = -4; dx <= 4; dx++) {
-                              warns.push({ x: monster.position.x + dx, y: monster.position.y + dy, type: 'wrath', level: lvl });
-                          }
-                      }
-                      setCombat(prev => ({ ...prev, warnings: warns }));
-                  } else if (d <= 1 && d20() > 10) {
-                      newLog.push(`🪵 ${monster.name} uses Root Strike!`);
-                      let atk = d20() + monster.attackMod;
-                      if (atk >= char.ac) {
-                          let dmg = rollDice("1d10+4");
-                          charHp -= dmg;
-                          newLog.push(`  Hits for ${dmg} Physical damage!`);
-                          if (d20() < 10) {
-                              setCombat(prev => ({ ...prev, activeBuffs: [...(prev.activeBuffs||[]), "rooted"] }));
-                              newLog.push(`  You are Rooted!`);
-                              notify("You are Rooted!");
-                          }
-                      } else {
-                          newLog.push(`  Missed!`);
-                      }
-                  } else if ((d <= 2 && Object.keys(bState).filter(k => k.startsWith("prep_")).length === 0) || (isPhase2 && d <= 1 && d20() > 10)) {
-                      const lvl = checkProf(["Perception", "Survival"]);
-                      if (lvl === 0) newLog.push(`⚠ Something feels dangerous...`);
-                      else if (lvl === 1) newLog.push(`⚠ Large physical attack incoming!`);
-                      else newLog.push(`⚠ The ground shakes! (Ground Slam, Range: 5x5)`);
-                      
-                      bState["prep_GroundSlam"] = 1;
-                      const warns = [];
-                      for(let dy = -2; dy <= 2; dy++) {
-                          for(let dx = -2; dx <= 2; dx++) {
-                              warns.push({ x: monster.position.x + dx, y: monster.position.y + dy, type: 'slam', level: lvl });
-                          }
-                      }
-                      setCombat(prev => ({ ...prev, warnings: warns }));
-                  } else if (d > 2 && d <= 6 && d20() > 8) {
-                      newLog.push(`🌿 ${monster.name} uses Vine Lash!`);
-                      let atk = d20() + monster.attackMod;
-                      if (atk >= char.ac) {
-                          let dmg = rollDice("1d8+2");
-                          charHp -= dmg;
-                          newLog.push(`  Hits for ${dmg} damage!`);
-                      } else {
-                          newLog.push(`  Missed!`);
-                      }
-                  } else {
-                      if (isPhase2) {
-                          bossSkillUsedThisTurn = false; // standard AI handles move/attack
-                      } else {
-                          if (combat.round % 3 === 0) {
-                              newLog.push(`🌿 ${monster.name} regenerates 10 HP!`);
-                              newMonsters[mIdx].hp = Math.min(newMonsters[mIdx].maxHp, newMonsters[mIdx].hp + 10);
-                          } else {
-                              newLog.push(`🌲 ${monster.name} watches menacingly.`);
-                          }
-                      }
+                  const threatVal = monster.threatMemory?.[char.id] || 0;
+
+                  // ── BOSS PHASE CHECK & SUMMON ADDS ──
+                  const hpRatio = monster.hp / monster.maxHp;
+                  let currPhase: 1 | 2 | 3 = monster.bossPhase || 1;
+                  if (hpRatio <= 0.6 && currPhase < 2) {
+                    currPhase = 2;
+                    newMonsters[mIdx].bossPhase = 2;
+                    newLog.push(`🔊 Ancient Treant enters Phase 2! Ancient Saplings emerge from the soil!`);
+                    newMonsters.push({
+                      id: gid(), name: "Ancient Sapling", hp: 18, maxHp: 18, ac: 11,
+                      position: { x: monster.position.x + 2, y: monster.position.y },
+                      damage: "1d6", range: 1, attackMod: 3, initiative: 2, xp: 20, sightRange: 6, alerted: true,
+                      image: "monster_treant", size: 1, personality: "aggressive"
+                    });
+                    newMonsters.push({
+                      id: gid(), name: "Ancient Sapling", hp: 18, maxHp: 18, ac: 11,
+                      position: { x: monster.position.x - 2, y: monster.position.y },
+                      damage: "1d6", range: 1, attackMod: 3, initiative: 2, xp: 20, sightRange: 6, alerted: true,
+                      image: "monster_treant", size: 1, personality: "aggressive"
+                    });
+                    notify("⚠ Phase 2! Ancient Treant summoned 2 Sapling Adds!");
+                  } else if (hpRatio <= 0.3 && currPhase < 3) {
+                    currPhase = 3;
+                    newMonsters[mIdx].bossPhase = 3;
+                    newLog.push(`🌋 Ancient Treant enters Phase 3 Enrage! Root Overgrowth surges!`);
+                    notify("⚠ Phase 3 ENRAGE! Root Overgrowth surges!");
                   }
+
+                  // ── 3x3 EDGE-BASED ATTACK & TELEGRAPH SYSTEM ──
+                  const bx = monster.position.x;
+                  const by = monster.position.y;
+                  const targetDx = char.position.x - bx;
+                  const targetDy = char.position.y - by;
+
+                  // Update Boss Facing direction toward player
+                  let newFacing: "N" | "E" | "S" | "W" = "S";
+                  if (Math.abs(targetDx) >= Math.abs(targetDy)) {
+                    newFacing = targetDx >= 0 ? "E" : "W";
+                  } else {
+                    newFacing = targetDy >= 0 ? "S" : "N";
+                  }
+                  newMonsters[mIdx].facing = newFacing;
+
+                  // ── ANTI-RANGED THREAT COUNTER ──
+                  if (d > 3 && threatVal >= 2) {
+                    if (d20() > 8) {
+                      newLog.push(`⛓️ Ancient Treant turns ${newFacing} and casts ROOT PULL! Dragged ${char.name} closer!`);
+                      const pullX = char.position.x + (targetDx > 0 ? 3 : targetDx < 0 ? -3 : 0);
+                      const pullY = char.position.y + (targetDy > 0 ? 3 : targetDy < 0 ? -3 : 0);
+                      updateChar(char.id, { position: { x: Math.max(0, pullX), y: Math.max(0, pullY) } });
+                      addEffect({ type: "rootslam", gridX: char.position.x, gridY: char.position.y });
+                      notify("⛓️ Dragged by Root Pull!");
+                    } else {
+                      newLog.push(`🌰 Ancient Treant turns ${newFacing} and fires SEED SHOT at ${char.name}!`);
+                      const atk = d20() + monster.attackMod;
+                      if (atk >= char.ac) {
+                        const dmg = rollDice("2d6+2");
+                        charHp -= dmg;
+                        newLog.push(`  Hits ${char.name} for ${dmg} Piercing damage!`);
+                        addEffect({ type: "number", gridX: char.position.x, gridY: char.position.y, value: `-${dmg}` });
+                      } else {
+                        newLog.push(`  Seed Shot missed!`);
+                      }
+                    }
+                  } else if (d <= 2 && d20() > 8) {
+                    // ROOT SLAM (Outer Ring 1-tile surrounding 3x3 body)
+                    const warns = [];
+                    for (let dy = -2; dy <= 2; dy++) {
+                      for (let dx = -2; dx <= 2; dx++) {
+                        if (Math.abs(dx) === 2 || Math.abs(dy) === 2) {
+                          warns.push({ x: bx + dx, y: by + dy, type: "slam" });
+                        }
+                      }
+                    }
+                    setCombat(prev => ({ ...prev, warnings: warns }));
+                    newLog.push(`⚠️ Ancient Treant raises limbs! Outer Ring ROOT SLAM red warning active!`);
+                  } else if (d > 6) {
+                    newMonsters[mIdx].ac = Math.min(22, newMonsters[mIdx].ac + 1);
+                    newMonsters[mIdx].hp = Math.min(newMonsters[mIdx].maxHp, newMonsters[mIdx].hp + 6);
+                    newLog.push(`🌿 Ancient Treant uses GROWTH! (+1 AC, +6 HP recovered)`);
+                  } else {
+                    // VINE SMASH (Directional Edge Sweep from Facing Edge: BBBXXX)
+                    const warns = [];
+                    if (newFacing === "E") {
+                      for (let y = by - 1; y <= by + 1; y++) {
+                        for (let x = bx + 2; x <= bx + 4; x++) warns.push({ x, y, type: "whip" });
+                      }
+                    } else if (newFacing === "W") {
+                      for (let y = by - 1; y <= by + 1; y++) {
+                        for (let x = bx - 4; x <= bx - 2; x++) warns.push({ x, y, type: "whip" });
+                      }
+                    } else if (newFacing === "S") {
+                      for (let x = bx - 1; x <= bx + 1; x++) {
+                        for (let y = by + 2; y <= by + 4; y++) warns.push({ x, y, type: "whip" });
+                      }
+                    } else {
+                      for (let x = bx - 1; x <= bx + 1; x++) {
+                        for (let y = by - 4; y <= by - 2; y++) warns.push({ x, y, type: "whip" });
+                      }
+                    }
+                    setCombat(prev => ({ ...prev, warnings: warns }));
+                    newLog.push(`🌿 Ancient Treant turns ${newFacing}! Charges Directional VINE SMASH!`);
+                    const atk = d20() + monster.attackMod;
+                    if (atk >= char.ac) {
+                      const dmg = rollDice("1d8+3");
+                      charHp -= dmg;
+                      newLog.push(`  Hits for ${dmg} Slashing damage!`);
+                      addEffect({ type: "whip", gridX: char.position.x, gridY: char.position.y });
+                      addEffect({ type: "number", gridX: char.position.x, gridY: char.position.y, value: `-${dmg}` });
+                    } else {
+                      newLog.push(`  Vine Smash missed!`);
+                    }
+                  }
+               
               }
           }
           newMonsters[mIdx].bossSkillsUsed = bState;
@@ -1565,6 +1616,20 @@ export function useGameEngine() {
     }
     const monster = gs.dungeonMonsters.find(m => m.id === monsterId);
     if (!monster || monster.hp <= 0) { notify(`Debug: monster dead or not found`); return; }
+
+    const attackDist = distToEntity(char.position, monster.position, monster.size);
+    if (attackDist > 4) {
+      setGs(prev => ({
+        ...prev,
+        dungeonMonsters: prev.dungeonMonsters.map(m => {
+          if (m.id === monsterId) {
+            const curTM = m.threatMemory || {};
+            return { ...m, threatMemory: { ...curTM, [char.id]: (curTM[char.id] || 0) + 1 } };
+          }
+          return m;
+        })
+      }));
+    }
     
     // Weapon Properties check
     const isRanged = (weapon.range ?? 5) > 5;
@@ -2086,19 +2151,28 @@ export function useGameEngine() {
     const { tile, x, y } = specialDialog;
     setSpecialDialog(null);
 
-    if (tile.type === "exit") {
+    if (tile.type === "sanctuary_exit") {
+      sfxManager.play("warp");
+      enterTown();
+      notify("🔮 Teleported back to Millhaven Town!");
+    } else if (tile.type === "exit") {
+      sfxManager.play("warp");
       setScreen("worldMap");
       updateChar(char.id, { position: { x: 10, y: 7 }, currentMap: "town" });
     } else if (tile.type === "shop") {
+      sfxManager.play("click");
       updateChar(char.id, { position: { x, y } });
       setShowShop(true);
     } else if (tile.type === "quest") {
+      sfxManager.play("click");
       updateChar(char.id, { position: { x, y } });
       setShowQuests(true);
     } else if (tile.type === "shrine") {
+      sfxManager.play("heal");
       updateChar(char.id, c => ({ ...c, hp: c.maxHp, mp: c.maxMp }));
       notify("✨ You prayed at Selenia's Statue. HP & MP fully restored!");
     } else if (tile.type === "inn") {
+      sfxManager.play("heal");
       updateChar(char.id, c => ({ ...c, hp: c.maxHp, mp: c.maxMp }));
       notify("🏨 Rested at Hearthstone Inn. HP & MP fully restored!");
     } else if (tile.type === "alchemy") {
@@ -2193,8 +2267,117 @@ export function useGameEngine() {
     }
   }
 
+  function emitNoise(gridX: number, gridY: number, noiseLevel: number) {
+    const radius = noiseLevel * 2;
+    setGs(prev => {
+      const newMonsters = prev.dungeonMonsters.map(m => {
+        if (m.hp <= 0) return m;
+        const d = distToEntity({ x: gridX, y: gridY }, m.position, m.size);
+        if (d <= radius) {
+          const dx = gridX - m.position.x;
+          const dy = gridY - m.position.y;
+          let newFacing: "N" | "S" | "E" | "W" = m.facing;
+          if (Math.abs(dx) > Math.abs(dy)) {
+            newFacing = dx > 0 ? "E" : "W";
+          } else {
+            newFacing = dy > 0 ? "S" : "N";
+          }
+          return { ...m, alerted: true, facing: newFacing };
+        }
+        return m;
+      });
+      return { ...prev, dungeonMonsters: newMonsters };
+    });
+    sfxManager.play("slash");
+    notify(`🔊 Noise emitted (Level ${noiseLevel})! Nearby monsters turned to investigate!`);
+  }
+
+  function handleGatherNode(objectId: string) {
+    if (!char || combat.active) return;
+    const obj = (gs.dungeonObjects || []).find(o => o.id === objectId);
+    if (!obj || obj.state === "depleted") return;
+
+    const turnsReq = obj.turnsRequired || (obj.type === "ore" ? 3 : obj.type === "chest" ? 2 : 1);
+    const currProg = (obj.turnsProgress || 0) + 1;
+    const noise = obj.noiseLevel || (obj.type === "ore" ? 3 : obj.type === "chest" ? 2 : 1);
+
+    emitNoise(obj.position.x, obj.position.y, noise);
+
+    if (currProg < turnsReq) {
+      setGs(prev => ({
+        ...prev,
+        dungeonObjects: (prev.dungeonObjects || []).map(o => o.id === objectId ? { ...o, turnsProgress: currProg } : o)
+      }));
+      notify(`⛏️ Gathering ${obj.subType || obj.type}... (${currProg}/${turnsReq} turns)`);
+      return;
+    }
+
+    setGs(prev => ({
+      ...prev,
+      dungeonObjects: (prev.dungeonObjects || []).map(o => o.id === objectId ? { ...o, state: "depleted", turnsProgress: turnsReq } : o)
+    }));
+
+    const itemName = obj.subType || (obj.type === "ore" ? "Iron Ore" : obj.type === "herb" ? "Healing Herb" : "Treasure Map Fragment");
+    const itemDef = RESOURCE_ITEMS.find(i => i.name === itemName) || MONSTER_DROPS.find(i => i.name === itemName) || SHOP_ITEMS.find(i => i.name === itemName);
+
+    if (itemDef) {
+      updateChar(char.id, ch => ({ inventory: [...ch.inventory, { ...itemDef, id: gid() }] }));
+      sfxManager.play("gold");
+      notify(`✨ Completed gathering! Received ${itemName}.`);
+    }
+
+    setGs(prev => {
+      const curObjs = prev.dungeonObjectives || { explorePercent: 0, herbsGathered: 0, oresMined: 0, chestsOpened: 0, monstersDefeated: 0, bossDefeated: false };
+      return {
+        ...prev,
+        dungeonObjectives: {
+          ...curObjs,
+          herbsGathered: obj.type === "herb" ? curObjs.herbsGathered + 1 : curObjs.herbsGathered,
+          oresMined: obj.type === "ore" ? curObjs.oresMined + 1 : curObjs.oresMined,
+          chestsOpened: obj.type === "chest" ? curObjs.chestsOpened + 1 : curObjs.chestsOpened,
+        }
+      };
+    });
+  }
+
+  function handleCraftAlchemy(ing1Id: string, ing2Id: string, catalystId?: string) {
+    if (!char) return;
+    const ing1 = char.inventory.find(i => i.id === ing1Id);
+    const ing2 = char.inventory.find(i => i.id === ing2Id);
+    const catalyst = catalystId ? char.inventory.find(i => i.id === catalystId) : undefined;
+
+    if (!ing1 || !ing2) {
+      notify("Missing ingredients for Alchemy!");
+      return;
+    }
+
+    const res = craftTagAlchemy(ing1, ing2, catalyst);
+    if (!res.success || !res.resultItem) {
+      notify(res.message);
+      return;
+    }
+
+    const usedIds = new Set([ing1Id, ing2Id]);
+    if (catalystId) usedIds.add(catalystId);
+
+    const newInv = char.inventory.filter(i => !usedIds.has(i.id));
+    newInv.push(res.resultItem);
+
+    const newDiscovered = new Set(char.discoveredRecipes || []);
+    if (res.recipe) newDiscovered.add(res.recipe.id);
+
+    updateChar(char.id, {
+      inventory: newInv,
+      discoveredRecipes: Array.from(newDiscovered)
+    });
+
+    sfxManager.play("heal");
+    notify(res.message);
+  }
+
   function handleObjectClick(id: string, type: "chest" | "secret") {
     if (!char) return;
+    handleGatherNode(id);
     if (type === "chest") {
       const chest = gs.dungeonChests?.find(c => c.id === id);
       if (chest && !chest.opened) {
@@ -2235,6 +2418,7 @@ export function useGameEngine() {
   }
   function handleBuyItem(item: Item) {
     if (!char || char.gold < item.value) return;
+    sfxManager.play("gold");
     updateChar(char.id, c => ({ gold: c.gold - item.value, inventory: [...c.inventory, { ...item, id: gid() }] }));
     notify(`Bought ${item.name} for ${item.value}g`);
     setShopPurchaseAnim(item.name);
@@ -2432,7 +2616,7 @@ export function useGameEngine() {
       });
     }, 500);
   }
-  function handleLogout() { setSession(null); setActiveCharId(null); setScreen("auth"); setCombat(INIT_COMBAT); }
+  function handleLogout() { setSession(null); setActiveCharId(null); setScreen("auth"); audioManager.playBGM("auth"); setCombat(INIT_COMBAT); }
   function handleDeleteChar(id: string) {
     if (!confirm("Are you sure you want to delete this hero?")) return;
     setGs(prev => {
@@ -2443,7 +2627,7 @@ export function useGameEngine() {
     });
     setSession(prev => prev ? { ...prev, charIds: prev.charIds.filter(cid => cid !== id) } : null);
   }
-  function enterTown() { if (!char) return; updateChar(char.id, { position: TOWN_ENTER, currentMap: "town" }); setScreen("town"); setCombat(INIT_COMBAT); setSeleniaTalkCount(0); }
+  function enterTown() { if (!char) return; updateChar(char.id, { position: TOWN_ENTER, currentMap: "town" }); setScreen("town"); setZoom(1.0); setCombat(INIT_COMBAT); setSeleniaTalkCount(0); }
   function enterDungeon() { 
     if (!char) return; 
     setSeleniaTalkCount(0);updateChar(char.id, { position: DUNGEON_ENTER, currentMap: "dungeon" }); setScreen("dungeon"); setCombat(INIT_COMBAT);
@@ -2453,8 +2637,8 @@ export function useGameEngine() {
       let rx, ry;
       let attempts = 0;
       do {
-        rx = Math.floor(Math.random() * 100);
-        ry = Math.floor(Math.random() * 100);
+        rx = Math.floor(Math.random() * 50);
+        ry = Math.floor(Math.random() * 40);
         attempts++;
       } while (!isWalkable("dungeon", rx, ry) && attempts < 100);
       return { x: rx, y: ry };
@@ -2481,7 +2665,7 @@ export function useGameEngine() {
     }));
     notify("Entered Darkroot Depths. Monsters lurk in the dark...", 3000);
   }
-  function enterSanctuary() { if (!char) return; updateChar(char.id, { position: { x: 15, y: 16 }, currentMap: "sanctuary" }); setScreen("sanctuary"); setCombat(INIT_COMBAT); }
+  function enterSanctuary() { if (!char) return; updateChar(char.id, { position: { x: 13, y: 10 }, currentMap: "sanctuary" }); setScreen("sanctuary"); setZooms(prev => ({ ...prev, sanctuary: 1.20 })); setCombat(INIT_COMBAT); }
   
   function handleSpeakWithSelenia() {
     if (!char) return;
@@ -2492,7 +2676,7 @@ export function useGameEngine() {
 
     if (char.lastSeenVersion !== CURRENT_VERSION) {
       greetingText = "Oh! The world has changed a little since you last visited... I hope you like the new updates!";
-      greetingEmotion = "shocked";
+      greetingEmotion = "happy";
       updateChar(char.id, { lastSeenVersion: CURRENT_VERSION });
     } else if (char.lastLoginTime && (Date.now() - char.lastLoginTime > 1000 * 60 * 60 * 24 * 7)) { // 7 days
       greetingText = "It has been so long... I was starting to worry. I'm glad you're safe.";
@@ -3002,6 +3186,7 @@ export function useGameEngine() {
     handleFlee: () => {}, // unused
     handleShortRest, handleLongRest,
     handleInsight, handleStealth,
+    handleGatherNode, handleCraftAlchemy,
     insightCooldown, insightVisionTiles, stealthActive, stealthCasting,
     // movement
     handleTileClick,
