@@ -1632,8 +1632,8 @@ export function useGameEngine() {
       }));
     }
     
-    // Weapon Properties check
-    const isRanged = (weapon.range ?? 5) > 5;
+    // Weapon Properties check (Reach weapons like Halberd/Spear have range 10 but are Melee)
+    const isRanged = weapon.properties?.includes("loading") || weapon.name.toLowerCase().includes("bow") || weapon.name.toLowerCase().includes("crossbow") || (!weapon.properties?.includes("reach") && (weapon.range ?? 5) > 10);
     const isFinesse = weapon.properties?.includes("finesse");
     const isTwoHanded = weapon.properties?.includes("two-handed");
     const isLight = weapon.properties?.includes("light");
@@ -1700,7 +1700,7 @@ export function useGameEngine() {
     if (weapon.properties?.includes("heavy") || weapon.properties?.includes("two-handed")) effectScale = 1.3;
     else if (weapon.properties?.includes("light")) effectScale = 0.7;
 
-    const isRangedWeapon = isRanged || weapon.properties?.includes("loading") || weapon.name.toLowerCase().includes("bow");
+    const isRangedWeapon = isRanged;
 
     if (isRangedWeapon) {
       // 1. Play Start Effect at player position
