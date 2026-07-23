@@ -65,6 +65,72 @@ import lsHit5 from "../../assets/effect/hiteffect/slash1/5.png";
 import lsHit6 from "../../assets/effect/hiteffect/slash1/6.png";
 import lsHit7 from "../../assets/effect/hiteffect/slash1/7.png";
 
+// Thrust 1 Effects (Piercing)
+import thrustAtk1 from "../../assets/effect/attackeffect/thrust1/1.png";
+import thrustAtk2 from "../../assets/effect/attackeffect/thrust1/2.png";
+import thrustAtk3 from "../../assets/effect/attackeffect/thrust1/3.png";
+import thrustAtk4 from "../../assets/effect/attackeffect/thrust1/4.png";
+import thrustAtk5 from "../../assets/effect/attackeffect/thrust1/5.png";
+import thrustAtk6 from "../../assets/effect/attackeffect/thrust1/6.png";
+import thrustAtk7 from "../../assets/effect/attackeffect/thrust1/7.png";
+
+import thrustHit1 from "../../assets/effect/hiteffect/thrust1/1.png";
+import thrustHit2 from "../../assets/effect/hiteffect/thrust1/2.png";
+import thrustHit3 from "../../assets/effect/hiteffect/thrust1/3.png";
+import thrustHit4 from "../../assets/effect/hiteffect/thrust1/4.png";
+import thrustHit5 from "../../assets/effect/hiteffect/thrust1/5.png";
+import thrustHit6 from "../../assets/effect/hiteffect/thrust1/6.png";
+import thrustHit7 from "../../assets/effect/hiteffect/thrust1/7.png";
+import thrustHit8 from "../../assets/effect/hiteffect/thrust1/8.png";
+
+// Smash 1 Effects (Bludgeoning)
+import smashAtk1 from "../../assets/effect/attackeffect/smash1/1.png";
+import smashAtk2 from "../../assets/effect/attackeffect/smash1/2.png";
+import smashAtk3 from "../../assets/effect/attackeffect/smash1/3.png";
+import smashAtk4 from "../../assets/effect/attackeffect/smash1/4.png";
+import smashAtk5 from "../../assets/effect/attackeffect/smash1/5.png";
+import smashAtk6 from "../../assets/effect/attackeffect/smash1/6.png";
+import smashAtk7 from "../../assets/effect/attackeffect/smash1/7.png";
+import smashAtk8 from "../../assets/effect/attackeffect/smash1/8.png";
+
+import smashHit1 from "../../assets/effect/hiteffect/smash1/1.png";
+import smashHit2 from "../../assets/effect/hiteffect/smash1/2.png";
+import smashHit3 from "../../assets/effect/hiteffect/smash1/3.png";
+import smashHit4 from "../../assets/effect/hiteffect/smash1/4.png";
+import smashHit5 from "../../assets/effect/hiteffect/smash1/5.png";
+import smashHit6 from "../../assets/effect/hiteffect/smash1/6.png";
+import smashHit7 from "../../assets/effect/hiteffect/smash1/7.png";
+import smashHit8 from "../../assets/effect/hiteffect/smash1/8.png";
+
+// Shoot 1 Effects (Ranged: Bow / Crossbow)
+import shootAtk1 from "../../assets/effect/attackeffect/shoot1/1.png";
+import shootAtk2 from "../../assets/effect/attackeffect/shoot1/2.png";
+import shootAtk3 from "../../assets/effect/attackeffect/shoot1/3.png";
+import shootAtk4 from "../../assets/effect/attackeffect/shoot1/4.png";
+import shootAtk5 from "../../assets/effect/attackeffect/shoot1/5.png";
+import shootAtk6 from "../../assets/effect/attackeffect/shoot1/6.png";
+import shootAtk7 from "../../assets/effect/attackeffect/shoot1/7.png";
+
+import shootProj1 from "../../assets/effect/projectlieeffect/shoot1/1.png";
+import shootProj2 from "../../assets/effect/projectlieeffect/shoot1/2.png";
+import shootProj3 from "../../assets/effect/projectlieeffect/shoot1/3.png";
+import shootProj4 from "../../assets/effect/projectlieeffect/shoot1/4.png";
+import shootProj5 from "../../assets/effect/projectlieeffect/shoot1/5.png";
+import shootProj6 from "../../assets/effect/projectlieeffect/shoot1/6.png";
+import shootProj7 from "../../assets/effect/projectlieeffect/shoot1/7.png";
+import shootProj8 from "../../assets/effect/projectlieeffect/shoot1/8.png";
+import shootProj9 from "../../assets/effect/projectlieeffect/shoot1/9.png";
+import shootProj10 from "../../assets/effect/projectlieeffect/shoot1/10.png";
+import shootProj11 from "../../assets/effect/projectlieeffect/shoot1/11.png";
+
+import shootHit1 from "../../assets/effect/hiteffect/shoot1/1.png";
+import shootHit2 from "../../assets/effect/hiteffect/shoot1/2.png";
+import shootHit3 from "../../assets/effect/hiteffect/shoot1/3.png";
+import shootHit4 from "../../assets/effect/hiteffect/shoot1/4.png";
+import shootHit5 from "../../assets/effect/hiteffect/shoot1/5.png";
+import shootHit6 from "../../assets/effect/hiteffect/shoot1/6.png";
+import shootHit7 from "../../assets/effect/hiteffect/shoot1/7.png";
+
 import { AmbientSystem } from "./AmbientSystem";
 import { parseWhisperingForest } from "../../maps/whispering_forest";
 
@@ -306,6 +372,27 @@ export function MapGrid({ mode, char, monsters, chests, dungeonObjects, secrets,
         @keyframes anim-frame-7-5 { 0%, 57.1% { opacity: 0; } 57.2%, 71.4% { opacity: 1; } 71.5%, 100% { opacity: 0; } }
         @keyframes anim-frame-7-6 { 0%, 71.4% { opacity: 0; } 71.5%, 85.7% { opacity: 1; } 85.8%, 100% { opacity: 0; } }
         @keyframes anim-frame-7-7 { 0%, 85.7% { opacity: 0; } 85.8%, 100% { opacity: 1; } }
+
+        @keyframes anim-frame-8-1 { 0%, 12.4% { opacity: 1; } 12.5%, 100% { opacity: 0; } }
+        @keyframes anim-frame-8-2 { 0%, 12.4% { opacity: 0; } 12.5%, 24.9% { opacity: 1; } 25.0%, 100% { opacity: 0; } }
+        @keyframes anim-frame-8-3 { 0%, 24.9% { opacity: 0; } 25.0%, 37.4% { opacity: 1; } 37.5%, 100% { opacity: 0; } }
+        @keyframes anim-frame-8-4 { 0%, 37.4% { opacity: 0; } 37.5%, 49.9% { opacity: 1; } 50.0%, 100% { opacity: 0; } }
+        @keyframes anim-frame-8-5 { 0%, 49.9% { opacity: 0; } 50.0%, 62.4% { opacity: 1; } 62.5%, 100% { opacity: 0; } }
+        @keyframes anim-frame-8-6 { 0%, 62.4% { opacity: 0; } 62.5%, 74.9% { opacity: 1; } 75.0%, 100% { opacity: 0; } }
+        @keyframes anim-frame-8-7 { 0%, 74.9% { opacity: 0; } 75.0%, 87.4% { opacity: 1; } 87.5%, 100% { opacity: 0; } }
+        @keyframes anim-frame-8-8 { 0%, 87.4% { opacity: 0; } 87.5%, 100% { opacity: 1; } }
+
+        @keyframes anim-frame-11-1  { 0%, 9.08%  { opacity: 1; } 9.09%,  100% { opacity: 0; } }
+        @keyframes anim-frame-11-2  { 0%, 9.08%  { opacity: 0; } 9.09%,  18.17% { opacity: 1; } 18.18%, 100% { opacity: 0; } }
+        @keyframes anim-frame-11-3  { 0%, 18.17% { opacity: 0; } 18.18%, 27.26% { opacity: 1; } 27.27%, 100% { opacity: 0; } }
+        @keyframes anim-frame-11-4  { 0%, 27.26% { opacity: 0; } 27.27%, 36.35% { opacity: 1; } 36.36%, 100% { opacity: 0; } }
+        @keyframes anim-frame-11-5  { 0%, 36.35% { opacity: 0; } 36.36%, 45.44% { opacity: 1; } 45.45%, 100% { opacity: 0; } }
+        @keyframes anim-frame-11-6  { 0%, 45.44% { opacity: 0; } 45.45%, 54.53% { opacity: 1; } 54.54%, 100% { opacity: 0; } }
+        @keyframes anim-frame-11-7  { 0%, 54.53% { opacity: 0; } 54.54%, 63.62% { opacity: 1; } 63.63%, 100% { opacity: 0; } }
+        @keyframes anim-frame-11-8  { 0%, 63.62% { opacity: 0; } 63.63%, 72.71% { opacity: 1; } 72.72%, 100% { opacity: 0; } }
+        @keyframes anim-frame-11-9  { 0%, 72.71% { opacity: 0; } 72.72%, 81.80% { opacity: 1; } 81.81%, 100% { opacity: 0; } }
+        @keyframes anim-frame-11-10 { 0%, 81.80% { opacity: 0; } 81.81%, 90.89% { opacity: 1; } 90.90%, 100% { opacity: 0; } }
+        @keyframes anim-frame-11-11 { 0%, 90.89% { opacity: 0; } 90.90%, 100% { opacity: 1; } }
 
         @keyframes anim-frame-13-1  { 0%, 7.68% { opacity: 1; } 7.69%, 100% { opacity: 0; } }
         @keyframes anim-frame-13-2  { 0%, 7.68% { opacity: 0; } 7.69%, 15.37% { opacity: 1; } 15.38%, 100% { opacity: 0; } }
@@ -989,8 +1076,7 @@ export function MapGrid({ mode, char, monsters, chests, dungeonObjects, secrets,
             return null;
           }
 
-          if (e.type === "ls_slash") {
-            // Calculate angle if there's a target
+          if (e.type === "thrust_attack") {
             let angle = 0;
             let cx = ex;
             let cy = ey;
@@ -1000,30 +1086,25 @@ export function MapGrid({ mode, char, monsters, chests, dungeonObjects, secrets,
               const dx = ex - fromX;
               const dy = ey - fromY;
               angle = Math.atan2(dy, dx) * 180 / Math.PI;
-              // Center the slash between player and monster
               cx = fromX + dx * 0.55;
               cy = fromY + dy * 0.55;
             }
             const animStyle: React.CSSProperties = { position: "absolute", width: "100%", height: "100%", objectFit: "contain", opacity: 0 };
-            const slashFrames = [
-              lsSlash1, lsSlash2, lsSlash3, lsSlash4, lsSlash5, lsSlash6, lsSlash7,
-              lsSlash8, lsSlash9, lsSlash10, lsSlash11, lsSlash12, lsSlash13
-            ];
+            const thrustFrames = [thrustAtk1, thrustAtk2, thrustAtk3, thrustAtk4, thrustAtk5, thrustAtk6, thrustAtk7];
             return (
               <div key={e.id} style={{
                 position: "absolute", pointerEvents: "none", zIndex: 60, left: cx - 160, top: cy - 160, width: 320, height: 320,
                 transform: `rotate(${angle}deg) scaleY(${e.flip ? -1 : 1}) scale(${e.scale || 1})`,
-                mixBlendMode: "screen",
-                overflow: "hidden"
+                mixBlendMode: "screen", overflow: "hidden"
               }}>
-                {slashFrames.map((imgSrc, idx) => (
-                  <img key={`lss-${idx}`} src={imgSrc} style={{ ...animStyle, animation: `anim-frame-13-${idx + 1} 0.35s linear forwards` }} />
+                {thrustFrames.map((imgSrc, idx) => (
+                  <img key={`tatk-${idx}`} src={imgSrc} style={{ ...animStyle, animation: `anim-frame-7-${idx + 1} 0.3s linear forwards` }} />
                 ))}
               </div>
             );
           }
 
-          if (e.type === "ls_hit") {
+          if (e.type === "thrust_hit") {
             let angle = 0;
             if (e.targetX !== undefined && e.targetY !== undefined) {
               const fromX = e.targetX * CELL + CELL / 2;
@@ -1033,39 +1114,146 @@ export function MapGrid({ mode, char, monsters, chests, dungeonObjects, secrets,
               angle = Math.atan2(dy, dx) * 180 / Math.PI;
             }
             const animStyle: React.CSSProperties = { position: "absolute", width: "100%", height: "100%", objectFit: "contain", opacity: 0 };
+            const thrustHitFrames = [thrustHit1, thrustHit2, thrustHit3, thrustHit4, thrustHit5, thrustHit6, thrustHit7, thrustHit8];
             return (
               <div key={e.id} style={{
                 position: "absolute", pointerEvents: "none", zIndex: 65, left: ex - 75, top: ey - 75, width: 150, height: 150,
                 transform: `rotate(${angle}deg) scaleY(${e.flip ? -1 : 1}) scale(${e.scale || 1})`,
                 mixBlendMode: "screen"
               }}>
-                <img src={lsHit1} style={{ ...animStyle, animation: "anim-frame-7-1 0.2s linear forwards" }} />
-                <img src={lsHit2} style={{ ...animStyle, animation: "anim-frame-7-2 0.2s linear forwards" }} />
-                <img src={lsHit3} style={{ ...animStyle, animation: "anim-frame-7-3 0.2s linear forwards" }} />
-                <img src={lsHit4} style={{ ...animStyle, animation: "anim-frame-7-4 0.2s linear forwards" }} />
-                <img src={lsHit5} style={{ ...animStyle, animation: "anim-frame-7-5 0.2s linear forwards" }} />
-                <img src={lsHit6} style={{ ...animStyle, animation: "anim-frame-7-6 0.2s linear forwards" }} />
-                <img src={lsHit7} style={{ ...animStyle, animation: "anim-frame-7-7 0.2s linear forwards" }} />
+                {thrustHitFrames.map((imgSrc, idx) => (
+                  <img key={`thit-${idx}`} src={imgSrc} style={{ ...animStyle, animation: `anim-frame-8-${idx + 1} 0.25s linear forwards` }} />
+                ))}
               </div>
             );
           }
-          if (e.type === "arrow") {
-            const fromX = (e.targetX ?? e.gridX - 1) * CELL + CELL / 2;
-            const fromY = (e.targetY ?? e.gridY) * CELL + CELL / 2;
-            const dx = ex - fromX;
-            const dy = ey - fromY;
-            const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+
+          if (e.type === "smash_attack") {
+            let angle = 0;
+            let cx = ex;
+            let cy = ey;
+            if (e.targetX !== undefined && e.targetY !== undefined) {
+              const fromX = e.targetX * CELL + CELL / 2;
+              const fromY = e.targetY * CELL + CELL / 2;
+              const dx = ex - fromX;
+              const dy = ey - fromY;
+              angle = Math.atan2(dy, dx) * 180 / Math.PI;
+              cx = fromX + dx * 0.55;
+              cy = fromY + dy * 0.55;
+            }
+            const animStyle: React.CSSProperties = { position: "absolute", width: "100%", height: "100%", objectFit: "contain", opacity: 0 };
+            const smashFrames = [smashAtk1, smashAtk2, smashAtk3, smashAtk4, smashAtk5, smashAtk6, smashAtk7, smashAtk8];
             return (
               <div key={e.id} style={{
-                position: "absolute", pointerEvents: "none", zIndex: 55, left: fromX - 40, top: fromY - 40, width: 80, height: 80
+                position: "absolute", pointerEvents: "none", zIndex: 60, left: cx - 160, top: cy - 160, width: 320, height: 320,
+                transform: `rotate(${angle}deg) scale(1) scale(${e.scale || 1})`,
+                mixBlendMode: "screen", overflow: "hidden"
+              }}>
+                {smashFrames.map((imgSrc, idx) => (
+                  <img key={`satk-${idx}`} src={imgSrc} style={{ ...animStyle, animation: `anim-frame-8-${idx + 1} 0.35s linear forwards` }} />
+                ))}
+              </div>
+            );
+          }
+
+          if (e.type === "smash_hit") {
+            let angle = 0;
+            if (e.targetX !== undefined && e.targetY !== undefined) {
+              const fromX = e.targetX * CELL + CELL / 2;
+              const fromY = e.targetY * CELL + CELL / 2;
+              const dx = ex - fromX;
+              const dy = ey - fromY;
+              angle = Math.atan2(dy, dx) * 180 / Math.PI;
+            }
+            const animStyle: React.CSSProperties = { position: "absolute", width: "100%", height: "100%", objectFit: "contain", opacity: 0 };
+            const smashHitFrames = [smashHit1, smashHit2, smashHit3, smashHit4, smashHit5, smashHit6, smashHit7, smashHit8];
+            return (
+              <div key={e.id} style={{
+                position: "absolute", pointerEvents: "none", zIndex: 65, left: ex - 75, top: ey - 75, width: 150, height: 150,
+                transform: `rotate(${angle}deg) scale(${e.scale || 1})`,
+                mixBlendMode: "screen"
+              }}>
+                {smashHitFrames.map((imgSrc, idx) => (
+                  <img key={`shit-${idx}`} src={imgSrc} style={{ ...animStyle, animation: `anim-frame-8-${idx + 1} 0.25s linear forwards` }} />
+                ))}
+              </div>
+            );
+          }
+
+          if (e.type === "shoot_attack") {
+            let angle = 0;
+            if (e.targetX !== undefined && e.targetY !== undefined) {
+              const toX = e.targetX * CELL + CELL / 2;
+              const toY = e.targetY * CELL + CELL / 2;
+              const dx = toX - ex;
+              const dy = toY - ey;
+              angle = Math.atan2(dy, dx) * 180 / Math.PI;
+            }
+            const animStyle: React.CSSProperties = { position: "absolute", width: "100%", height: "100%", objectFit: "contain", opacity: 0 };
+            const shootAtkFrames = [shootAtk1, shootAtk2, shootAtk3, shootAtk4, shootAtk5, shootAtk6, shootAtk7];
+            return (
+              <div key={e.id} style={{
+                position: "absolute", pointerEvents: "none", zIndex: 60, left: ex - 80, top: ey - 80, width: 160, height: 160,
+                transform: `rotate(${angle}deg) scale(${e.scale || 1})`,
+                mixBlendMode: "screen", overflow: "hidden"
+              }}>
+                {shootAtkFrames.map((imgSrc, idx) => (
+                  <img key={`shatk-${idx}`} src={imgSrc} style={{ ...animStyle, animation: `anim-frame-7-${idx + 1} 0.25s linear forwards` }} />
+                ))}
+              </div>
+            );
+          }
+
+          if (e.type === "shoot_proj") {
+            const fromX = ex;
+            const fromY = ey;
+            const toX = (e.targetX ?? e.gridX + 1) * CELL + CELL / 2;
+            const toY = (e.targetY ?? e.gridY) * CELL + CELL / 2;
+            const dx = toX - fromX;
+            const dy = toY - fromY;
+            const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+            const animStyle: React.CSSProperties = { position: "absolute", width: "100%", height: "100%", objectFit: "contain", opacity: 0 };
+            const shootProjFrames = [shootProj1, shootProj2, shootProj3, shootProj4, shootProj5, shootProj6, shootProj7, shootProj8, shootProj9, shootProj10, shootProj11];
+            return (
+              <div key={e.id} style={{
+                position: "absolute", pointerEvents: "none", zIndex: 62, left: fromX - 70, top: fromY - 70, width: 140, height: 140,
+                mixBlendMode: "screen"
               }}>
                 <style>{`
-                  @keyframes arrow-fly-${e.id} {
-                    0% { transform: translate(0, 0); opacity: 1; }
-                    100% { transform: translate(${dx}px, ${dy}px); opacity: 0; }
+                  @keyframes shoot-fly-${e.id} {
+                    0% { transform: translate(0, 0) rotate(${angle}deg) scale(${e.scale || 1}); opacity: 1; }
+                    100% { transform: translate(${dx}px, ${dy}px) rotate(${angle}deg) scale(${e.scale || 1}); opacity: 0.9; }
                   }
                 `}</style>
-                <img src={effectArrow} style={{ width: "100%", height: "100%", objectFit: "contain", transform: `rotate(${angle + 45}deg)`, animation: `arrow-fly-${e.id} 0.35s linear forwards` }} alt="Arrow" />
+                <div style={{ width: "100%", height: "100%", animation: `shoot-fly-${e.id} 0.35s linear forwards` }}>
+                  {shootProjFrames.map((imgSrc, idx) => (
+                    <img key={`shproj-${idx}`} src={imgSrc} style={{ ...animStyle, animation: `anim-frame-11-${idx + 1} 0.35s linear forwards` }} />
+                  ))}
+                </div>
+              </div>
+            );
+          }
+
+          if (e.type === "shoot_hit") {
+            let angle = 0;
+            if (e.targetX !== undefined && e.targetY !== undefined) {
+              const fromX = e.targetX * CELL + CELL / 2;
+              const fromY = e.targetY * CELL + CELL / 2;
+              const dx = ex - fromX;
+              const dy = ey - fromY;
+              angle = Math.atan2(dy, dx) * 180 / Math.PI;
+            }
+            const animStyle: React.CSSProperties = { position: "absolute", width: "100%", height: "100%", objectFit: "contain", opacity: 0 };
+            const shootHitFrames = [shootHit1, shootHit2, shootHit3, shootHit4, shootHit5, shootHit6, shootHit7];
+            return (
+              <div key={e.id} style={{
+                position: "absolute", pointerEvents: "none", zIndex: 65, left: ex - 75, top: ey - 75, width: 150, height: 150,
+                transform: `rotate(${angle}deg) scale(${e.scale || 1})`,
+                mixBlendMode: "screen"
+              }}>
+                {shootHitFrames.map((imgSrc, idx) => (
+                  <img key={`shhit-${idx}`} src={imgSrc} style={{ ...animStyle, animation: `anim-frame-7-${idx + 1} 0.25s linear forwards` }} />
+                ))}
               </div>
             );
           }

@@ -136,7 +136,8 @@ export interface SkillDef {
 
 export interface VisualEffect {
   id: string;
-  type: "slash" | "scratch" | "fire_bolt" | "magic_missile" | "sacred_flame" | "thunder" | "fire_aoe" | "smite" | "heal" | "miss" | "number" | "sword_swing" | "arrow" | "whip" | "rootslam" | "ls_slash" | "ls_hit";
+  type: "slash" | "scratch" | "fire_bolt" | "magic_missile" | "sacred_flame" | "thunder" | "fire_aoe" | "smite" | "heal" | "miss" | "number" | "sword_swing" | "arrow" | "whip" | "rootslam" | "ls_slash" | "ls_hit"
+    | "thrust_attack" | "thrust_hit" | "smash_attack" | "smash_hit" | "shoot_attack" | "shoot_proj" | "shoot_hit";
   targetX?: number; targetY?: number;
   gridX: number; gridY: number;
   value?: string;

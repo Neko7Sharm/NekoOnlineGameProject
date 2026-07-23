@@ -182,6 +182,7 @@ export function useGameEngine() {
   const [insightVisionTiles, setInsightVisionTiles] = useState<Set<string>>(new Set());
   const insightRevealedIdsRef = useRef<Set<string>>(new Set());
   const lsAttackFlipRef = useRef<boolean>(false);
+  const thrustAttackFlipRef = useRef<boolean>(false);
   const insightActiveUntilRef = useRef<number>(0);
   const [stealthActive, setStealthActive] = useState(false);
   const stealthedMonstersRef = useRef<Set<string>>(new Set());
@@ -1699,13 +1700,20 @@ export function useGameEngine() {
     if (weapon.properties?.includes("heavy") || weapon.properties?.includes("two-handed")) effectScale = 1.3;
     else if (weapon.properties?.includes("light")) effectScale = 0.7;
 
-    if (weapon.damageType === "slashing") {
+    if (isRanged) {
+      addEffect({ type: "shoot_attack", gridX: char.position.x, gridY: char.position.y, targetX: monster.position.x, targetY: monster.position.y, scale: effectScale });
+      addEffect({ type: "shoot_proj", gridX: char.position.x, gridY: char.position.y, targetX: monster.position.x, targetY: monster.position.y, scale: effectScale });
+    } else if (weapon.damageType === "piercing") {
+      currentFlip = thrustAttackFlipRef.current;
+      thrustAttackFlipRef.current = !currentFlip;
+      addEffect({ type: "thrust_attack", gridX: monster.position.x, gridY: monster.position.y, targetX: char.position.x, targetY: char.position.y, flip: currentFlip, scale: effectScale });
+    } else if (weapon.damageType === "bludgeoning") {
+      addEffect({ type: "smash_attack", gridX: monster.position.x, gridY: monster.position.y, targetX: char.position.x, targetY: char.position.y, flip: false, scale: effectScale });
+    } else {
+      // Default to slashing/melee swing
       currentFlip = lsAttackFlipRef.current;
       lsAttackFlipRef.current = !currentFlip;
       addEffect({ type: "ls_slash", gridX: monster.position.x, gridY: monster.position.y, targetX: char.position.x, targetY: char.position.y, flip: currentFlip, scale: effectScale });
-    } else if (isRanged) {
-      addEffect({ type: "arrow", gridX: char.position.x, gridY: char.position.y, targetX: monster.position.x, targetY: monster.position.y });
-      setTimeout(() => addEffect({ type: "slash", gridX: monster.position.x, gridY: monster.position.y }), 320);
     }
 
     setTimeout(() => {
@@ -1803,10 +1811,14 @@ export function useGameEngine() {
           }
 
           setTimeout(() => {
-            if (weapon.damageType === "slashing") {
-              addEffect({ type: "ls_hit", gridX: monster.position.x, gridY: monster.position.y, targetX: char.position.x, targetY: char.position.y, flip: currentFlip, scale: effectScale });
+            if (isRanged) {
+              addEffect({ type: "shoot_hit", gridX: monster.position.x, gridY: monster.position.y, targetX: char.position.x, targetY: char.position.y, scale: effectScale });
+            } else if (weapon.damageType === "piercing") {
+              addEffect({ type: "thrust_hit", gridX: monster.position.x, gridY: monster.position.y, targetX: char.position.x, targetY: char.position.y, flip: currentFlip, scale: effectScale });
+            } else if (weapon.damageType === "bludgeoning") {
+              addEffect({ type: "smash_hit", gridX: monster.position.x, gridY: monster.position.y, targetX: char.position.x, targetY: char.position.y, flip: false, scale: effectScale });
             } else {
-              // addEffect({ type: "slash", gridX: monster.position.x, gridY: monster.position.y });
+              addEffect({ type: "ls_hit", gridX: monster.position.x, gridY: monster.position.y, targetX: char.position.x, targetY: char.position.y, flip: currentFlip, scale: effectScale });
             }
             addHit(monsterId);
           }, 100);
